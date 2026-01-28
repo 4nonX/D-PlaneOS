@@ -1,0 +1,57 @@
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# PHP
+*.log
+vendor/
+composer.lock
+
+# System files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Backup files
+*.bak
+*.old
+*.backup
+
+# Test files
+test/
+tests/output/
+
+# Sensitive
+config.local.php
+*.key
+*.pem
+*.crt
+
+# Node (if future JS tooling added)
+node_modules/
+package-lock.json
+npm-debug.log
+
+# Build artifacts
+dist/
+build/
+*.tar.gz
+*.zip
+!dplaneos-*.tar.gz
+
+# Docker
+.dockerignore
+
+# Temporary
+tmp/
+temp/
+*.tmp

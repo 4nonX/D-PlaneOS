@@ -1,0 +1,104 @@
+# D-PlaneOS Enhanced Sudoers Configuration
+# Version: 1.5.0
+# Purpose: Least-privilege command execution for www-data user
+
+# ZFS Pool Management (read-only operations)
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool list *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool status *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool get *
+
+# ZFS Pool Management (write operations)
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool create *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool destroy *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool scrub *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool clear *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool online *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool offline *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool replace *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool add *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zpool attach *
+
+# ZFS Dataset Management (read-only)
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs list *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs get *
+
+# ZFS Dataset Management (write operations)
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs create *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs destroy *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs snapshot *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs rollback *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs set *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs send *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs receive *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs mount *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/zfs unmount *
+
+# Disk Management (read-only)
+www-data ALL=(ALL) NOPASSWD: /usr/bin/lsblk *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/lsof *
+
+# SMART Monitoring
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/smartctl -H *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/smartctl -a *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/smartctl -A *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/smartctl -t short *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/smartctl -t long *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/smartctl -t conveyance *
+
+# Docker Management (read-only)
+www-data ALL=(ALL) NOPASSWD: /usr/bin/docker ps *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/docker inspect *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/docker logs *
+
+# Docker Management (write operations)
+www-data ALL=(ALL) NOPASSWD: /usr/bin/docker start *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/docker stop *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/docker restart *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/docker rm *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/docker-compose *
+
+# System Information (read-only)
+www-data ALL=(ALL) NOPASSWD: /usr/bin/top -bn1
+www-data ALL=(ALL) NOPASSWD: /usr/bin/free *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/uptime *
+
+# SMB/Samba Management
+www-data ALL=(ALL) NOPASSWD: /usr/bin/testparm *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/smbpasswd *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/smbstatus *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/useradd *
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/userdel *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload smbd
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart smbd
+
+# NFS Management
+www-data ALL=(ALL) NOPASSWD: /usr/sbin/exportfs *
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload nfs-server
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart nfs-server
+
+# Explicitly DENIED commands (belt and suspenders)
+# These should never be needed and are blocked for defense in depth
+www-data ALL=(ALL) !NOPASSWD: /usr/bin/rm
+www-data ALL=(ALL) !NOPASSWD: /usr/bin/chmod
+www-data ALL=(ALL) !NOPASSWD: /usr/bin/chown
+www-data ALL=(ALL) !NOPASSWD: /usr/bin/systemctl
+www-data ALL=(ALL) !NOPASSWD: /usr/bin/reboot
+www-data ALL=(ALL) !NOPASSWD: /usr/bin/shutdown
+www-data ALL=(ALL) !NOPASSWD: /usr/sbin/useradd
+www-data ALL=(ALL) !NOPASSWD: /usr/sbin/userdel
+www-data ALL=(ALL) !NOPASSWD: /usr/sbin/passwd
+www-data ALL=(ALL) !NOPASSWD: /usr/bin/su
+www-data ALL=(ALL) !NOPASSWD: /usr/bin/sudo
+
+# Security: Disable environment variable preservation
+Defaults:www-data !env_reset
+Defaults:www-data env_keep -= "PATH"
+Defaults:www-data secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Security: Require exact command match (no wildcards in invocation)
+Defaults:www-data !authenticate
+Defaults:www-data !requiretty
+
+# Logging: Log all sudo attempts
+Defaults:www-data log_output
+Defaults:www-data log_input
