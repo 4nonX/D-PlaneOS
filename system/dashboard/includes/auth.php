@@ -171,35 +171,174 @@ function validateInput($data, $type = 'string') {
  * Enhanced version that validates inputs before execution
  */
 function execCommand($cmd, &$output = [], &$return_code = 0) {
-    // Extract and validate any pool names
-    if (preg_match_all('/\b([a-zA-Z0-9_-]+)\b/', $cmd, $matches)) {
-        foreach ($matches[1] as $token) {
-            // Skip command names and flags
-            if (in_array($token, ['sudo', 'usr', 'sbin', 'bin', 'zpool', 'zfs', 'docker', 'smartctl', 'lsblk'])) continue;
-            if (strpos($token, '-') === 0) continue; // Skip flags
-            
-            // Validate tokens that look like names
-            if (strlen($token) > 2 && !preg_match('/^[a-zA-Z0-9_\/-]+$/', $token)) {
-                error_log("SECURITY: Rejected suspicious token in command: $token");
-                $output[] = "Invalid parameter detected";
-                $return_code = 1;
-                return false;
-            }
-        }
+    $allowedCommands = [
+        'sudo', '/usr/sbin/zpool', '/usr/sbin/zfs', '/usr/bin/docker',
+        '/usr/sbin/smartctl', '/usr/bin/lsblk', '/usr/bin/df', '/bin/grep',
+        '/bin/cat', '/usr/bin/rclone', '/usr/bin/systemctl', '/usr/sbin/service',
+        '/usr/sbin/smbd', '/usr/sbin/smbpasswd', '/usr/bin/chpasswd',
+    ];
+    
+    $parts = preg_split('/\s+/', trim($cmd), -1, PREG_SPLIT_NO_EMPTY);
+    if (empty($parts)) {
+        error_log("SECURITY: Empty command blocked");
+        $output[] = "Invalid command";
+        $return_code = 1;
+        return false;
     }
     
-    // Check for command injection patterns
-    $dangerous = ['&&', '||', ';', '|', '`', '$', '>', '<', "\n", "\r"];
+    $commandIndex = ($parts[0] === 'sudo') ? 1 : 0;
+    if (!isset($parts[$commandIndex])) {
+        error_log("SECURITY: Invalid command structure");
+        $output[] = "Invalid command";
+        $return_code = 1;
+        return false;
+    }
+    
+    $baseCommand = $parts[$commandIndex];
+    
+    if (!in_array($baseCommand, $allowedCommands)) {
+        error_log("SECURITY: Non-whitelisted command blocked: $baseCommand");
+        $output[] = "Command not allowed";
+        $return_code = 1;
+        return false;
+    }
+    
+    $dangerous = ['&&', '||', ';', '`', '$', "\n", "\r", "\t", '(', ')'];
     foreach ($dangerous as $char) {
-        if (strpos($cmd, $char) !== false && strpos($cmd, 'escapeshellarg') === false) {
-            error_log("SECURITY: Blocked command injection attempt: " . substr($cmd, 0, 100));
+        if (strpos($cmd, $char) !== false) {
+            error_log("SECURITY: Blocked dangerous character: " . substr($cmd, 0, 100));
             $output[] = "Command contains dangerous characters";
             $return_code = 1;
             return false;
         }
     }
     
+    if (strpos($cmd, '>') !== false && !preg_match('/2>&1/', $cmd)) {
+        error_log("SECURITY: Blocked redirect");
+        $output[] = "Command contains dangerous characters";
+        $return_code = 1;
+        return false;
+    }
+    
+    if (strpos($cmd, '|') !== false) {
+        if (strpos($cmd, 'docker') === false || strpos($cmd, '--format') === false || !preg_match('/(["|\']).*\|.*\1/', $cmd)) {
+            error_log("SECURITY: Blocked pipe");
+            $output[] = "Command contains dangerous characters";
+            $return_code = 1;
+            return false;
+        }
+    }
+    
+    error_log("CMD_EXEC: " . substr($cmd, 0, 200));
     exec($cmd . ' 2>&1', $output, $return_code);
+    
+    if ($return_code !== 0) {
+        error_log("CMD_FAILED (code $return_code): " . substr($cmd, 0, 200));
+    }
+    
+    return $return_code === 0;
+}
+    
+    $dangerous = ['&&', '||', ';', '`', '$', "\n", "\r", "\t", '(', ')'];
+    foreach ($dangerous as $char) {
+        if (strpos($cmd, $char) !== false) {
+            error_log("SECURITY: Blocked dangerous character: " . substr($cmd, 0, 100));
+            $output[] = "Command contains dangerous characters";
+            $return_code = 1;
+            return false;
+        }
+    }
+    
+    if (strpos($cmd, '>') !== false && !preg_match('/2>&1/', $cmd)) {
+        error_log("SECURITY: Blocked redirect");
+        $output[] = "Command contains dangerous characters";
+        $return_code = 1;
+        return false;
+    }
+    
+    if (strpos($cmd, '|') !== false) {
+        if (strpos($cmd, 'docker') === false || strpos($cmd, '--format') === false || !preg_match('/(["|\']).*\|.*\1/', $cmd)) {
+            error_log("SECURITY: Blocked pipe");
+            $output[] = "Command contains dangerous characters";
+            $return_code = 1;
+            return false;
+        }
+    }
+    
+    error_log("CMD_EXEC: " . substr($cmd, 0, 200));
+    exec($cmd . ' 2>&1', $output, $return_code);
+    
+    if ($return_code !== 0) {
+        error_log("CMD_FAILED (code $return_code): " . substr($cmd, 0, 200));
+    }
+    
+    return $return_code === 0;
+}function execCommand($cmd, &$output = [], &$return_code = 0) {
+    $allowedCommands = [
+        'sudo', '/usr/sbin/zpool', '/usr/sbin/zfs', '/usr/bin/docker',
+        '/usr/sbin/smartctl', '/usr/bin/lsblk', '/usr/bin/df', '/bin/grep',
+        '/bin/cat', '/usr/bin/rclone', '/usr/bin/systemctl', '/usr/sbin/service',
+        '/usr/sbin/smbd', '/usr/sbin/smbpasswd', '/usr/bin/chpasswd',
+    ];
+    
+    $parts = preg_split('/\s+/', trim($cmd), -1, PREG_SPLIT_NO_EMPTY);
+    if (empty($parts)) {
+        error_log("SECURITY: Empty command blocked");
+        $output[] = "Invalid command";
+        $return_code = 1;
+        return false;
+    }
+    
+    $commandIndex = ($parts[0] === 'sudo') ? 1 : 0;
+    if (!isset($parts[$commandIndex])) {
+        error_log("SECURITY: Invalid command structure");
+        $output[] = "Invalid command";
+        $return_code = 1;
+        return false;
+    }
+    
+    $baseCommand = $parts[$commandIndex];
+    
+    if (!in_array($baseCommand, $allowedCommands)) {
+        error_log("SECURITY: Non-whitelisted command blocked: $baseCommand");
+        $output[] = "Command not allowed";
+        $return_code = 1;
+        return false;
+    }
+    
+    $dangerous = ['&&', '||', ';', '`', '$', "\n", "\r", "\t", '(', ')'];
+    foreach ($dangerous as $char) {
+        if (strpos($cmd, $char) !== false) {
+            error_log("SECURITY: Blocked dangerous character: " . substr($cmd, 0, 100));
+            $output[] = "Command contains dangerous characters";
+            $return_code = 1;
+            return false;
+        }
+    }
+    
+    if (strpos($cmd, '>') !== false && !preg_match('/2>&1/', $cmd)) {
+        error_log("SECURITY: Blocked redirect");
+        $output[] = "Command contains dangerous characters";
+        $return_code = 1;
+        return false;
+    }
+    
+    if (strpos($cmd, '|') !== false) {
+        if (strpos($cmd, 'docker') === false || strpos($cmd, '--format') === false || !preg_match('/(["|\']).*\|.*\1/', $cmd)) {
+            error_log("SECURITY: Blocked pipe");
+            $output[] = "Command contains dangerous characters";
+            $return_code = 1;
+            return false;
+        }
+    }
+    
+    error_log("CMD_EXEC: " . substr($cmd, 0, 200));
+    exec($cmd . ' 2>&1', $output, $return_code);
+    
+    if ($return_code !== 0) {
+        error_log("CMD_FAILED (code $return_code): " . substr($cmd, 0, 200));
+    }
+    
     return $return_code === 0;
 }
 
