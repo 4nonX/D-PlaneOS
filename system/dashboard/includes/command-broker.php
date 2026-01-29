@@ -151,7 +151,8 @@ class CommandBroker {
         }
         
         // Build command with validated arguments
-        $cmd = 'sudo ' . vsprintf($spec['cmd'], $args) . ' 2>&1';
+        $escapedArgs = array_map('escapeshellarg', $args);
+        $cmd = 'sudo ' . vsprintf($spec['cmd'], $escapedArgs) . ' 2>&1';
         
         // Execute
         exec($cmd, $output, $returnCode);
