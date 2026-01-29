@@ -2,7 +2,7 @@
 
 **A transparent, Docker-native NAS operating system built on ZFS**
 
-Version 1.8.0 | Status: **POWER USER READY** ⚡
+Version 1.8.0 | Status: **USER FEEDBACK PENDING** ⚡
 
 ---
 
