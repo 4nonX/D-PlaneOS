@@ -1,4 +1,4 @@
--- D-PlaneOS Database Schema
+-- D-PlaneOS Database Schema (CORRECTED)
 -- SQLite3 database for system metadata
 
 -- Users table
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS scrub_schedules (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create default admin user (password: admin)
+-- Create default admin user (password: admin123)
 INSERT OR IGNORE INTO users (id, username, password, email) 
 VALUES (1, 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin@localhost');
 
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS alert_settings (
     alert_type TEXT NOT NULL,
     enabled INTEGER DEFAULT 0,
     webhook_url TEXT,
-    config TEXT,
+    config TEXT, -- JSON
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS alert_settings (
 CREATE TABLE IF NOT EXISTS alert_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     alert_type TEXT NOT NULL,
-    severity TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK(severity IN ('low', 'medium', 'high', 'critical')),
     message TEXT NOT NULL,
     details TEXT,
     sent INTEGER DEFAULT 0,
@@ -137,19 +137,19 @@ CREATE TABLE IF NOT EXISTS shares (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
     dataset_path TEXT NOT NULL,
-    share_type TEXT NOT NULL, -- 'smb' or 'nfs'
+    share_type TEXT NOT NULL CHECK(share_type IN ('smb', 'nfs')),
     enabled INTEGER DEFAULT 1,
     
     -- SMB specific
     smb_guest_ok INTEGER DEFAULT 0,
     smb_read_only INTEGER DEFAULT 0,
     smb_browseable INTEGER DEFAULT 1,
-    smb_valid_users TEXT, -- Comma-separated list
+    smb_valid_users TEXT, -- Comma-separated (TODO: normalize to junction table)
     
     -- NFS specific
     nfs_allowed_networks TEXT, -- e.g., '192.168.1.0/24,10.0.0.0/8'
     nfs_read_only INTEGER DEFAULT 0,
-    nfs_sync TEXT DEFAULT 'async', -- 'sync' or 'async'
+    nfs_sync TEXT DEFAULT 'async' CHECK(nfs_sync IN ('sync', 'async')),
     nfs_no_root_squash INTEGER DEFAULT 0,
     
     -- Common
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS user_quotas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL,
     dataset_path TEXT NOT NULL,
-    quota_bytes INTEGER NOT NULL, -- Quota in bytes
+    quota_bytes INTEGER NOT NULL,
     enabled INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -183,18 +183,18 @@ CREATE TABLE IF NOT EXISTS notifications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     message TEXT NOT NULL,
-    type TEXT NOT NULL, -- 'info', 'warning', 'error', 'success'
-    category TEXT, -- 'disk', 'pool', 'system', 'replication', 'quota'
-    priority INTEGER DEFAULT 0, -- 0=low, 1=normal, 2=high, 3=critical
+    type TEXT NOT NULL CHECK(type IN ('info', 'warning', 'error', 'success')),
+    category TEXT CHECK(category IN ('disk', 'pool', 'system', 'replication', 'quota', 'general')),
+    priority INTEGER DEFAULT 0 CHECK(priority BETWEEN 0 AND 3),
     read INTEGER DEFAULT 0,
     dismissed INTEGER DEFAULT 0,
-    action_url TEXT, -- Optional link to relevant page
-    details TEXT, -- JSON with additional info
+    action_url TEXT,
+    details TEXT, -- JSON
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    expires_at DATETIME -- Auto-dismiss after this time
+    expires_at DATETIME
 );
 
--- Disk tracking table for maintenance and health history
+-- Disk tracking table
 CREATE TABLE IF NOT EXISTS disk_tracking (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     disk_path TEXT UNIQUE NOT NULL,
@@ -203,33 +203,33 @@ CREATE TABLE IF NOT EXISTS disk_tracking (
     disk_size INTEGER,
     first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-    status TEXT DEFAULT 'healthy', -- 'healthy', 'warning', 'critical', 'failing', 'replaced'
-    in_pool TEXT, -- Pool name if applicable
+    status TEXT DEFAULT 'healthy' CHECK(status IN ('healthy', 'warning', 'critical', 'failing', 'replaced')),
+    in_pool TEXT,
     notes TEXT,
     replacement_date DATETIME,
-    replaced_by TEXT -- Serial of replacement disk
+    replaced_by TEXT
 );
 
--- Disk maintenance log
+-- FIXED: Disk maintenance log now references disk_tracking.id
 CREATE TABLE IF NOT EXISTS disk_maintenance_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    disk_path TEXT NOT NULL,
-    action_type TEXT NOT NULL, -- 'smart_test', 'replacement', 'note', 'status_change'
+    disk_id INTEGER NOT NULL,
+    action_type TEXT NOT NULL CHECK(action_type IN ('smart_test', 'replacement', 'note', 'status_change')),
     description TEXT NOT NULL,
     performed_by TEXT,
     result TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (disk_path) REFERENCES disk_tracking(disk_path)
+    FOREIGN KEY (disk_id) REFERENCES disk_tracking(id) ON DELETE CASCADE
 );
 
 -- UPS/USV status tracking
 CREATE TABLE IF NOT EXISTS ups_status (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ups_name TEXT NOT NULL,
-    status TEXT, -- 'ONLINE', 'ONBATT', 'LOWBATT', 'COMMOK', 'COMMBAD'
-    battery_charge INTEGER, -- Percentage 0-100
-    battery_runtime INTEGER, -- Seconds remaining
-    load INTEGER, -- Load percentage
+    status TEXT CHECK(status IN ('ONLINE', 'ONBATT', 'LOWBATT', 'COMMOK', 'COMMBAD', 'UNKNOWN')),
+    battery_charge INTEGER CHECK(battery_charge BETWEEN 0 AND 100),
+    battery_runtime INTEGER,
+    load INTEGER CHECK(load BETWEEN 0 AND 100),
     input_voltage REAL,
     output_voltage REAL,
     temperature REAL,
@@ -242,12 +242,12 @@ CREATE TABLE IF NOT EXISTS ups_status (
 CREATE TABLE IF NOT EXISTS snapshot_schedules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dataset_path TEXT NOT NULL,
-    frequency TEXT NOT NULL, -- 'hourly', 'daily', 'weekly', 'monthly'
-    keep_count INTEGER NOT NULL, -- How many to retain
+    frequency TEXT NOT NULL CHECK(frequency IN ('hourly', 'daily', 'weekly', 'monthly')),
+    keep_count INTEGER NOT NULL CHECK(keep_count > 0),
     enabled INTEGER DEFAULT 1,
     last_run DATETIME,
     next_run DATETIME,
-    name_prefix TEXT, -- e.g. 'auto-daily-'
+    name_prefix TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -260,24 +260,15 @@ CREATE TABLE IF NOT EXISTS snapshot_history (
     deleted_at DATETIME,
     size_bytes INTEGER,
     schedule_id INTEGER,
-    FOREIGN KEY (schedule_id) REFERENCES snapshot_schedules(id)
+    FOREIGN KEY (schedule_id) REFERENCES snapshot_schedules(id) ON DELETE SET NULL
 );
-
--- Create indices for performance
-CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
-CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
-CREATE INDEX IF NOT EXISTS idx_widgets_user ON widgets(user_id);
-CREATE INDEX IF NOT EXISTS idx_metrics_history ON metrics_history(metric_type, timestamp);
-CREATE INDEX IF NOT EXISTS idx_alert_history ON alert_history(timestamp);
-CREATE INDEX IF NOT EXISTS idx_shares_type ON shares(share_type);
-CREATE INDEX IF NOT EXISTS idx_shares_dataset ON shares(dataset_path);
 
 -- Rclone remote configurations
 CREATE TABLE IF NOT EXISTS rclone_remotes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
-    remote_type TEXT NOT NULL, -- s3, gdrive, b2, sftp, etc.
-    config TEXT NOT NULL, -- JSON config for rclone
+    remote_type TEXT NOT NULL,
+    config TEXT NOT NULL, -- JSON
     enabled INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -290,9 +281,9 @@ CREATE TABLE IF NOT EXISTS rclone_tasks (
     remote_id INTEGER NOT NULL,
     source_path TEXT NOT NULL,
     destination_path TEXT NOT NULL,
-    direction TEXT NOT NULL, -- 'push' or 'pull'
-    sync_type TEXT NOT NULL, -- 'sync', 'copy', 'move'
-    schedule_type TEXT, -- 'manual', 'hourly', 'daily', 'weekly'
+    direction TEXT NOT NULL CHECK(direction IN ('push', 'pull')),
+    sync_type TEXT NOT NULL CHECK(sync_type IN ('sync', 'copy', 'move')),
+    schedule_type TEXT CHECK(schedule_type IN ('manual', 'hourly', 'daily', 'weekly')),
     enabled INTEGER DEFAULT 1,
     last_run DATETIME,
     last_status TEXT,
@@ -300,5 +291,48 @@ CREATE TABLE IF NOT EXISTS rclone_tasks (
     FOREIGN KEY (remote_id) REFERENCES rclone_remotes(id) ON DELETE CASCADE
 );
 
+-- Performance indices
+CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_widgets_user ON widgets(user_id);
+CREATE INDEX IF NOT EXISTS idx_metrics_history ON metrics_history(metric_type, timestamp);
+CREATE INDEX IF NOT EXISTS idx_alert_history ON alert_history(timestamp);
+CREATE INDEX IF NOT EXISTS idx_shares_type ON shares(share_type);
+CREATE INDEX IF NOT EXISTS idx_shares_dataset ON shares(dataset_path);
 CREATE INDEX IF NOT EXISTS idx_rclone_tasks_remote ON rclone_tasks(remote_id);
 CREATE INDEX IF NOT EXISTS idx_rclone_tasks_enabled ON rclone_tasks(enabled);
+CREATE INDEX IF NOT EXISTS idx_snapshot_schedules_dataset ON snapshot_schedules(dataset_path);
+CREATE INDEX IF NOT EXISTS idx_disk_tracking_status ON disk_tracking(status);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, dismissed);
+CREATE INDEX IF NOT EXISTS idx_disk_maintenance_disk ON disk_maintenance_log(disk_id);
+
+-- ADDED: Auto-update triggers for updated_at fields
+CREATE TRIGGER IF NOT EXISTS update_shares_timestamp 
+AFTER UPDATE ON shares
+BEGIN
+    UPDATE shares SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS update_smb_users_timestamp 
+AFTER UPDATE ON smb_users
+BEGIN
+    UPDATE smb_users SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS update_user_quotas_timestamp 
+AFTER UPDATE ON user_quotas
+BEGIN
+    UPDATE user_quotas SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS update_rclone_remotes_timestamp 
+AFTER UPDATE ON rclone_remotes
+BEGIN
+    UPDATE rclone_remotes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS update_settings_timestamp 
+AFTER UPDATE ON settings
+BEGIN
+    UPDATE settings SET updated_at = CURRENT_TIMESTAMP WHERE key = NEW.key;
+END;
