@@ -3,6 +3,76 @@ require_once __DIR__ . '/../../includes/auth.php';
 requireAuth();
 header('Content-Type: application/json');
 
+// Docker Compose YAML validation to prevent command injection
+function validateDockerComposeYaml($yaml) {
+    // Basic YAML parsing check
+    if (!function_exists('yaml_parse')) {
+        // Fallback: basic validation without yaml extension
+        if (strpos($yaml, '<?php') !== false || strpos($yaml, '<?=') !== false) {
+            throw new Exception('Invalid YAML content detected');
+        }
+    } else {
+        try {
+            $data = yaml_parse($yaml);
+        } catch (Exception $e) {
+            throw new Exception('Invalid YAML format');
+        }
+        
+        if (!isset($data['services']) || !is_array($data['services'])) {
+            throw new Exception('No services defined in compose file');
+        }
+        
+        // Validate each service for dangerous configurations
+        foreach ($data['services'] as $name => $service) {
+            if (!is_array($service)) continue;
+            
+            // Block dangerous options that could lead to privilege escalation
+            $dangerous = ['privileged', 'cap_add', 'security_opt', 'pid', 'ipc', 'userns_mode'];
+            foreach ($dangerous as $key) {
+                if (isset($service[$key])) {
+                    throw new Exception("Security: Option '$key' not allowed in compose files");
+                }
+            }
+            
+            // Check network_mode for host mode
+            if (isset($service['network_mode']) && $service['network_mode'] === 'host') {
+                throw new Exception("Security: host network mode not allowed");
+            }
+            
+            // Validate volumes - no critical system mounts
+            if (isset($service['volumes'])) {
+                foreach ($service['volumes'] as $volume) {
+                    if (is_string($volume)) {
+                        // Check for bind mounts to sensitive directories
+                        if (preg_match('#^(/|/root|/etc|/var|/sys|/proc|/dev):#', $volume)) {
+                            throw new Exception("Security: System directory mounts not allowed: $volume");
+                        }
+                    }
+                }
+            }
+            
+            // Validate image source
+            if (isset($service['image'])) {
+                $image = $service['image'];
+                // Block suspicious patterns
+                if (preg_match('#[;&|`$]#', $image)) {
+                    throw new Exception("Security: Invalid characters in image name");
+                }
+            }
+            
+            // Validate command for injection attempts
+            if (isset($service['command'])) {
+                $cmd = is_array($service['command']) ? implode(' ', $service['command']) : $service['command'];
+                if (preg_match('#[;&|`]#', $cmd)) {
+                    throw new Exception("Security: Potentially dangerous command detected");
+                }
+            }
+        }
+    }
+    
+    return true;
+}
+
 try {
     $method = $_SERVER['REQUEST_METHOD'];
     
@@ -41,6 +111,14 @@ try {
     } elseif ($method === 'GET' && isset($_GET['action'])) {
         $action = $_GET['action'];
         
+        // Whitelist valid actions to prevent logic bypass
+        $validActions = ['stats', 'logs', 'inspect', 'export'];
+        if (!in_array($action, $validActions, true)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid action']);
+            exit;
+        }
+        
         if ($action === 'stats') {
             $name = $_GET['name'] ?? '';
             if (empty($name)) throw new Exception('Container name required');
@@ -61,7 +139,7 @@ try {
             
         } elseif ($action === 'logs') {
             $name = $_GET['name'] ?? '';
-            $lines = intval($_GET['lines'] ?? 100);
+            $lines = min(max(intval($_GET['lines'] ?? 100), 1), 10000);  // Cap at 10k lines
             if (empty($name)) throw new Exception('Container name required');
             
             $output = [];
@@ -134,6 +212,9 @@ try {
             if (empty($yaml)) {
                 throw new Exception('Docker Compose YAML required');
             }
+            
+            // Validate YAML for security issues
+            validateDockerComposeYaml($yaml);
             
             // Save compose file
             $composeDir = '/var/dplane/compose';

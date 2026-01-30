@@ -54,7 +54,7 @@ function writeSambaConfig() {
         $base .= "   map acl inherit = yes\n";
         $base .= "   store dos attributes = yes\n\n";
         
-        file_put_contents($baseConfig, $base);
+        atomicFileWrite($baseConfig, $base, 0644);
     }
     
     $config = file_get_contents($baseConfig);
@@ -66,7 +66,7 @@ function writeSambaConfig() {
     
     // Write to temp file first
     $tempFile = '/tmp/smb.conf.new';
-    file_put_contents($tempFile, $config);
+    atomicFileWrite($tempFile, $config, 0644);
     
     // Test config
     $output = [];
@@ -140,10 +140,10 @@ function writeNFSExports() {
     
     // Write to temp file first
     $tempFile = '/tmp/exports.new';
-    file_put_contents($tempFile, $exports);
+    atomicFileWrite($tempFile, $exports, 0644);
     
-    // Copy to actual location
-    copy($tempFile, '/etc/exports');
+    // Copy to actual location (atomic)
+    atomicFileWrite('/etc/exports', $exports, 0644);
     unlink($tempFile);
     
     // Reload NFS

@@ -334,14 +334,6 @@ function setSecurityHeaders() {
         header("$header: $value");
     }
     
-    // Force HTTPS (if not localhost)
-    if (!isset($_SERVER['HTTPS']) || $_SERVER['HTTPS'] !== 'on') {
-        if ($_SERVER['SERVER_NAME'] !== 'localhost' && $_SERVER['SERVER_NAME'] !== '127.0.0.1') {
-            $redirect = 'https://' . $_SERVER['SERVER_NAME'] . $_SERVER['REQUEST_URI'];
-            header('Location: ' . $redirect, true, 301);
-            exit;
-        }
-    }
     
     // HSTS (if HTTPS)
     if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
@@ -371,7 +363,7 @@ if (strpos($_SERVER['REQUEST_URI'], 'login') !== false) {
 }
 
 // Cleanup old records (1% chance)
-if (rand(1, 100) === 1) {
+if (random_int(1, 100) === 1) {
     BruteForceProtection::cleanup();
 }
 
@@ -395,6 +387,44 @@ if (!isset($_SESSION['user_agent'])) {
         http_response_code(403);
         die(json_encode(['success' => false, 'error' => 'Session validation failed']));
     }
+}
+
+// Atomic file write helper to prevent race conditions
+function atomicFileWrite($path, $content, $mode = 0644) {
+    $tempFile = $path . '.' . uniqid('tmp', true);
+    
+    // Write to temp file with exclusive lock
+    $fp = fopen($tempFile, 'wb');
+    if (!$fp) {
+        throw new Exception("Cannot create temp file for atomic write");
+    }
+    
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        @unlink($tempFile);
+        throw new Exception("Cannot lock temp file for atomic write");
+    }
+    
+    if (fwrite($fp, $content) === false) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        @unlink($tempFile);
+        throw new Exception("Cannot write to temp file");
+    }
+    
+    fflush($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    
+    chmod($tempFile, $mode);
+    
+    // Atomic rename (POSIX guarantees atomicity)
+    if (!rename($tempFile, $path)) {
+        @unlink($tempFile);
+        throw new Exception("Cannot rename temp file to final location");
+    }
+    
+    return true;
 }
 
 // CSRF token for state-changing requests

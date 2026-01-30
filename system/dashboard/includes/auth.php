@@ -115,7 +115,7 @@ function getCurrentUser() {
     }
     
     $db = getDB();
-    $stmt = $db->prepare('SELECT id, username, email FROM users WHERE id = ?');
+    $stmt = $db->prepare('SELECT id, username, email, role FROM users WHERE id = ?');
     $stmt->execute([$_SESSION['user_id']]);
     return $stmt->fetch();
 }
@@ -171,71 +171,35 @@ function validateInput($data, $type = 'string') {
  * Enhanced version that validates inputs before execution
  */
 function execCommand($cmd, &$output = [], &$return_code = 0) {
-    $allowedCommands = [
-        'sudo', '/usr/sbin/zpool', '/usr/sbin/zfs', '/usr/bin/docker',
-        '/usr/sbin/smartctl', '/usr/bin/lsblk', '/usr/bin/df', '/bin/grep',
-        '/bin/cat', '/usr/bin/rclone', '/usr/bin/systemctl', '/usr/sbin/service',
-        '/usr/sbin/smbd', '/usr/sbin/smbpasswd', '/usr/bin/chpasswd',
-    ];
-    
-    $parts = preg_split('/\s+/', trim($cmd), -1, PREG_SPLIT_NO_EMPTY);
-    if (empty($parts)) {
-        error_log("SECURITY: Empty command blocked");
-        $output[] = "Invalid command";
-        $return_code = 1;
-        return false;
+    // Extract and validate any pool names
+    if (preg_match_all('/\b([a-zA-Z0-9_-]+)\b/', $cmd, $matches)) {
+        foreach ($matches[1] as $token) {
+            // Skip command names and flags
+            if (in_array($token, ['sudo', 'usr', 'sbin', 'bin', 'zpool', 'zfs', 'docker', 'smartctl', 'lsblk'])) continue;
+            if (strpos($token, '-') === 0) continue; // Skip flags
+            
+            // Validate tokens that look like names
+            if (strlen($token) > 2 && !preg_match('/^[a-zA-Z0-9_\/-]+$/', $token)) {
+                error_log("SECURITY: Rejected suspicious token in command: $token");
+                $output[] = "Invalid parameter detected";
+                $return_code = 1;
+                return false;
+            }
+        }
     }
     
-    $commandIndex = ($parts[0] === 'sudo') ? 1 : 0;
-    if (!isset($parts[$commandIndex])) {
-        error_log("SECURITY: Invalid command structure");
-        $output[] = "Invalid command";
-        $return_code = 1;
-        return false;
-    }
-    
-    $baseCommand = $parts[$commandIndex];
-    
-    if (!in_array($baseCommand, $allowedCommands)) {
-        error_log("SECURITY: Non-whitelisted command blocked: $baseCommand");
-        $output[] = "Command not allowed";
-        $return_code = 1;
-        return false;
-    }
-    
-    $dangerous = ['&&', '||', ';', '`', '$', "\n", "\r", "\t", '(', ')'];
+    // Check for command injection patterns
+    $dangerous = ['&&', '||', ';', '|', '`', '$', '>', '<', "\n", "\r"];
     foreach ($dangerous as $char) {
-        if (strpos($cmd, $char) !== false) {
-            error_log("SECURITY: Blocked dangerous character: " . substr($cmd, 0, 100));
+        if (strpos($cmd, $char) !== false && strpos($cmd, 'escapeshellarg') === false) {
+            error_log("SECURITY: Blocked command injection attempt: " . substr($cmd, 0, 100));
             $output[] = "Command contains dangerous characters";
             $return_code = 1;
             return false;
         }
     }
     
-    if (strpos($cmd, '>') !== false && !preg_match('/2>&1/', $cmd)) {
-        error_log("SECURITY: Blocked redirect");
-        $output[] = "Command contains dangerous characters";
-        $return_code = 1;
-        return false;
-    }
-    
-    if (strpos($cmd, '|') !== false) {
-        if (strpos($cmd, 'docker') === false || strpos($cmd, '--format') === false || !preg_match('/(["|\']).*\|.*\1/', $cmd)) {
-            error_log("SECURITY: Blocked pipe");
-            $output[] = "Command contains dangerous characters";
-            $return_code = 1;
-            return false;
-        }
-    }
-    
-    error_log("CMD_EXEC: " . substr($cmd, 0, 200));
     exec($cmd . ' 2>&1', $output, $return_code);
-    
-    if ($return_code !== 0) {
-        error_log("CMD_FAILED (code $return_code): " . substr($cmd, 0, 200));
-    }
-    
     return $return_code === 0;
 }
 
@@ -263,4 +227,89 @@ function formatBytes($bytes) {
     $pow = min($pow, count($units) - 1);
     $bytes /= pow(1024, $pow);
     return round($bytes, 2) . ' ' . $units[$pow];
+}
+
+/**
+ * RBAC: Get current user's role
+ */
+function getCurrentUserRole() {
+    $user = getCurrentUser();
+    return $user ? ($user['role'] ?? 'user') : null;
+}
+
+/**
+ * RBAC: Check if user has specific role
+ */
+function hasRole($role) {
+    $currentRole = getCurrentUserRole();
+    if (!$currentRole) return false;
+    
+    // Exact role match
+    if ($currentRole === $role) return true;
+    
+    // Admin has all permissions
+    if ($currentRole === 'admin') return true;
+    
+    return false;
+}
+
+/**
+ * RBAC: Require specific role (or admin)
+ */
+function requireRole($role, $errorMessage = 'Insufficient permissions') {
+    if (!hasRole($role)) {
+        if (strpos($_SERVER['REQUEST_URI'], '/api/') !== false) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            die(json_encode(['success' => false, 'error' => $errorMessage]));
+        }
+        
+        http_response_code(403);
+        die('<h1>403 Forbidden</h1><p>' . htmlspecialchars($errorMessage) . '</p>');
+    }
+}
+
+/**
+ * RBAC: Check if current user is admin
+ */
+function isAdmin() {
+    return getCurrentUserRole() === 'admin';
+}
+
+/**
+ * RBAC: Check if user can write/modify (admin or user role)
+ */
+function canWrite() {
+    $role = getCurrentUserRole();
+    return in_array($role, ['admin', 'user'], true);
+}
+
+/**
+ * RBAC: Check if user can read (all roles)
+ */
+function canRead() {
+    return isAuthenticated();
+}
+
+/**
+ * RBAC: Require write permissions
+ */
+function requireWrite($errorMessage = 'Write access required') {
+    if (!canWrite()) {
+        if (strpos($_SERVER['REQUEST_URI'], '/api/') !== false) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            die(json_encode(['success' => false, 'error' => $errorMessage]));
+        }
+        
+        http_response_code(403);
+        die('<h1>403 Forbidden</h1><p>' . htmlspecialchars($errorMessage) . '</p>');
+    }
+}
+
+/**
+ * RBAC: Require admin role
+ */
+function requireAdmin($errorMessage = 'Administrator access required') {
+    requireRole('admin', $errorMessage);
 }

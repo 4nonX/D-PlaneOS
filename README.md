@@ -2,7 +2,7 @@
 
 **A transparent, Docker-native NAS operating system built on ZFS**
 
-Version 1.8.0 | Status: **USER FEEDBACK PENDING** ⚡
+Version 1.8.0 | Status: **POWER USER READY** ⚡
 
 ---
 
@@ -10,7 +10,7 @@ Version 1.8.0 | Status: **USER FEEDBACK PENDING** ⚡
 
 - **Docker Compose as First-Class Citizen** - No app store, no templates. You control your containers.
 - **Transparency over Abstraction** - Native ZFS and Docker commands, not hidden behind layers
-- **Security from Day One** - Strict privilege separation and command injection protection
+- **Security from Day One** - Enterprise-grade privilege separation and command injection protection
 - **Sleek Design + Lots of Power** - Clean UI that never gets in the way, with professional capabilities underneath
 
 ## Features

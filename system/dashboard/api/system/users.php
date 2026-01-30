@@ -1,43 +1,37 @@
 <?php
+/**
+ * User Management API with RBAC
+ * Requires admin role
+ */
+
 require_once __DIR__ . '/../../includes/auth.php';
 requireAuth();
-header('Content-Type: application/json');
+requireAdmin(); // Only admins can manage users
 
-// Only admin can manage users
-$currentUser = getCurrentUser();
-if ($currentUser['username'] !== 'admin') {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Admin access required']);
-    exit;
-}
+header('Content-Type: application/json');
 
 try {
     $method = $_SERVER['REQUEST_METHOD'];
+    $db = getDB();
     
     if ($method === 'GET') {
         $action = $_GET['action'] ?? 'list';
         
         if ($action === 'list') {
-            // List all users
-            $db = getDB();
-            $stmt = $db->query('SELECT id, username, email, created_at FROM users ORDER BY username');
-            
-            $users = [];
-            while ($row = $stmt->fetch()) {
-                $users[] = $row;
-            }
+            // List all users with roles
+            $stmt = $db->query('SELECT id, username, email, role, created_at, last_login FROM users ORDER BY id');
+            $users = $stmt->fetchAll();
             
             echo json_encode(['success' => true, 'users' => $users]);
             
         } elseif ($action === 'get') {
-            $userId = $_GET['id'] ?? 0;
+            $userId = intval($_GET['id'] ?? 0);
             
             if (!$userId) {
                 throw new Exception('User ID required');
             }
             
-            $db = getDB();
-            $stmt = $db->prepare('SELECT id, username, email, created_at FROM users WHERE id = ?');
+            $stmt = $db->prepare('SELECT id, username, email, role, created_at, last_login FROM users WHERE id = ?');
             $stmt->execute([$userId]);
             $user = $stmt->fetch();
             
@@ -53,25 +47,28 @@ try {
         $action = $input['action'] ?? '';
         
         if ($action === 'create') {
+            // Create new user with role
             $username = validateInput($input['username'] ?? '', 'username');
             $password = $input['password'] ?? '';
             $email = validateInput($input['email'] ?? '', 'email');
+            $role = $input['role'] ?? 'user';
             
+            // Validation
             if (!$username || !$password) {
                 throw new Exception('Username and password required');
             }
             
-            // Validate username format
             if (!preg_match('/^[a-zA-Z0-9_-]{3,32}$/', $username)) {
                 throw new Exception('Username must be 3-32 characters (alphanumeric, dash, underscore only)');
             }
             
-            // Validate password strength
             if (strlen($password) < 8) {
                 throw new Exception('Password must be at least 8 characters');
             }
             
-            $db = getDB();
+            if (!in_array($role, ['admin', 'user', 'readonly'], true)) {
+                throw new Exception('Invalid role. Must be: admin, user, or readonly');
+            }
             
             // Check if username exists
             $stmt = $db->prepare('SELECT id FROM users WHERE username = ?');
@@ -83,52 +80,41 @@ try {
             // Hash password
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
             
-            // Create user
-            $stmt = $db->prepare('INSERT INTO users (username, password, email, created_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)');
-            $stmt->execute([$username, $hashedPassword, $email]);
+            // Create user in database with role
+            $stmt = $db->prepare('INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)');
+            $stmt->execute([$username, $hashedPassword, $email, $role]);
             
             $userId = $db->lastInsertId();
             
-            // Create Linux user (for SMB/NFS access)
-            $output = [];
-            $cmd = 'sudo useradd -m -s /bin/bash ' . escapeshellarg($username);
-            execCommand($cmd, $output, $ret);
-            
-            if ($ret === 0) {
-                // Set Linux password
-                $cmd = 'echo ' . escapeshellarg($username . ':' . $password) . ' | sudo chpasswd';
-                execCommand($cmd, $output);
+            // Create system user for SMB/NFS access (only if not readonly)
+            if ($role !== 'readonly') {
+                $output = [];
+                $cmd = 'sudo /opt/dplaneos/system/scripts/smb-user-add.sh ' . escapeshellarg($username) . ' ' . escapeshellarg($password);
+                execCommand($cmd, $output, $ret);
                 
-                // Add to SMB
-                $cmd = '(echo ' . escapeshellarg($password) . '; echo ' . escapeshellarg($password) . ') | sudo smbpasswd -a -s ' . escapeshellarg($username);
-                execCommand($cmd, $output);
+                if ($ret !== 0) {
+                    // Log warning but don't fail
+                    error_log("Warning: Failed to create system user for $username: " . implode("\n", $output));
+                }
             }
             
-            auditLog('create', 'user', $username, "User created");
+            logAction('user_create', 'user', $username, "Created user with role: $role");
             
-            createNotification(
-                'User Created',
-                "New user '$username' has been created",
-                'success',
-                'system',
-                1
-            );
-            
-            echo json_encode(['success' => true, 'message' => 'User created', 'user_id' => $userId]);
+            echo json_encode([
+                'success' => true,
+                'message' => 'User created successfully',
+                'user_id' => $userId
+            ]);
             
         } elseif ($action === 'update') {
-            $userId = validateInput($input['id'] ?? 0, 'integer');
-            $email = validateInput($input['email'] ?? '', 'email');
-            
+            // Update user
+            $userId = intval($input['id'] ?? 0);
             if (!$userId) {
                 throw new Exception('User ID required');
             }
             
-            $db = getDB();
-            
-            // Get current user info
-            $stmt = $db->prepare('SELECT username FROM users WHERE id = ?');
+            // Get current user data
+            $stmt = $db->prepare('SELECT * FROM users WHERE id = ?');
             $stmt->execute([$userId]);
             $user = $stmt->fetch();
             
@@ -136,16 +122,52 @@ try {
                 throw new Exception('User not found');
             }
             
-            // Update email
-            $stmt = $db->prepare('UPDATE users SET email = ? WHERE id = ?');
-            $stmt->execute([$email, $userId]);
+            // Prevent modifying own role
+            if ($userId == $_SESSION['user_id'] && isset($input['role'])) {
+                throw new Exception('Cannot modify your own role');
+            }
             
-            auditLog('update', 'user', $user['username'], "Updated email");
+            // Prevent removing admin role from last admin
+            if (isset($input['role']) && $input['role'] !== 'admin' && $user['role'] === 'admin') {
+                $adminCount = $db->query("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")->fetch();
+                if ($adminCount['count'] <= 1) {
+                    throw new Exception('Cannot remove admin role from last administrator');
+                }
+            }
+            
+            $updates = [];
+            $params = [];
+            
+            if (isset($input['email'])) {
+                $email = validateInput($input['email'], 'email');
+                $updates[] = 'email = ?';
+                $params[] = $email;
+            }
+            
+            if (isset($input['role'])) {
+                $role = $input['role'];
+                if (!in_array($role, ['admin', 'user', 'readonly'], true)) {
+                    throw new Exception('Invalid role');
+                }
+                $updates[] = 'role = ?';
+                $params[] = $role;
+            }
+            
+            if (empty($updates)) {
+                throw new Exception('No fields to update');
+            }
+            
+            $params[] = $userId;
+            $sql = 'UPDATE users SET ' . implode(', ', $updates) . ' WHERE id = ?';
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+            
+            logAction('user_update', 'user', $user['username'], 'Updated: ' . implode(', ', array_keys($input)));
             
             echo json_encode(['success' => true, 'message' => 'User updated']);
             
         } elseif ($action === 'change_password') {
-            $userId = validateInput($input['id'] ?? 0, 'integer');
+            $userId = intval($input['id'] ?? 0);
             $newPassword = $input['new_password'] ?? '';
             
             if (!$userId || !$newPassword) {
@@ -156,20 +178,13 @@ try {
                 throw new Exception('Password must be at least 8 characters');
             }
             
-            $db = getDB();
-            
             // Get username
-            $stmt = $db->prepare('SELECT username FROM users WHERE id = ?');
+            $stmt = $db->prepare('SELECT username, role FROM users WHERE id = ?');
             $stmt->execute([$userId]);
             $user = $stmt->fetch();
             
             if (!$user) {
                 throw new Exception('User not found');
-            }
-            
-            // Cannot change admin password this way
-            if ($user['username'] === 'admin' && $userId != $currentUser['id']) {
-                throw new Exception('Cannot change admin password');
             }
             
             // Hash new password
@@ -179,34 +194,31 @@ try {
             $stmt = $db->prepare('UPDATE users SET password = ? WHERE id = ?');
             $stmt->execute([$hashedPassword, $userId]);
             
-            // Update Linux password
-            $cmd = 'echo ' . escapeshellarg($user['username'] . ':' . $newPassword) . ' | sudo chpasswd';
-            execCommand($cmd, $output);
+            // Update system user password (if not readonly)
+            if ($user['role'] !== 'readonly') {
+                $output = [];
+                $cmd = '(echo ' . escapeshellarg($newPassword) . '; echo ' . escapeshellarg($newPassword) . ') | sudo smbpasswd -a -s ' . escapeshellarg($user['username']);
+                execCommand($cmd, $output);
+            }
             
-            // Update SMB password
-            $cmd = '(echo ' . escapeshellarg($newPassword) . '; echo ' . escapeshellarg($newPassword) . ') | sudo smbpasswd -a -s ' . escapeshellarg($user['username']);
-            execCommand($cmd, $output);
-            
-            auditLog('update', 'user', $user['username'], "Password changed");
+            logAction('user_update', 'user', $user['username'], 'Password changed');
             
             echo json_encode(['success' => true, 'message' => 'Password changed']);
             
         } elseif ($action === 'delete') {
-            $userId = validateInput($input['id'] ?? 0, 'integer');
+            $userId = intval($input['id'] ?? 0);
             
             if (!$userId) {
                 throw new Exception('User ID required');
             }
             
-            // Cannot delete admin
-            if ($userId == 1) {
-                throw new Exception('Cannot delete admin user');
+            // Prevent self-deletion
+            if ($userId == $_SESSION['user_id']) {
+                throw new Exception('Cannot delete your own account');
             }
             
-            $db = getDB();
-            
-            // Get username
-            $stmt = $db->prepare('SELECT username FROM users WHERE id = ?');
+            // Get user data
+            $stmt = $db->prepare('SELECT * FROM users WHERE id = ?');
             $stmt->execute([$userId]);
             $user = $stmt->fetch();
             
@@ -214,28 +226,30 @@ try {
                 throw new Exception('User not found');
             }
             
-            // Delete from database
+            // Prevent deleting last admin
+            if ($user['role'] === 'admin') {
+                $adminCount = $db->query("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")->fetch();
+                if ($adminCount['count'] <= 1) {
+                    throw new Exception('Cannot delete the last administrator');
+                }
+            }
+            
+            // Delete from database (cascades will clean up related data)
             $stmt = $db->prepare('DELETE FROM users WHERE id = ?');
             $stmt->execute([$userId]);
             
-            // Delete Linux user (keep home directory for safety)
-            $output = [];
-            $cmd = 'sudo userdel ' . escapeshellarg($user['username']);
-            execCommand($cmd, $output);
+            // Delete system user (if exists)
+            if ($user['role'] !== 'readonly') {
+                $output = [];
+                $cmd = 'sudo /opt/dplaneos/system/scripts/smb-user-del.sh ' . escapeshellarg($user['username']);
+                execCommand($cmd, $output, $ret);
+                
+                if ($ret !== 0) {
+                    error_log("Warning: Failed to delete system user for {$user['username']}: " . implode("\n", $output));
+                }
+            }
             
-            // Remove from SMB
-            $cmd = 'sudo smbpasswd -x ' . escapeshellarg($user['username']);
-            execCommand($cmd, $output);
-            
-            auditLog('delete', 'user', $user['username'], "User deleted");
-            
-            createNotification(
-                'User Deleted',
-                "User '{$user['username']}' has been deleted",
-                'warning',
-                'system',
-                1
-            );
+            logAction('user_delete', 'user', $user['username'], 'User deleted');
             
             echo json_encode(['success' => true, 'message' => 'User deleted']);
         }
@@ -245,11 +259,3 @@ try {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
-
-function createNotification($title, $message, $type, $category, $priority, $details = null) {
-    $db = getDB();
-    $stmt = $db->prepare('INSERT INTO notifications (title, message, type, category, priority, details)
-        VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$title, $message, $type, $category, $priority, $details]);
-}
-?>

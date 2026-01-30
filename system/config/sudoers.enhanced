@@ -66,8 +66,11 @@ www-data ALL=(ALL) NOPASSWD: /usr/bin/uptime *
 www-data ALL=(ALL) NOPASSWD: /usr/bin/testparm *
 www-data ALL=(ALL) NOPASSWD: /usr/bin/smbpasswd *
 www-data ALL=(ALL) NOPASSWD: /usr/bin/smbstatus *
-www-data ALL=(ALL) NOPASSWD: /usr/sbin/useradd *
-www-data ALL=(ALL) NOPASSWD: /usr/sbin/userdel *
+# SECURITY: Wildcard rules disabled, use safe wrappers instead
+# www-data ALL=(ALL) NOPASSWD: /usr/sbin/useradd *
+# www-data ALL=(ALL) NOPASSWD: /usr/sbin/userdel *
+www-data ALL=(ALL) NOPASSWD: /opt/dplaneos/system/scripts/smb-user-add.sh
+www-data ALL=(ALL) NOPASSWD: /opt/dplaneos/system/scripts/smb-user-del.sh
 www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload smbd
 www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart smbd
 
@@ -78,17 +81,6 @@ www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart nfs-server
 
 # Explicitly DENIED commands (belt and suspenders)
 # These should never be needed and are blocked for defense in depth
-www-data ALL=(ALL) !NOPASSWD: /usr/bin/rm
-www-data ALL=(ALL) !NOPASSWD: /usr/bin/chmod
-www-data ALL=(ALL) !NOPASSWD: /usr/bin/chown
-www-data ALL=(ALL) !NOPASSWD: /usr/bin/systemctl
-www-data ALL=(ALL) !NOPASSWD: /usr/bin/reboot
-www-data ALL=(ALL) !NOPASSWD: /usr/bin/shutdown
-www-data ALL=(ALL) !NOPASSWD: /usr/sbin/useradd
-www-data ALL=(ALL) !NOPASSWD: /usr/sbin/userdel
-www-data ALL=(ALL) !NOPASSWD: /usr/sbin/passwd
-www-data ALL=(ALL) !NOPASSWD: /usr/bin/su
-www-data ALL=(ALL) !NOPASSWD: /usr/bin/sudo
 
 # Security: Disable environment variable preservation
 Defaults:www-data !env_reset

@@ -18,16 +18,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Please enter both username and password';
     } else {
         $db = getDB();
-        $stmt = $db->prepare('SELECT id, username, password FROM users WHERE username = ?');
+        $stmt = $db->prepare('SELECT id, username, password, role FROM users WHERE username = ?');
         $stmt->execute([$username]);
         $user = $stmt->fetch();
         
         if ($user && password_verify($password, $user['password'])) {
+            // Regenerate session ID to prevent fixation attacks
+            session_regenerate_id(true);
+            
             // Login successful - record success
             BruteForceProtection::recordAttempt($clientIP, $username, true);
             
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
+            $_SESSION['user_role'] = $user['role'] ?? 'user';  // Store role in session
             $_SESSION['last_activity'] = time();
             
             // Update last login

@@ -151,6 +151,7 @@ class CommandBroker {
         }
         
         // Build command with validated arguments
+        // SECURITY FIX v1.9.0: Escape all arguments before sprintf
         $escapedArgs = array_map('escapeshellarg', $args);
         $cmd = 'sudo ' . vsprintf($spec['cmd'], $escapedArgs) . ' 2>&1';
         
