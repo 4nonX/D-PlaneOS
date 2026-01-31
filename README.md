@@ -15,6 +15,13 @@ Version 1.9.0 | Status: **POWER USER READY** ⚡
 
 ## Features
 
+### ⚖️ License
+D-PlaneOS is now licensed under the PolyForm Noncommercial License 1.0.0.
+Personal Use: Free
+Commercial Use: Prohibited
+View License Details
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
+
 ### Licence Change and Critical Bug Fixes (v1.9.0)
 - License: moving to PolyForm Noncommercial 1.0.0
 - auth.php - PHP Parse Error & Duplicate Code (CRITICAL)
