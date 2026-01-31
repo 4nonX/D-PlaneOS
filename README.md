@@ -15,7 +15,8 @@ Version 1.9.0 | Status: **POWER USER READY** ⚡
 
 ## Features
 
-### Critical Bug Fixes (v1.9.0)
+### Licence Change and Critical Bug Fixes (v1.9.0)
+- license: moving to PolyForm Noncommercial
 - auth.php - PHP Parse Error & Duplicate Code (CRITICAL)
 - Removed duplicate/orphaned code blocks (lines 243-309)
 
