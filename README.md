@@ -2,7 +2,7 @@
 
 **A transparent, Docker-native NAS operating system built on ZFS**
 
-Version 1.8.0 | Status: **POWER USER READY** ⚡
+Version 1.9.0 | Status: **POWER USER READY** ⚡
 
 ---
 
@@ -14,6 +14,10 @@ Version 1.8.0 | Status: **POWER USER READY** ⚡
 - **Sleek Design + Lots of Power** - Clean UI that never gets in the way, with professional capabilities underneath
 
 ## Features
+
+### Critical Bug Fixes (v1.9.0)
+- auth.php - PHP Parse Error & Duplicate Code (CRITICAL)
+- Removed duplicate/orphaned code blocks (lines 243-309)
 
 ### File Management (New in v1.8.0) 📁
 - **Complete File Browser**: Upload, download, preview text files
