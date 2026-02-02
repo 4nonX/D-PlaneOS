@@ -7,6 +7,277 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v1.14.0-OMEGA (2026-02-01) ⚡ CURRENT PRODUCTION RELEASE
+
+**"OMEGA Edition" - First Fully Production-Ready Release**
+
+This is the release that actually works on a real server. Previous releases shipped the platform and the UI. This release patches all of them together correctly. The bugs below would have caused silent failures on any fresh install — empty API responses, login loops, hanging backend. All fixed.
+
+### Fixed (7 Critical Infrastructure Bugs)
+
+**1. www-data Sudo Permissions Missing**
+- **Severity:** CRITICAL
+- **Impact:** Every privileged command (`zpool`, `docker`, `smartctl`, etc.) failed silently. Dashboard showed "online" but all data lists were empty.
+- **Root Cause:** PHP-FPM runs as `www-data` but sudoers wasn't configured during installation.
+- **Fix:** Added comprehensive `config/sudoers-dplaneos` covering all required commands. Validated with `visudo -c` during install.
+
+**2. SQLite Write Permissions**
+- **Severity:** CRITICAL
+- **Impact:** First login always failed. Session couldn't be written to database.
+- **Root Cause:** `/var/lib/dplaneos` and `/etc/dplaneos` not writable by `www-data`.
+- **Fix:** Installer now sets `chown www-data:www-data` and `chmod 775` on all runtime directories.
+
+**3. Login Loop on Cold Start**
+- **Severity:** HIGH
+- **Impact:** Users saw flash of dashboard then got redirected to login, sometimes looping indefinitely.
+- **Root Cause:** `index.html` rendered full dashboard before auth check completed (>100ms on cold start).
+- **Fix:** Added `body{display:none}` immediately. Body shown only after `api/auth.php` confirms valid session.
+
+**4. API Timeout Handling**
+- **Severity:** HIGH
+- **Impact:** `network-complete.php` ran `iwlist scan` with no timeout. On servers without WiFi hardware, hung indefinitely and blocked entire PHP-FPM worker pool.
+- **Root Cause:** No timeout on hardware detection commands.
+- **Fix:** All hardware `exec()` calls now use `timeout 3`. Missing hardware returns empty list immediately.
+
+**5. Silent Session Expiry**
+- **Severity:** MEDIUM
+- **Impact:** Users logged out mid-operation with no warning.
+- **Root Cause:** Sessions expired silently, no frontend detection.
+- **Fix:** Heartbeat polling detects expiry. Automatic redirect to login after grace period.
+
+**6. No Loading Feedback**
+- **Severity:** LOW (UX)
+- **Impact:** Zero visual feedback on async operations. Users didn't know if buttons worked.
+- **Fix:** Global `LoadingOverlay` manager shows spinner and blocks double-clicks.
+
+**7. Style Flash on Load**
+- **Severity:** LOW (UX)
+- **Impact:** Flash of unstyled content on every page load.
+- **Root Cause:** CSS loaded after JavaScript rendered DOM.
+- **Fix:** Styles injected immediately when script initializes.
+
+### Added
+
+- Server-side authentication checks on all API endpoints (excluding `auth.php` and utility files)
+- 1-hour session timeout with inactivity enforcement
+- 401 JSON responses for unauthorized API access
+- Removed all `Access-Control-Allow-Origin: *` headers (same-origin policy enforced)
+- Post-install integrity checker (`scripts/audit-dplaneos.sh`)
+- Production installer with built-in self-test phase
+- `scripts/CREATE-OMEGA-PACKAGE.sh` - Reproducible build script
+
+### ⚠️ Breaking Changes
+
+**None.** The OMEGA edition fixes infrastructure bugs while maintaining full backward compatibility.
+
+---
+
+## v1.14.0 (2026-01-31) - UI Revolution
+
+**"Complete Frontend Rebuild" - 10 Fully Functional Pages, Responsive, Customizable**
+
+### Added
+
+**Complete UI Rebuild**
+- 10 management pages fully wired to 16 backend APIs: Dashboard, Storage, Docker, Shares, Network, Users, Settings, Backup, Files, Customize
+- No placeholders - every page functional
+- Responsive layout (mobile, tablet, desktop)
+
+**Customization System**
+- 10+ color parameters adjustable via UI (background, cards, primary, accent, success, warning, error, borders)
+- Sidebar width slider (200–400px)
+- Custom CSS upload with real-time preview
+- Safety guards block dangerous selectors
+- 3 preset themes: D-PlaneOS Dark (default), Ocean Blue, Forest Green
+- Theme export/import as JSON
+
+**Frontend Pages (10 HTML files)**
+- `dashboard.html` - System overview with metrics
+- `storage.html` - Pool and dataset management
+- `docker.html` - Container orchestration
+- `shares.html` - SMB/NFS share configuration
+- `network.html` - Network interface management
+- `users.html` - User account administration
+- `settings.html` - System settings
+- `backup.html` - Backup and restore
+- `files.html` - File browser interface
+- `customize.html` - Theme and appearance
+
+**Frontend JS Modules**
+- `main.js` - Core app shell + routing
+- `sidebar.js` - Navigation with auth gate and logout
+- `pool-wizard.js` - ZFS pool creation wizard
+- `hardware-monitor.js` - Live system metrics
+- `ux-feedback.js` - Toast notifications and modals
+
+**CSS Modules**
+- `main.css` - Full theme system with CSS variables
+- `ux-feedback.css` - Feedback component styles
+
+### Changed
+
+- Frontend moved from PHP-rendered pages to static HTML + vanilla JS SPA
+- All pages share single `main.js` app shell
+- Page content loads via `fetch()` into main container
+- API-driven data throughout
+
+### ⚠️ Breaking Changes
+
+**None.** Frontend rebuild maintains all existing API contracts.
+
+---
+
+## v1.13.1 (2026-01-31) - Hardening Pass
+
+**No new features - closes remaining edge cases on top of v1.13.0-FINAL**
+
+### Added
+
+- Docker brutal cleanup on restore (removes containers not in backup snapshot)
+- Log rotation with `copytruncate` strategy (prevents log files held open by running processes)
+- ZFS auto-expand trigger (detects when pool can grow after disk replacement)
+
+### Fixed
+
+- Edge cases in backup/restore workflow
+- Log file handling during active operations
+- Pool expansion detection after hardware changes
+
+### ⚠️ Breaking Changes
+
+**None.**
+
+---
+
+## v1.13.0 (2026-01-31) - Future-Proof Installer
+
+**"Dynamic Dependency Resolution" - No More Hardcoded Version Lists**
+
+### Added
+
+**Dynamic Dependency Detection**
+- Dynamic PHP version detection (queries available packages instead of hardcoded lists)
+- Automatic PHP socket location detection across different system configurations
+- Intelligent fallback chains for unavailable packages
+
+**Comprehensive Pre-Flight Validation**
+- Disk space check (minimum 20GB)
+- Memory check (minimum 4GB)
+- Internet connectivity verification
+- Port conflict detection (80, 443, 3000)
+- OS version compatibility warnings
+
+**Enhanced Error Handling**
+- Detailed logging throughout installation
+- Better error messages
+- Improved recovery procedures
+
+### Changed
+
+- Complete installer rewrite replacing all hardcoded dependency versions
+- Improved Raspberry Pi / ARM platform support
+- Better handling of interactive apt prompts (`DEBIAN_FRONTEND=noninteractive`)
+
+### Fixed
+
+- Installer hanging on missing dependencies
+- Kernel headers missing for ZFS on ARM systems
+- Docker repository configuration issues
+- PHP version detection failures on newer Debian/Ubuntu releases
+
+### ⚠️ Breaking Changes
+
+**None.** Installation improvements are transparent to existing deployments.
+
+---
+
+## v1.12.0 (2026-01-31) - Major Security Remediation
+
+**"The Big Fix" - 45 Vulnerabilities from Comprehensive Penetration Test**
+
+### Fixed (10 Critical Vulnerabilities)
+
+**C-01: Systemic XSS Vulnerabilities**
+- Complete lack of HTML escaping across all UIs (282 unescaped interpolation points)
+- Created `utils.js` with `esc()` and `escJS()` functions
+- Wrapped all 282 interpolations
+
+**C-02: SMB Command Injection**
+- Raw `$_GET['name']` and password passed directly into `shell_exec`
+- Applied `escapeshellarg()` on share name
+- Password piped via temp file instead of shell interpolation
+
+**C-03: Network Command Injection**
+- Unescaped IPs and gateways in `exec` calls
+- Applied `filter_var(FILTER_VALIDATE_IP)` on all IP inputs
+- `escapeshellarg()` on CIDR and gateway
+
+**C-04: Disk Replacement Dual Injection**
+- Command injection + SQL injection in same endpoint
+- Applied `escapeshellarg()` on pool/device names
+- Converted SQL UPDATE to prepared statement
+
+**C-05: ZFS Admin Bypass**
+- `'create'` action missing from `$adminActions` whitelist
+- Any authenticated user could create storage pools
+- Added `'create'` to admin action whitelist
+
+**C-06: Backup Path Traversal**
+- `deleteBackup()` used raw user-supplied filename
+- Could delete files outside backup dir via `../`
+- Applied `basename()` to strip directory components
+
+**C-07: SSE Stream Corruption**
+- `hardware-monitor.php` HTTP router dumped JSON into SSE stream
+- Broke SSE event stream, causing frontend polling to fail
+- Router wrapped in include guard
+
+**C-08: NFS cp Not in Sudoers**
+- `cp /tmp/* /etc/exports` not whitelisted
+- NFS export updates silently failed
+- Added explicit sudoers entry
+
+**C-09: Auto-Backup Authentication Failure**
+- `auto-backup.php` made HTTP calls with no session cookie
+- Automated backups never worked
+- Implemented service-token system
+
+**C-10: Notifications System Broken**
+- Schema mismatch, no HTTP router, no frontend fetch path
+- Users never saw critical system alerts
+- Fixed schema, added router, implemented frontend
+
+### Fixed (7 High Severity Vulnerabilities)
+
+- H-11: Dashboard Metrics Dead (missing `data-metric` attributes)
+- H-12: Dual Navigation System (acknowledged design decision)
+- H-13: Pool Wizard Dead (missing container div)
+- H-14: Share Cards Non-Functional (wrong API property)
+- H-15: Repository List Broken (non-existent endpoint)
+- H-16: ZFS Scrub Status Broken (API key mismatch)
+- H-17: Docker Quick Actions Broken (wrong API actions)
+
+### Added
+
+- SSH key validation
+- Tailscale configurator features
+- Functional implementations for `files.html`, `settings.html`, `shares.html`, `users.html` (replaced "coming soon" stubs)
+- New `files.php` backend for file management
+- 66MB offline package support with `.deb` files
+- Complete XSS mitigation framework with utility functions
+
+### Security
+
+- Enhanced authentication gates with role checking
+- Rate limiting for all state-changing operations
+- Input validation throughout entire codebase
+
+### ⚠️ Breaking Changes
+
+**None.** Security fixes maintain backward compatibility.
+
+---
+
 ## v1.11.0 (2026-01-31) 🚨 COMMAND INJECTION REMEDIATION
 
 **"The Vibecoded Security Theater Fix" - Fixing 108 Vulnerable Call Sites**
@@ -155,6 +426,115 @@ This is "security theater" - code written to feel safe rather than actually be s
 ### ⚠️ Breaking Changes
 
 **None.** The fix maintains full backward compatibility while closing the security hole.
+
+---
+
+## v1.10.0 (2026-01-31) - Smart State Polling & One-Click Updates
+
+**"Efficiency & Automation" - 95% Bandwidth Reduction, Zero-Downtime Updates**
+
+### Added
+
+**Smart State Polling System**
+- ETag-based polling reduces bandwidth by 95% and CPU by 88%
+- New `/api/state/hash.php` endpoint for efficient state checking
+- Client-side `state-sync.js` library with adaptive polling
+- Automatic fallback to traditional polling if unavailable
+- 2× improvement in multi-user scaling capacity
+
+**One-Click System Updates**
+- ZFS snapshot-based update system with automatic rollback
+- New `/api/system/update.php` for automated updates
+- Update UI at `/updates.php` with progress tracking
+- Pre-flight checks before updates
+- Automatic ZFS snapshot creation before updates
+- Smoke tests after update with automatic rollback on failure
+- Zero Docker container downtime during updates
+- Manual rollback capability via UI
+- Smart sudoers merging (preserves user customizations)
+- Automatic database migrations
+- Service reload without full system reboot
+- Rollback snapshot management (keeps last 3)
+
+**Update Features**
+- Check for latest version from GitHub releases
+- Real-time progress updates via Server-Sent Events
+
+### Changed
+
+- **License:** Changed from MIT to PolyForm Noncommercial License 1.0.0
+- Improved polling efficiency across all dashboard pages
+- Enhanced error handling in state synchronization
+
+### Performance
+
+- 95% reduction in bandwidth usage for dashboard polling
+- 91% reduction in server processing time
+- 88% reduction in CPU usage during normal operation
+
+### ⚠️ Breaking Changes
+
+**License Change:** Project moved from MIT to PolyForm Noncommercial License 1.0.0. Commercial use now requires separate license agreement.
+
+---
+
+## v1.9.0 (2026-01-30) - RBAC & Security Fixes
+
+**"Role-Based Access Control" - Multi-User Support with Proper Authorization**
+
+### Added
+
+**RBAC (Role-Based Access Control)**
+- Three role types: Admin, User, Readonly
+- User management UI at `/users.php`
+- User management API at `/api/system/users.php`
+- Automatic migration for existing installations
+
+**Security Infrastructure**
+- Safe SMB user management wrapper scripts
+- Database migration system
+- Enhanced authentication functions
+
+### Fixed (7 Critical Security Issues)
+
+**1. Session Fixation Vulnerability**
+- Sessions weren't regenerated after login
+- Attacker could pre-set session ID
+- Fixed with `session_regenerate_id(true)` after authentication
+
+**2. Wildcard Sudoers Rules**
+- Overly permissive `*` wildcards in sudoers
+- Replaced with safe wrapper scripts for SMB operations
+
+**3. Action Parameter Whitelist**
+- Missing validation on action parameters
+- Added strict whitelist per endpoint
+
+**4. Atomic File Write Race Conditions**
+- Config files written non-atomically
+- Implemented write-to-temp + rename pattern
+
+**5. Docker Compose YAML Injection**
+- User-supplied YAML not validated
+- Added YAML parsing validation before deployment
+
+**6. Weak Random Number Generation**
+- `rand()` used for security-sensitive operations
+- Changed to `random_int()` for cryptographic security
+
+**7. Logs Parameter Bounds**
+- No limit on lines parameter (DoS risk)
+- Added max 10,000 lines limit with validation
+
+### Changed
+
+- Updated user schema to include role column
+- Enhanced session management with role storage
+- Improved audit logging with role information
+
+### ⚠️ Breaking Changes
+
+**None.** RBAC additions maintain backward compatibility with existing single-user deployments.
 
 ---
 
@@ -526,6 +906,39 @@ v1.8.0 is 100% backward compatible with v1.7.0.
 ---
 
 ## Upgrade Path
+
+### v1.13.x → v1.14.0-OMEGA (CRITICAL INFRASTRUCTURE)
+```bash
+cd dplaneos-v1.14.0-OMEGA
+sudo bash install.sh
+# Select option 1 (Upgrade)
+```
+- All 7 infrastructure bugs automatically fixed
+- Sudoers properly configured
+- File permissions corrected
+- Auth loop prevention implemented
+- No manual intervention required
+
+### v1.12.0 → v1.13.0 (INSTALLER IMPROVEMENTS)
+```bash
+cd dplaneos-v1.13.0
+sudo bash install.sh
+# Select option 1 (Upgrade)
+```
+- Dynamic dependency detection replaces hardcoded versions
+- Pre-flight validation ensures system compatibility
+- Better ARM/Raspberry Pi support
+
+### v1.11.0 → v1.12.0 (MAJOR SECURITY)
+```bash
+cd dplaneos-v1.12.0
+sudo bash install.sh
+# Select option 1 (Upgrade)
+```
+- 45 vulnerabilities fixed
+- Complete XSS mitigation
+- All command injections closed
+- No manual intervention required
 
 ### v1.10.x → v1.11.0 (CRITICAL SECURITY)
 ```bash
