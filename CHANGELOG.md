@@ -4,7 +4,7 @@
 
 ### **MASSIVE UPDATE: Every Tab Now Functional - Zero UI Changes**
 
-This release makes D-PlaneOS truly complete by implementing ALL remaining backend features while keeping the sleek, clean UI unchanged. **Sleek design + LOTS of power** - exactly as requested.
+This release makes D-PlaneOS truly complete by implementing ALL remaining backend features while keeping the sleek, clean UI unchanged. **Sleek design + LOTS of power** 
 
 ---
 
