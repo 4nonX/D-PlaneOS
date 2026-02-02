@@ -1,6 +1,58 @@
-# D-PlaneOS Security & Architecture
+# 🛡️ D-PlaneOS Security & Architecture (v1.14.0)
 
-## Security Model
+## Security Model: Command Execution
+
+D-PlaneOS uses a multi-layered validation approach to execute system commands. This architecture is designed to minimize the risk of command injection while maintaining the flexibility needed for ZFS and Docker management.
+
+### Active Protection in `execCommand()`
+The backend includes real-time security validation for every system call:
+
+* **Token Validation:** All command tokens are extracted and validated against the pattern: `^[a-zA-Z0-9_\/-]+$`.
+* **Injection Pattern Detection:** * Blocks shell operators: `&&`, `||`, `;`, `|`
+    * Blocks code execution: `` ` ``, `$`
+    * Blocks redirection: `>`, `<`
+    * Blocks control characters: newlines, carriage returns.
+* **Security Logging:** All blocked attempts are logged with command snippets for incident response and analysis.
+
+---
+
+## Architecture & Trust Boundaries
+
+### System Layers
+1.  **Web UI (HTML/JS):** Client-side validation and state management.
+2.  **REST API (PHP-FPM):** Session authentication, CSRF protection, and input sanitization.
+3.  **Command Broker (PHP):** Validates requests against an internal whitelist of approved system operations.
+4.  **System Layer:** Execution via `sudo` with a strictly defined scope in `/etc/sudoers.d/dplaneos`.
+
+### Authentication
+* **Session-based:** 30-minute inactivity timeout.
+* **Multi-User Support:** v1.14.0 supports full user management with `bcrypt` password hashing.
+* **Database:** SQLite with strict file permissions and automatic integrity checks on startup.
+
+---
+
+## Recovery Procedures (Admin Playbook)
+
+### Lost Admin Password
+To reset the admin password to default (`admin`), run this command on the host terminal:
+```bash
+sqlite3 /var/www/html/backend/data/dplane.db "UPDATE users SET password='\$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE username='admin'"
+Database Repair
+The installer includes a repair mode to fix permissions and database structures:
+
+Bash
+
+cd dplaneos-v1.14.0
+sudo bash install.sh --repair
+Known Limitations
+No Built-in TLS: D-PlaneOS currently serves over HTTP. For production environments or remote access, we strictly recommend using a reverse proxy (e.g., Nginx, Caddy, or Traefik) for TLS termination.
+
+API Tokens: Currently, the API is session-only. Programmatic API token support is planned for v1.15.0.
+
+Reporting Vulnerabilities
+If you discover a security vulnerability, please open a GitHub Issue with the [Security] label or use the GitHub Private Vulnerability Reporting feature.
+
+Thank you for helping keep D-PlaneOS secure!
 
 ### Command Execution (v1.3.1)
 
