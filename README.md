@@ -318,7 +318,7 @@ sudo systemctl restart dplaneos-ui
 
 ## 📄 License
 
-MIT License - See LICENSE file
+PolyForm Non-Commercial 1.0.0 License - See LICENSE file
 
 ---
 
