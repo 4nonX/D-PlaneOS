@@ -702,27 +702,27 @@ if (window.ConnectionMonitor) {
         }
         
         // Load system stats
-        const statsRes = await csrfFetch('/api/system.php?action=stats');
+        const statsRes = await csrfFetch('/api/metrics/current');
         const stats = await statsRes.json();
         if (stats.success) updateStats(stats.data);
         
         // Load UPS status
-        const upsRes = await csrfFetch('/api/system.php?action=ups_status');
+        const upsRes = await csrfFetch('/api/system/ups');
         const ups = await upsRes.json();
         if (ups.success && ups.data) updateUPSStatus(ups.data);
         
         // Load containers
-        const containersRes = await csrfFetch('/api/docker.php?action=list');
+        const containersRes = await csrfFetch('/api/docker/containers');
         const containers = await containersRes.json();
         if (containers.success) updateContainers(containers.containers);
         
         // Load pools
-        const poolsRes = await csrfFetch('/api/pools.php?action=list');
+        const poolsRes = await csrfFetch('/api/zfs/pools');
         const pools = await poolsRes.json();
         if (pools.success) updatePools(pools.pools);
         
         // Load recent activity
-        const logsRes = await csrfFetch('/api/logs.php?action=recent&limit=3');
+        const logsRes = await csrfFetch('/api/system/logs?limit=3');
         const logs = await logsRes.json();
         if (logs.success) updateActivity(logs.logs);
         

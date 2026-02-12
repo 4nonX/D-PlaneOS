@@ -47,7 +47,7 @@ class UPSWidget {
     }
     
     async fetchUPSData() {
-        const response = await fetch('/api/ups-api.php?action=status');
+        const response = await fetch('/api/system/ups');
         const data = await response.json();
         return data.success ? data.ups : { available: false };
     }
@@ -168,7 +168,7 @@ class UPSWidget {
                         <h4>No UPS Detected</h4>
                         <p>Connect a UPS via USB to enable monitoring</p>
                     </div>
-                    <button class="ups-setup-btn" onclick="window.location.href='/settings.php#ups'">
+                    <button class="ups-setup-btn" onclick="window.location.href='/pages/settings.html#ups'">
                         Setup UPS
                     </button>
                 </div>

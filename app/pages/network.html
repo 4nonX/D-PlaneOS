@@ -485,7 +485,7 @@ async function configureInterface(name) {
     ui.showLoading('Applying network configuration...');
     
     try {
-      const response = await csrfFetch('/api/network.php', {
+      const response = await csrfFetch('/api/system/network', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'configure', interface: name, ...result })
@@ -517,7 +517,7 @@ async function configureVPN() {
     ui.showLoading('Saving VPN settings...');
     
     try {
-      const response = await csrfFetch('/api/network.php', {
+      const response = await csrfFetch('/api/system/network', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'vpn', ...result })
@@ -542,7 +542,7 @@ async function testNetwork() {
   ui.showLoading('Testing network connection...');
   
   try {
-    const response = await csrfFetch('/api/network.php?action=test');
+    const response = await csrfFetch('/api/system/network');
     const result = await response.json();
     ui.hideLoading();
     
@@ -559,7 +559,7 @@ async function testNetwork() {
 
 async function loadNetworkInterfaces() {
   try {
-    const response = await csrfFetch('/api/network.php?action=list');
+    const response = await csrfFetch('/api/system/network');
     const data = await response.json();
     
     if (data.success && data.interfaces) {

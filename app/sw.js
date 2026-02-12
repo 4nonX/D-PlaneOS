@@ -14,8 +14,8 @@ const CACHE_VERSION = '5.0.0';
 // Assets to cache on install
 const STATIC_ASSETS = [
   '/',
-  '/index.php',
-  '/login.php',
+  '/pages/index.html',
+  '/pages/login.html',
   '/assets/css/design-tokens.css',
   '/assets/css/m3-tokens.css',
   '/assets/css/m3-components.css',

@@ -99,7 +99,7 @@ class AlertSystem {
      */
     async loadAlerts() {
         try {
-            const response = await fetch('/api/alert-manager-api.php?action=list');
+            const response = await fetch('/api/metrics/current');
             const data = await response.json();
             
             if (data.success) {
@@ -215,7 +215,7 @@ class AlertSystem {
         
         // Mark as dismissed in backend
         try {
-            await fetch('/api/alert-manager-api.php?action=dismiss', {
+            await fetch('/api/metrics/current?action=dismiss', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -275,7 +275,7 @@ class AlertSystem {
      */
     async acknowledgeCritical(alertId) {
         try {
-            const response = await fetch('/api/alert-manager-api.php?action=acknowledge', {
+            const response = await fetch('/api/metrics/current?action=acknowledge', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

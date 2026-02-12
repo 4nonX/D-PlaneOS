@@ -495,7 +495,7 @@ if (window.ConnectionMonitor) {
     async function loadModules() {
         try {
             showLoading();
-            const response = await csrfFetch('/api/modules.php?action=list_available');
+            const response = await csrfFetch('/api/docker/containers');
             const data = await response.json();
             
             if (data.success) {
@@ -564,7 +564,7 @@ if (window.ConnectionMonitor) {
 
         try {
             showLoading('Installing module...');
-            const response = await csrfFetch('/api/modules.php', {
+            const response = await csrfFetch('/api/docker/containers', {
                 method: 'POST',
                 body: JSON.stringify({
                     action: 'install',
@@ -595,7 +595,7 @@ if (window.ConnectionMonitor) {
 
         try {
             showLoading('Uninstalling module...');
-            const response = await csrfFetch('/api/modules.php', {
+            const response = await csrfFetch('/api/docker/containers', {
                 method: 'POST',
                 body: JSON.stringify({
                     action: 'uninstall',

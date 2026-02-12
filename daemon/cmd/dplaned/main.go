@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"strings"
 	"time"
 
 	"dplaned/internal/audit"
@@ -173,6 +174,25 @@ func main() {
 	r.Use(rateLimitMiddleware)
 
 	// Health check
+
+	// ─── AUTH ROUTES (public, no session required) ───
+	authHandler := handlers.NewAuthHandler(db)
+	r.HandleFunc("/api/auth/login", authHandler.Login).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/auth/logout", authHandler.Logout).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/auth/check", authHandler.Check).Methods("GET")
+	r.HandleFunc("/api/auth/session", authHandler.Session).Methods("GET")
+	r.HandleFunc("/api/auth/change-password", authHandler.ChangePassword).Methods("POST")
+	r.HandleFunc("/api/csrf", authHandler.CSRFToken).Methods("GET")
+
+	// Session cleanup goroutine
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			authHandler.CleanExpiredSessions()
+		}
+	}()
+
 	r.HandleFunc("/health", healthCheckHandler).Methods("GET")
 
 	// ZFS handlers
@@ -199,12 +219,37 @@ func main() {
 	dockerHandler := handlers.NewDockerHandler()
 	r.HandleFunc("/api/docker/containers", dockerHandler.ListContainers).Methods("GET")
 	r.HandleFunc("/api/docker/action", dockerHandler.ContainerAction).Methods("POST")
-	
-	// Shares handlers
+	r.HandleFunc("/api/docker/logs", dockerHandler.ContainerLogs).Methods("GET")
+
+	// Shares handlers (config management)
 	r.HandleFunc("/api/shares/smb/reload", handlers.ReloadSMBConfig).Methods("POST")
 	r.HandleFunc("/api/shares/smb/test", handlers.TestSMBConfig).Methods("POST")
 	r.HandleFunc("/api/shares/nfs/reload", handlers.ReloadNFSExports).Methods("POST")
 	r.HandleFunc("/api/shares/nfs/list", handlers.ListNFSExports).Methods("GET")
+
+	// Shares CRUD handlers
+	shareCRUDHandler := handlers.NewShareCRUDHandler(db)
+	r.HandleFunc("/api/shares/list", shareCRUDHandler.HandleShares).Methods("GET")
+	r.HandleFunc("/api/shares", shareCRUDHandler.HandleShares).Methods("GET", "POST")
+
+	// User & Group CRUD handlers
+	userGroupHandler := handlers.NewUserGroupHandler(db)
+	r.HandleFunc("/api/rbac/users", userGroupHandler.HandleUsers).Methods("GET", "POST")
+	r.HandleFunc("/api/rbac/groups", userGroupHandler.HandleGroups).Methods("GET", "POST")
+	r.HandleFunc("/api/users/create", userGroupHandler.HandleUsers).Methods("POST")
+
+	// System status, profile, preflight, setup handlers
+	systemStatusHandler := handlers.NewSystemStatusHandler(db)
+	r.HandleFunc("/api/system/status", systemStatusHandler.HandleStatus).Methods("GET")
+	r.HandleFunc("/api/system/profile", systemStatusHandler.HandleProfile).Methods("GET")
+	r.HandleFunc("/api/system/settings", systemStatusHandler.HandleSettings).Methods("GET", "POST")
+	r.HandleFunc("/api/system/preflight", systemStatusHandler.HandlePreflight).Methods("GET")
+	r.HandleFunc("/api/system/setup-complete", systemStatusHandler.HandleSetupComplete).Methods("POST")
+	r.HandleFunc("/api/system/metrics", handlers.HandleSystemMetrics).Methods("GET")
+
+	// Disk discovery (setup wizard)
+	r.HandleFunc("/api/system/disks", handlers.HandleDiskDiscovery).Methods("GET")
+	r.HandleFunc("/api/system/pool/create", handlers.HandlePoolCreate).Methods("POST")
 	
 	// Files handlers
 	filesHandler := handlers.NewFilesExtendedHandler()
@@ -429,8 +474,10 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 // Session validation middleware
 func sessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip validation for health check
-		if r.URL.Path == "/health" {
+		// Skip validation for public endpoints (auth, csrf, health)
+		if r.URL.Path == "/health" ||
+			strings.HasPrefix(r.URL.Path, "/api/auth/") ||
+			r.URL.Path == "/api/csrf" {
 			next.ServeHTTP(w, r)
 			return
 		}

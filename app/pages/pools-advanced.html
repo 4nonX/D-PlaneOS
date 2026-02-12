@@ -618,7 +618,7 @@ if (window.ConnectionMonitor) {
 
         try {
             showLoading('Creating encrypted dataset...');
-            const response = await csrfFetch('/api/storage-advanced.php', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
                 body: JSON.stringify({
                     action: 'create_encrypted_dataset',
@@ -655,7 +655,7 @@ if (window.ConnectionMonitor) {
 
         try {
             showLoading('Adding L2ARC...');
-            const response = await csrfFetch('/api/storage-advanced.php', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
                 body: JSON.stringify({ action: 'add_l2arc', pool, device })
             });
@@ -685,7 +685,7 @@ if (window.ConnectionMonitor) {
 
         try {
             showLoading('Adding ZIL...');
-            const response = await csrfFetch('/api/storage-advanced.php', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
                 body: JSON.stringify({ action: 'add_zil', pool, device, mirror })
             });
@@ -709,7 +709,7 @@ if (window.ConnectionMonitor) {
 
         try {
             showLoading('Setting compression...');
-            const response = await csrfFetch('/api/storage-advanced.php', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
                 body: JSON.stringify({ action: 'set_compression', dataset, compression })
             });
@@ -743,7 +743,7 @@ if (window.ConnectionMonitor) {
 
         try {
             showLoading('Setting deduplication...');
-            const response = await csrfFetch('/api/storage-advanced.php', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
                 body: JSON.stringify({ action: 'set_dedup', dataset, dedup })
             });
@@ -770,7 +770,7 @@ if (window.ConnectionMonitor) {
 
         try {
             showLoading('Creating schedule...');
-            const response = await csrfFetch('/api/storage-advanced.php', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
                 body: JSON.stringify({
                     action: 'create_snapshot_schedule',
@@ -797,7 +797,7 @@ if (window.ConnectionMonitor) {
 
     async function loadSnapshotSchedules() {
         try {
-            const response = await csrfFetch('/api/storage-advanced.php?action=list_snapshot_schedules');
+            const response = await csrfFetch('/api/snapshots/schedules');
             const data = await response.json();
             
             if (data.success) {
@@ -818,7 +818,7 @@ if (window.ConnectionMonitor) {
         if (!await ui.confirm('Delete Schedule', 'Delete this snapshot schedule? Existing snapshots will be kept.')) return;
         
         try {
-            const response = await csrfFetch('/api/storage-advanced.php', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
                 body: JSON.stringify({ action: 'delete_snapshot_schedule', schedule_id: id })
             });

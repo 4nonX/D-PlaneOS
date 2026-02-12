@@ -471,7 +471,7 @@ const ui = new DPlaneUI();
 // Load logs from API
 async function loadLogs(filter = '') {
   try {
-    const url = `/api/system.php?action=logs${filter ? '&filter=' + encodeURIComponent(filter) : ''}`;
+    const url = `/api/system/logs${filter ? '&filter=' + encodeURIComponent(filter) : ''}`;
     const response = await csrfFetch(url);
     const data = await response.json();
     
@@ -504,7 +504,7 @@ async function clearLogs() {
     ui.showLoading('Clearing logs...');
     
     try {
-      const response = await csrfFetch('/api/system.php?action=clear_logs', {
+      const response = await csrfFetch('/api/system/logs', {
         method: 'POST'
       });
       

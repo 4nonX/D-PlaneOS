@@ -493,7 +493,7 @@ const ui = new DPlaneUI();
 
 async function loadRoutes() {
   try {
-    const response = await csrfFetch('/api/network-routing.php?action=list');
+    const response = await csrfFetch('/api/system/network');
     const data = await response.json();
     
     if (data.success && data.routes) {
@@ -541,7 +541,7 @@ async function addRoute() {
     ui.showLoading('Adding route...');
     
     try {
-      const response = await csrfFetch('/api/network-routing.php', {
+      const response = await csrfFetch('/api/system/network', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'add', ...result })
@@ -568,7 +568,7 @@ async function deleteRoute(route) {
     ui.showLoading('Deleting route...');
     
     try {
-      const response = await csrfFetch('/api/network-routing.php', {
+      const response = await csrfFetch('/api/system/network', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', destination: route.destination, gateway: route.gateway })

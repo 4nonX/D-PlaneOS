@@ -1,4 +1,4 @@
-# D-PlaneOS v2.0.0 — ZFS NAS Operating System
+# D-PlaneOS v2.0.0 — Enterprise NAS Operating System
 
 Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
 
@@ -17,7 +17,7 @@ Web UI: `https://your-server` (nginx reverse proxy on port 443 → daemon on 900
 
 > **Rebuilding from source?** You need Go 1.22+ and gcc: `make build` compiles fresh.
 
-### Off-Pool Database Backup (recommended large scale deployment)
+### Off-Pool Database Backup (recommended for 52TB+)
 
 Edit `/etc/systemd/system/dplaned.service` and add `-backup-path`:
 ```

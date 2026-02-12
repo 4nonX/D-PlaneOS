@@ -47,13 +47,13 @@ class HealthWidget {
     }
     
     async fetchScrubStatus() {
-        const response = await fetch('/api/zfs-api.php?action=scrub_status');
+        const response = await fetch('/api/zfs/pools');
         const data = await response.json();
         return data.success ? data.scrub_status : null;
     }
     
     async fetchSmartData() {
-        const response = await fetch('/api/hardware-api.php?action=disk_temperatures');
+        const response = await fetch('/api/metrics/current');
         const data = await response.json();
         return data.success ? data.temperatures : [];
     }

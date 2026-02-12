@@ -488,7 +488,7 @@ const ui = new DPlaneUI();
 
 async function loadDNS() {
   try {
-    const response = await csrfFetch('/api/network-dns.php?action=get');
+    const response = await csrfFetch('/api/system/network');
     const data = await response.json();
     
     if (data.success) {
@@ -556,7 +556,7 @@ async function saveDNSChange(data) {
   ui.showLoading('Updating DNS configuration...');
   
   try {
-    const response = await csrfFetch('/api/network-dns.php', {
+    const response = await csrfFetch('/api/system/network', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)

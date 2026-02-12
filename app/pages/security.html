@@ -510,7 +510,7 @@ if (window.ConnectionMonitor) {
     <script>
     async function enable2FA() {
         try {
-            const response = await csrfFetch('/api/security.php?action=enable_2fa', {
+            const response = await csrfFetch('/api/auth/check?action=enable_2fa', {
                 method: 'POST',
                 body: JSON.stringify({})
             });
@@ -537,7 +537,7 @@ if (window.ConnectionMonitor) {
         }
 
         try {
-            const response = await csrfFetch('/api/security.php?action=change_password', {
+            const response = await csrfFetch('/api/auth/change-password', {
                 method: 'POST',
                 body: JSON.stringify({
                     current_password: current,
@@ -563,7 +563,7 @@ if (window.ConnectionMonitor) {
         if (!name) return;
 
         try {
-            const response = await csrfFetch('/api/security.php?action=create_api_token', {
+            const response = await csrfFetch('/api/auth/check?action=create_api_token', {
                 method: 'POST',
                 body: JSON.stringify({ name, permissions: [] })
             });
@@ -600,7 +600,7 @@ if (window.ConnectionMonitor) {
 
     async function loadAPITokens() {
         try {
-            const response = await csrfFetch('/api/security.php?action=list_api_tokens');
+            const response = await csrfFetch('/api/auth/check?action=list_api_tokens');
             const data = await response.json();
             if (data.success) {
                 const list = document.getElementById('apiTokensList');
@@ -619,7 +619,7 @@ if (window.ConnectionMonitor) {
     async function revokeToken(id) {
         if (!await ui.confirm('Revoke Token', 'Revoke this API token? Any applications using this token will lose access immediately.')) return;
         try {
-            const response = await csrfFetch('/api/security.php?action=revoke_api_token', {
+            const response = await csrfFetch('/api/auth/check?action=revoke_api_token', {
                 method: 'POST',
                 body: JSON.stringify({ token_id: id })
             });

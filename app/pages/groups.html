@@ -476,7 +476,7 @@ const ui = new DPlaneUI();
 
 async function loadGroups() {
   try {
-    const response = await csrfFetch('/api/groups.php?action=list');
+    const response = await csrfFetch('/api/rbac/groups');
     const data = await response.json();
     
     if (data.success && data.groups && data.groups.length > 0) {
@@ -532,7 +532,7 @@ async function createGroup() {
     ui.showLoading('Creating group...');
     
     try {
-      const response = await csrfFetch('/api/groups.php', {
+      const response = await csrfFetch('/api/rbac/groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create', ...result })
@@ -558,7 +558,7 @@ async function editGroup(id) {
   ui.showLoading('Loading group...');
   
   try {
-    const response = await csrfFetch(`/api/groups.php?action=get&id=${id}`);
+    const response = await csrfFetch(`/api/rbac/groups&id=${id}`);
     const data = await response.json();
     ui.hideLoading();
     
@@ -572,7 +572,7 @@ async function editGroup(id) {
       if (result) {
         ui.showLoading('Updating group...');
         
-        const updateResponse = await csrfFetch('/api/groups.php', {
+        const updateResponse = await csrfFetch('/api/rbac/groups', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'update', id, ...result })
@@ -604,7 +604,7 @@ async function deleteGroup(id, name) {
     ui.showLoading('Deleting group...');
     
     try {
-      const response = await csrfFetch('/api/groups.php', {
+      const response = await csrfFetch('/api/rbac/groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', id })

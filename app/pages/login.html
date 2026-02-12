@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - D-PlaneOS</title>
+<style>
+:root { --primary:#8a9cff; --bg:#0a0a0a; --surface:rgba(255,255,255,0.05); --border:rgba(255,255,255,0.1); --dim:rgba(255,255,255,0.5); --error:#f87171; }
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',system-ui,sans-serif; }
+body { background:var(--bg); color:#fff; min-height:100vh; display:flex; align-items:center; justify-content:center; }
+.login-box { width:100%; max-width:400px; padding:40px; }
+.logo { font-size:28px; font-weight:800; color:var(--primary); text-align:center; margin-bottom:8px; letter-spacing:-1px; }
+.subtitle { text-align:center; color:var(--dim); font-size:14px; margin-bottom:40px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px; }
+.form-group { margin-bottom:20px; }
+.form-label { display:block; font-size:13px; color:var(--dim); margin-bottom:8px; font-weight:600; }
+.form-input { width:100%; padding:12px 16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:#fff; font-size:15px; outline:none; transition:border-color 0.15s; }
+.form-input:focus { border-color:var(--primary); }
+.btn-login { width:100%; padding:14px; background:var(--primary); color:#000; border:none; border-radius:10px; font-size:15px; font-weight:700; cursor:pointer; transition:0.15s; }
+.btn-login:hover { opacity:0.9; }
+.btn-login:disabled { opacity:0.5; cursor:not-allowed; }
+.error-msg { color:var(--error); font-size:13px; text-align:center; margin-top:16px; display:none; }
+.version { text-align:center; color:rgba(255,255,255,0.2); font-size:12px; margin-top:24px; }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <div class="logo">D-PlaneOS</div>
+  <div class="subtitle">NAS Operating System</div>
+  <div class="card">
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input type="text" id="username" class="form-input" placeholder="admin" autocomplete="username" autofocus>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input type="password" id="password" class="form-input" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button id="loginBtn" class="btn-login" onclick="doLogin()">Sign In</button>
+    <div id="errorMsg" class="error-msg"></div>
+  </div>
+  <div class="version">v2.0.0</div>
+</div>
+
+<script>
+// Handle Enter key
+document.getElementById('password').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('username').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') document.getElementById('password').focus();
+});
+
+async function doLogin() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const btn = document.getElementById('loginBtn');
+  const errEl = document.getElementById('errorMsg');
+
+  if (!username || !password) {
+    errEl.textContent = 'Please enter username and password';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+  errEl.style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await resp.json();
+
+    if (data.success) {
+      // Store session
+      sessionStorage.setItem('session_id', data.session_id);
+      sessionStorage.setItem('username', data.username);
+      
+      // Redirect to dashboard
+      window.location.href = '/pages/index.html';
+    } else {
+      errEl.textContent = data.error || 'Login failed';
+      errEl.style.display = 'block';
+    }
+  } catch (err) {
+    errEl.textContent = 'Connection error — is the server running?';
+    errEl.style.display = 'block';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Sign In';
+}
+</script>
+</body>
+</html>

@@ -549,7 +549,7 @@ async function deployStack() {
   ui.showLoading('Deploying stack...');
   
   try {
-    const response = await csrfFetch('/api/docker.php', {
+    const response = await csrfFetch('/api/docker/action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'deploy', yaml: yaml })
@@ -573,7 +573,7 @@ async function deployStack() {
 
 async function postDeployHealthCheck() {
   try {
-    var resp = await csrfFetch('/api/docker.php?action=list', { showLoading: false, showError: false });
+    var resp = await csrfFetch('/api/docker/containers', { showLoading: false, showError: false });
     var data = await resp.json();
     if (!data.success || !data.containers) return;
     
@@ -589,7 +589,7 @@ async function postDeployHealthCheck() {
     for (var i = 0; i < exited.length; i++) {
       var c = exited[i];
       try {
-        var logResp = await csrfFetch('/api/docker.php?action=logs&container=' + encodeURIComponent(c.name), { showLoading: false, showError: false });
+        var logResp = await csrfFetch('/api/docker/logs?container=' + encodeURIComponent(c.name), { showLoading: false, showError: false });
         var logData = await logResp.json();
         if (!logData.success || !logData.logs) continue;
         if (/permission denied|EACCES|operation not permitted|read.only file system/i.test(logData.logs)) {
@@ -627,7 +627,7 @@ async function stopContainer(name) {
     ui.showLoading(`Stopping ${name}...`);
     
     try {
-      const response = await csrfFetch('/api/docker.php', {
+      const response = await csrfFetch('/api/docker/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'stop', container: name })
@@ -653,7 +653,7 @@ async function viewLogs(name) {
   ui.showLoading(`Loading logs for ${name}...`);
   
   try {
-    const response = await csrfFetch(`/api/docker.php?action=logs&container=${name}`);
+    const response = await csrfFetch(`/api/docker/logs?container=${name}`);
     const result = await response.json();
     ui.hideLoading();
     
@@ -685,7 +685,7 @@ async function loadContainers() {
   }
   
   try {
-    const response = await csrfFetch('/api/docker.php?action=list', { showLoading: false });
+    const response = await csrfFetch('/api/docker/containers', { showLoading: false });
     const data = await response.json();
     
     if (data.success && data.containers) {

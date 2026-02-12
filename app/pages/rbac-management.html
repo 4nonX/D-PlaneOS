@@ -1142,7 +1142,7 @@ if (window.ConnectionMonitor) {
         // Load Roles
         async function loadRoles() {
             try {
-                const response = await daemonAPI('/api/v1/rbac/roles');
+                const response = await daemonAPI('/api/rbac/roles');
                 roles = response.roles;
                 
                 document.getElementById('roles-loading').style.display = 'none';
@@ -1176,7 +1176,7 @@ if (window.ConnectionMonitor) {
         // View Role
         async function viewRole(roleId) {
             try {
-                const role = await daemonAPI('/api/v1/rbac/roles/' + roleId);
+                const role = await daemonAPI('/api/rbac/roles/' + roleId);
                 selectedRole = role;
                 
                 // Open permissions modal
@@ -1197,7 +1197,7 @@ if (window.ConnectionMonitor) {
             try {
                 document.getElementById('permissions-loading').style.display = 'block';
                 
-                const response = await daemonAPI('/api/v1/rbac/permissions');
+                const response = await daemonAPI('/api/rbac/permissions');
                 permissions = response.permissions;
                 
                 document.getElementById('permissions-loading').style.display = 'none';
@@ -1238,8 +1238,8 @@ if (window.ConnectionMonitor) {
         async function loadPermissionsForRole(roleId) {
             try {
                 const [allPerms, rolePerms] = await Promise.all([
-                    daemonAPI('/api/v1/rbac/permissions'),
-                    daemonAPI('/api/v1/rbac/roles/' + roleId + '/permissions')
+                    daemonAPI('/api/rbac/permissions'),
+                    daemonAPI('/api/rbac/roles/' + roleId + '/permissions')
                 ]);
                 
                 const rolePermIds = new Set(rolePerms.permissions.map(p => p.id));
@@ -1342,10 +1342,10 @@ if (window.ConnectionMonitor) {
             
             try {
                 if (selectedRole) {
-                    await daemonAPI('/api/v1/rbac/roles/' + selectedRole.id, 'PUT', data);
+                    await daemonAPI('/api/rbac/roles/' + selectedRole.id, 'PUT', data);
                     showToast('Role updated successfully', 'success');
                 } else {
-                    await daemonAPI('/api/v1/rbac/roles', 'POST', data);
+                    await daemonAPI('/api/rbac/roles', 'POST', data);
                     showToast('Role created successfully', 'success');
                 }
                 

@@ -489,7 +489,7 @@ async function createTask() {
     ui.showLoading('Creating replication task...');
     
     try {
-      const response = await csrfFetch('/api/replication.php', {
+      const response = await csrfFetch('/api/replication/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create', ...result })
@@ -525,7 +525,7 @@ async function editTask(id) {
     ui.showLoading('Updating task...');
     
     try {
-      const response = await csrfFetch('/api/replication.php', {
+      const response = await csrfFetch('/api/replication/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update', task_id: id, ...result })
@@ -552,7 +552,7 @@ async function runTask(id) {
     ui.showLoading('Starting replication...');
     
     try {
-      const response = await csrfFetch('/api/replication.php', {
+      const response = await csrfFetch('/api/replication/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'run', task_id: id })
@@ -575,7 +575,7 @@ async function runTask(id) {
 
 async function loadReplicationTasks() {
   try {
-    const response = await csrfFetch('/api/backup.php?action=list');
+    const response = await csrfFetch('/api/backup/rsync');
     const data = await response.json();
     
     if (data.success && data.tasks && data.tasks.length > 0) {

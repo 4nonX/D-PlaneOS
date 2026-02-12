@@ -51,7 +51,7 @@ class DPlaneUI {
      */
     async getCSRFToken() {
         try {
-            const response = await fetch('/api/csrf.php');
+            const response = await fetch('/api/csrf');
             const data = await response.json();
             this.csrfToken = data.token;
         } catch (error) {

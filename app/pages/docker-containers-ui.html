@@ -558,8 +558,8 @@
         async function refreshContainers() {
             try {
                 const endpoint = currentView === 'grouped' 
-                    ? '/api/docker-containers-list.php?action=grouped'
-                    : '/api/docker-containers-list.php?action=list';
+                    ? '/api/docker/containers'
+                    : '/api/docker/containers';
                 
                 const response = await fetch(endpoint);
                 const data = await response.json();
@@ -899,7 +899,7 @@
         
         async function fetchAndCheckLogs(name, image) {
             try {
-                const resp = await fetch('/api/docker.php?action=logs&container=' + encodeURIComponent(name));
+                const resp = await fetch('/api/docker/containers?action=logs&container=' + encodeURIComponent(name));
                 const data = await resp.json();
                 if (!data.success || !data.logs) return;
                 
@@ -941,7 +941,7 @@
         
         function viewPermLogs(name) {
             var safeName = name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-            fetch('/api/docker.php?action=logs&container=' + encodeURIComponent(name))
+            fetch('/api/docker/containers?action=logs&container=' + encodeURIComponent(name))
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data.success) return;

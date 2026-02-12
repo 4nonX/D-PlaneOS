@@ -605,7 +605,7 @@ const ui = new DPlaneUI();
 
 async function loadInterfaces() {
   try {
-    const response = await csrfFetch('/api/network-interfaces.php?action=list');
+    const response = await csrfFetch('/api/system/network');
     const data = await response.json();
     
     if (data.success && data.interfaces) {
@@ -678,7 +678,7 @@ function displayInterfaces(interfaces) {
 
 async function configureInterface(name) {
   // Get current config
-  const response = await csrfFetch(`/api/network-interfaces.php?action=get&interface=${name}`);
+  const response = await csrfFetch(`/api/system/network&interface=${name}`);
   const data = await response.json();
   
   if (!data.success) {
@@ -733,7 +733,7 @@ async function configureInterface(name) {
     ui.showLoading('Applying network configuration...');
     
     try {
-      const applyResponse = await csrfFetch('/api/network-interfaces.php', {
+      const applyResponse = await csrfFetch('/api/system/network', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

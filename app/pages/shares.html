@@ -475,7 +475,7 @@ const ui = new DPlaneUI();
 
 async function loadShares() {
   try {
-    const response = await csrfFetch('/api/shares.php?action=list');
+    const response = await csrfFetch('/api/shares');
     const data = await response.json();
     
     if (data.success && data.shares && data.shares.length > 0) {
@@ -534,7 +534,7 @@ async function createShare() {
     ui.showLoading('Creating share...');
     
     try {
-      const response = await csrfFetch('/api/shares.php', {
+      const response = await csrfFetch('/api/shares', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create', ...result })
@@ -560,7 +560,7 @@ async function editShare(id) {
   ui.showLoading('Loading share...');
   
   try {
-    const response = await csrfFetch(`/api/shares.php?action=get&id=${id}`);
+    const response = await csrfFetch(`/api/shares&id=${id}`);
     const data = await response.json();
     ui.hideLoading();
     
@@ -577,7 +577,7 @@ async function editShare(id) {
       if (result) {
         ui.showLoading('Updating share...');
         
-        const updateResponse = await csrfFetch('/api/shares.php', {
+        const updateResponse = await csrfFetch('/api/shares', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'update', id, ...result })
@@ -609,7 +609,7 @@ async function deleteShare(id, name) {
     ui.showLoading('Deleting share...');
     
     try {
-      const response = await csrfFetch('/api/shares.php', {
+      const response = await csrfFetch('/api/shares', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', id })

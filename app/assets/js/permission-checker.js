@@ -11,7 +11,7 @@ class PermissionChecker {
     // Load current user's permissions
     async load() {
         try {
-            const response = await fetch('/api/v1/me/permissions', {
+            const response = await fetch('/api/rbac/me/permissions', {
                 headers: {
                     'X-Session-Token': this.getSessionToken()
                 }

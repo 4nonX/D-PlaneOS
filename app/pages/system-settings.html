@@ -1067,7 +1067,7 @@ if (window.ConnectionMonitor) {
         // Update live metrics
         async function updateMetrics() {
             try {
-                const metrics = await daemonAPI('/api/monitoring/metrics');
+                const metrics = await daemonAPI('/api/metrics/current');
                 
                 // Inotify
                 document.getElementById('inotify-used').textContent = formatNumber(metrics.inotify.used);

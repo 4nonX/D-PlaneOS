@@ -63,7 +63,7 @@ class ConnectionMonitor {
     // Check every 30 seconds
     this.checkInterval = setInterval(async () => {
       try {
-        const response = await fetch('/api/auth.php?action=check', {
+        const response = await fetch('/api/auth/check', {
           method: 'GET',
           cache: 'no-cache'
         });

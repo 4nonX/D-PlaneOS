@@ -550,7 +550,7 @@ async function toggleSetting(el, setting) {
   ui.showLoading(`${state ? 'Enabling' : 'Disabling'} ${setting}...`);
   
   try {
-    const response = await csrfFetch('/api/settings.php', {
+    const response = await csrfFetch('/api/settings/telegram', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'toggle', setting: setting, enabled: state })
@@ -582,7 +582,7 @@ async function editSetting(setting) {
     ui.showLoading('Saving...');
     
     try {
-      const response = await csrfFetch('/api/settings.php', {
+      const response = await csrfFetch('/api/settings/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update', setting: setting, ...result })
@@ -608,7 +608,7 @@ async function checkUpdates() {
   ui.showLoading('Checking for updates...');
   
   try {
-    const response = await csrfFetch('/api/settings.php?action=updates');
+    const response = await csrfFetch('/api/settings/telegram');
     const result = await response.json();
     ui.hideLoading();
     

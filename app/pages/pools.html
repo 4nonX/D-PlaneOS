@@ -527,7 +527,7 @@ async function createPool() {
     ui.showLoading('Creating pool...');
     
     try {
-      const response = await csrfFetch('/api/storage.php', {
+      const response = await csrfFetch('/api/zfs/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create', ...result })
@@ -579,7 +579,7 @@ async function createDataset(poolName) {
     try {
       ui.showLoading('Creating dataset...');
       
-      const response = await csrfFetch('/api/datasets.php?action=create', {
+      const response = await csrfFetch('/api/zfs/datasets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -612,7 +612,7 @@ async function listDatasets(poolName) {
   try {
     ui.showLoading('Loading datasets...');
     
-    const response = await csrfFetch(`/api/datasets.php?action=list&pool=${poolName}`);
+    const response = await csrfFetch(`/api/zfs/datasets&pool=${poolName}`);
     const data = await response.json();
     ui.hideLoading();
     
@@ -647,7 +647,7 @@ async function exportPool(name) {
     ui.showLoading(`Exporting ${name}...`);
     
     try {
-      const response = await csrfFetch('/api/storage.php', {
+      const response = await csrfFetch('/api/zfs/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'export', pool: name })
@@ -673,7 +673,7 @@ async function viewProperties(name) {
   ui.showLoading(`Loading ${name} properties...`);
   
   try {
-    const response = await csrfFetch(`/api/storage.php?action=properties&pool=${name}`);
+    const response = await csrfFetch(`/api/zfs/pools&pool=${name}`);
     const result = await response.json();
     ui.hideLoading();
     
@@ -695,7 +695,7 @@ async function destroyPool(name) {
     ui.showLoading(`Destroying ${name}...`);
     
     try {
-      const response = await csrfFetch('/api/storage.php', {
+      const response = await csrfFetch('/api/zfs/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'destroy', pool: name })
@@ -722,7 +722,7 @@ async function importPool() {
   
   try {
     // Step 1: Scan for importable pools
-    const scanRes = await csrfFetch('/api/storage.php?action=scan_imports');
+    const scanRes = await csrfFetch('/api/zfs/pools');
     const scan = await scanRes.json();
     ui.hideLoading();
     
@@ -759,7 +759,7 @@ async function importPool() {
     // Step 3: Import selected pool
     ui.showLoading(`Importing pool ${selectedPool.pool}...`);
     
-    const importRes = await csrfFetch('/api/storage.php', {
+    const importRes = await csrfFetch('/api/zfs/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -791,7 +791,7 @@ async function scrubPool(name) {
     ui.showLoading('Starting scrub...');
     
     try {
-      const response = await csrfFetch('/api/storage.php', {
+      const response = await csrfFetch('/api/zfs/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'scrub', pool: name })
@@ -827,7 +827,7 @@ async function loadPools() {
   }
   
   try {
-    const response = await csrfFetch('/api/storage.php?action=list', { showLoading: false });
+    const response = await csrfFetch('/api/zfs/pools', { showLoading: false });
     const data = await response.json();
     
     if (data.success && data.pools) {

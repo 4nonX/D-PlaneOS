@@ -12,7 +12,7 @@
     // Fetch CSRF token from server
     async function fetchCSRFToken() {
         try {
-            const response = await fetch('/api/csrf.php');
+            const response = await fetch('/api/csrf');
             const data = await response.json();
             if (data.success && data.csrf_token) {
                 csrfToken = data.csrf_token;
@@ -45,6 +45,8 @@
         
         options.headers = {
             'X-CSRF-Token': token || '',
+        'X-Session-ID': sessionStorage.getItem('session_id') || '',
+        'X-User': sessionStorage.getItem('username') || '',
             ...options.headers
         };
 
@@ -66,7 +68,7 @@
                 if (showError && window.EnhancedUI) {
                     EnhancedUI.toast('Session expired. Please login again.', 'error');
                 }
-                setTimeout(() => window.location.href = '/login.php', 1000);
+                setTimeout(() => window.location.href = '/pages/login.html', 1000);
                 throw new Error('Authentication required');
             }
             
@@ -115,22 +117,27 @@
     // Authentication check
     async function checkAuth() {
         const page = window.location.pathname;
-        if (page.includes('login.php') || page.includes('setup.php') || page.includes('reset-password')) {
+        if (page.includes('login.html') || page.includes('setup-wizard.html') || page.includes('reset-password')) {
             return true;
         }
 
         try {
-            const response = await fetch('/api/auth.php?action=check');
+            const response = await fetch('/api/auth/check', {
+                headers: {
+                    'X-Session-ID': sessionStorage.getItem('session_id') || '',
+                    'X-User': sessionStorage.getItem('username') || ''
+                }
+            });
             const data = await response.json();
             
             if (!data.authenticated) {
-                window.location.href = '/login.php';
+                window.location.href = '/pages/login.html';
                 return false;
             }
             return true;
         } catch (error) {
             console.error('Auth check failed:', error);
-            window.location.href = '/login.php';
+            window.location.href = '/pages/login.html';
             return false;
         }
     }
@@ -168,11 +175,12 @@
             logoutBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 try {
-                    await csrfFetch('/api/auth.php?action=logout', { method: 'POST' });
+                    await csrfFetch('/api/auth/logout', { method: 'POST' });
+                    sessionStorage.clear();
                 } catch (error) {
                     console.error('Logout error:', error);
                 }
-                window.location.href = '/login.php';
+                window.location.href = '/pages/login.html';
             });
         }
     }
