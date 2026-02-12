@@ -1,11 +1,5 @@
 # D-PlaneOS on Non-ECC Hardware: Critical Limitations
 
-## ⚠️ REALITY CHECK
-
-**Your hardware configuration:**
-- CPU: Intel i3 (Consumer-grade)
-- RAM: 16GB **Non-ECC**
-- Storage: 52TB (4x 14TB WD Red in RAIDZ2)
 
 **The fundamental problem:**
 > ZFS can protect your data from disk failures and corruption **on the disk**.  
