@@ -1,4 +1,4 @@
-# D-PlaneOS v2.0.0 — Enterprise NAS Operating System
+# D-PlaneOS v2.0.0 — ZFS NAS Operating System
 
 Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
 
