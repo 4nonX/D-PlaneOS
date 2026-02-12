@@ -1,57 +1,43 @@
-# Database
+# D-PlaneOS v2.0.0 — .gitignore
+
+# Go build artifacts
+build/dplaned
+*.exe
+*.test
+*.out
+
+# Go module cache (vendor is committed)
+# daemon/vendor/ is committed for offline builds
+
+# SQLite runtime databases
 *.db
-*.db-journal
-*.sqlite
-*.sqlite3
+*.db-wal
+*.db-shm
+*.db.backup
 
-# PHP
-*.log
-vendor/
-composer.lock
-
-# System files
+# OS files
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# IDE / Editor
+.idea/
+.vscode/
 *.swp
 *.swo
 *~
+.project
+.settings/
 
-# IDE
-.vscode/
-.idea/
-*.sublime-*
-
-# Backup files
-*.bak
-*.old
-*.backup
-
-# Test files
-test/
-tests/output/
-
-# Sensitive
-config.local.php
-*.key
-*.pem
-*.crt
-
-# Node (if future JS tooling added)
-node_modules/
-package-lock.json
-npm-debug.log
-
-# Build artifacts
-dist/
-build/
-*.tar.gz
-*.zip
-!dplaneos-*.tar.gz
-
-# Docker
-.dockerignore
-
-# Temporary
+# Temporary files
 tmp/
-temp/
 *.tmp
+*.log
+
+# Legacy v1.x packages (too large for git)
+legacy/offline-packages/
+legacy/backend/
+legacy/frontend-built/
+
+# Node (not used in v2.0.0, but just in case)
+node_modules/

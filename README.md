@@ -1,341 +1,70 @@
-# 🚀 D-PlaneOS v1.14.0 TRUE COMPLETE
+# D-PlaneOS v2.0.0 — Enterprise NAS Operating System
 
-## The First 100% Offline-Capable Open-Source NAS Operating System
+Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
 
-**Installation Time:** 5-10 Minutes  
-**Internet Required:** ❌ NO - 100% Offline!  
-**Package Size:** ~70 MB  
-**System Requirements:** Ubuntu 20.04+ / Debian 11+
-
----
-
-## ✨ What Makes This "TRUE COMPLETE"
-
-### ✅ 100% Offline Installation
-- **All system packages included** (.deb files)
-- **Pre-compiled Node.js** (tarball)
-- **Complete backend** (PHP APIs, Scripts)
-- **Functional UI** (Minimal, upgradeable)
-- **NO internet connection needed!**
-
-### ✅ Included Packages
-```
-✓ ZFS Utils (759 KB)     - Storage management
-✓ Docker (36 MB)         - Container platform
-✓ PHP 8.1 (2.9 MB)       - Backend runtime
-✓ Node.js 18 (23 MB)     - UI runtime
-✓ Apache2 (2.0 MB)       - Web server
-✓ SQLite3 (751 KB)       - Database
-✓ Nginx (473 KB)         - Alternative web server
-
-TOTAL: 65 MB offline packages
-```
-
----
-
-## 🚀 INSTALLATION
-
-### Quick Start (2 Commands!)
+## Quick Start
 
 ```bash
-# Extract
-tar xzf dplaneos-v1.14.0-TRUE-COMPLETE.tar.gz
-cd dplaneos-v1.14.0-TRUE-COMPLETE
-
-# Install (NO Internet!)
-sudo ./install-offline.sh
+tar xzf dplaneos-v2.0.0-production-vendored.tar.gz
+cd dplaneos
+sudo make install   # Pre-built binary, no compiler needed
+sudo systemctl start dplaned
 ```
 
-**That's it!** System will be ready at `http://YOUR-SERVER-IP`
+Web UI: `https://your-server` (nginx reverse proxy on port 443 → daemon on 9000)
 
----
+**Default login:** `admin` / `admin` (change immediately after first login)
 
-## 📋 System Requirements
+> **Rebuilding from source?** You need Go 1.22+ and gcc: `make build` compiles fresh.
 
-### Minimum
-- Ubuntu 20.04+ or Debian 11+
-- 2 GB RAM
-- 20 GB Disk Space
-- 2+ Disks for ZFS
+### Off-Pool Database Backup (recommended for 52TB+)
 
-### Recommended
-- Ubuntu 22.04 LTS
-- 4 GB RAM
-- 50 GB Disk Space
-- 4+ Disks for ZFS RAID-Z2
-
----
-
-## 🎯 What Gets Installed
-
-### Backend (164 KB)
+Edit `/etc/systemd/system/dplaned.service` and add `-backup-path`:
 ```
-/var/www/dplaneos/
-├── api/              # PHP REST APIs
-│   ├── backup.php
-│   ├── disk-replacement.php
-│   └── zfs-pool-create-helper.php
-├── scripts/          # Maintenance scripts
-│   ├── check-sudoers.sh
-│   ├── integrity-check.sh
-│   └── auto-backup.php
-├── sql/              # Database schemas
-├── docs/             # Documentation
-└── config/           # System configs
+ExecStart=/opt/dplaneos/daemon/dplaned -db /var/lib/dplaneos/dplaneos.db -backup-path /mnt/usb/dplaneos.db.backup
 ```
-
-### Frontend (Minimal)
-```
-/opt/dplaneos-ui/
-├── server.js         # Node.js server
-└── index.html        # Minimal UI
-```
-
-**Note:** The UI is minimal but functional. Full React UI can be added later.
-
----
-
-## 🎨 Features
-
-### Storage Management
-- ✅ ZFS Pool Creation
-- ✅ Auto-Expand on disk add
-- ✅ SMART Monitoring
-- ✅ Health Dashboards
-
-### Docker Platform
-- ✅ Container Lifecycle Management
-- ✅ 47 Pre-configured Apps
-- ✅ Resource Monitoring
-- ✅ Log Viewing
-
-### Backup & Restore
-- ✅ Encrypted Backups (AES-256)
-- ✅ Docker Zombie Cleanup
-- ✅ One-time Password Generation
-- ✅ Automated Scheduling
-
-### Self-Healing
-- ✅ Log Rotation (prevents disk overflow)
-- ✅ Docker Zombie Cleanup
-- ✅ Sudoers Sync
-- ✅ Integrity Checks
-
----
-
-## 📊 Installation Process
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║         D-PlaneOS TRUE COMPLETE Installer                    ║
-╚══════════════════════════════════════════════════════════════╝
-
-Progress: [████████████████████████████████░░░░░░░░░] 80%
-
-[1/12] ✓ Installing ZFS packages (offline)...
-[2/12] ✓ Installing Docker packages (offline)...
-[3/12] ✓ Installing PHP packages (offline)...
-[4/12] ✓ Installing Node.js 18 (offline tarball)...
-[5/12] ✓ Installing Apache2 (offline)...
-[6/12] ✓ Installing SQLite3 (offline)...
-[7/12] ✓ Creating directory structure...
-[8/12] ✓ Installing D-PlaneOS backend...
-[9/12] ✓ Initializing database...
-[10/12] ✓ Installing D-PlaneOS UI...
-[11/12] ✓ Configuring system services...
-[12/12] ✓ Performing final setup...
-
-╔══════════════════════════════════════════════════════════════╗
-║              ✓ INSTALLATION SUCCESSFUL!                     ║
-╚══════════════════════════════════════════════════════════════╝
-
-Access your D-PlaneOS: http://192.168.1.100
-```
-
-**Installation Time:** 5-10 minutes
-
----
-
-## 🔧 Quick Commands
-
-After installation, use these commands:
-
-```bash
-# Check system status
-dplaneos status
-
-# Restart services
-dplaneos restart
-
-# View logs
-dplaneos logs
-```
-
----
-
-## 🐛 Troubleshooting
-
-### UI Not Loading
-```bash
-systemctl status dplaneos-ui
-systemctl restart dplaneos-ui
-journalctl -u dplaneos-ui -n 50
-```
-
-### Apache Not Starting
-```bash
-systemctl status apache2
-apache2ctl configtest
-systemctl restart apache2
-```
-
-### Docker Permission Denied
-```bash
-usermod -aG docker www-data
-systemctl restart apache2
-```
-
-### Check Installation Log
-```bash
-cat /var/log/dplaneos-install.log
-```
-
----
-
-## 📦 Package Contents
-
-```
-dplaneos-v1.14.0-TRUE-COMPLETE/
-├── backend/                   # PHP Backend (164 KB)
-├── frontend-built/            # Minimal UI
-├── offline-packages/          # System packages (65 MB)
-│   ├── zfs/                  # 3 .deb files
-│   ├── docker/               # 3 .deb files
-│   ├── php/                  # 4 .deb files
-│   ├── nodejs/               # 1 tarball
-│   ├── apache/               # 3 .deb files
-│   └── core/                 # 1 .deb file
-├── install-offline.sh         # Offline installer ⭐
-├── README.md                  # This file
-└── VERSION                    # 1.14.0-TRUE-COMPLETE
-```
-
----
-
-## 🏆 Why "TRUE COMPLETE"?
-
-### vs. Other Packages
-
-| Feature | TRUE COMPLETE | Semi-Complete | Hybrid |
-|---------|---------------|---------------|--------|
-| **Offline Install** | ✅ 100% | ⚠️ 90% | ⚠️ 50% |
-| **System Packages** | ✅ Included | ❌ Download | ❌ Download |
-| **Internet Required** | ❌ NO | ⚠️ Minimal | ✅ YES |
-| **Install Time** | ✅ 5-10 Min | ⚠️ 10-15 Min | ⚠️ 15-20 Min |
-| **Air-Gap Install** | ✅ YES | ❌ NO | ❌ NO |
-
-**TRUE COMPLETE = Real offline deployment!**
-
----
-
-## 🔒 Security
-
-### What's Protected
-- ✅ All user input sanitized
-- ✅ SQL injection prevention
-- ✅ XSS prevention
-- ✅ CSRF protection
-- ✅ Secure password hashing
-- ✅ File permission validation
-
-### Network Security
-- ✅ No external dependencies
-- ✅ Local-only installation
-- ✅ Firewall-friendly
-- ✅ No telemetry
-- ✅ No phone-home
-
----
-
-## 🎯 First Steps After Installation
-
-### 1. Access Dashboard
-```
-Open browser: http://YOUR-SERVER-IP
-```
-
-### 2. Create ZFS Pool
-```
-Storage → Create Pool
-→ Name: "tank"
-→ Type: RAID-Z2
-→ Select 4+ disks
-→ Create
-```
-
-### 3. First Backup
-```
-Backup → Create Backup
-→ ⚠️ SAVE PASSWORD! (shown only once)
-→ Backup runs automatically
-```
-
-### 4. Deploy First App
-```
-Docker → App Store
-→ Select app (e.g., Plex, Nextcloud)
-→ Configure
-→ Deploy
-```
-
----
-
-## 📝 Upgrading UI
-
-The package includes a minimal UI. To upgrade to the full React UI:
-
-```bash
-# 1. Build UI on a system with internet
-cd /tmp
-# ... npm install + npm build ...
-
-# 2. Copy to NAS
-scp -r .next/ user@nas:/opt/dplaneos-ui/
-
-# 3. Restart
-sudo systemctl restart dplaneos-ui
-```
-
----
-
-## 🆘 Support
-
-- **Documentation:** `/var/www/dplaneos/docs/`
-- **Logs:** `/var/log/dplaneos/`
-- **Installation Log:** `/var/log/dplaneos-install.log`
-
----
-
-## 📄 License
-
-PolyForm Non-Commercial 1.0.0 License - See LICENSE file
-
----
-
-## 🎉 Summary
-
-**D-PlaneOS v1.14.0 TRUE COMPLETE is:**
-- ✅ 100% Offline-Capable
-- ✅ Complete System Packages
-- ✅ 5-10 Minute Installation
-- ✅ Production-Ready
-- ✅ Self-Healing
-- ✅ Secure by Default
-
-**"Set it. Forget it. For decades."** 🚀
-
----
-
-**Installation Date:** Run `date` to see when installed  
-**Log Location:** `/var/log/dplaneos-install.log`  
-**Version:** 1.14.0-TRUE-COMPLETE
+Creates a VACUUM INTO backup on startup + every 24 hours.
+
+## Features
+
+- **Storage:** ZFS pools, snapshots, replication, encryption, quotas, file explorer
+- **Compute:** Docker container management, app modules
+- **Network:** Interface config, routing, DNS
+- **Identity:** User management, groups, **LDAP/Active Directory** (v2.0.0)
+- **Security:** RBAC (4 roles), audit logging, API tokens, firewall
+- **System:** Settings, logs, UPS management, hardware detection
+- **UI:** Material Design 3, dark theme, responsive, keyboard shortcuts
+
+## LDAP / Active Directory (New in v2.0.0)
+
+Navigate to **Identity → Directory Service** to configure. Supports:
+
+- Active Directory, OpenLDAP, FreeIPA (one-click presets)
+- Group → Role mapping (auto-assign permissions)
+- Just-In-Time user provisioning
+- Background sync with audit trail
+- TLS 1.2+ enforced
+
+## Architecture
+
+- **Frontend:** HTML5 + Material Design 3, flyout navigation, no framework dependencies
+- **Backend:** Go daemon (`dplaned`, 8MB) on port 9000, 85 API routes
+- **Database:** SQLite with WAL mode, `synchronous=FULL`, daily VACUUM INTO backup
+- **Web Server:** nginx reverse proxy (TLS termination)
+- **Storage:** ZFS (native kernel module) + ZED hook for real-time disk failure alerts
+- **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 34 permissions), injection-hardened, OOM-protected (512MB limit)
+
+## Documentation
+
+- `CHANGELOG-v2.0.0.md` — What's new
+- `RELEASE-NOTES-v2.0.0.md` — GitHub release notes
+- `ADMIN-GUIDE.md` — Full administration guide (v2.0.0)
+- `ERROR-REFERENCE.md` — API error codes and diagnostics
+- `TROUBLESHOOTING.md` — Build issues, ZED setup, common fixes
+- `LDAP-REFERENCE.md` — LDAP technical reference
+- `INSTALLATION-GUIDE.md` — Detailed installation steps
+- `scripts/build-release.sh` — Automated release builder with smoke tests
+
+## License
+
+Open source. See LICENSE file.

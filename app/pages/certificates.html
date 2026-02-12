@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><style>html{background:#0a0a0a}</style>
+<meta charset="UTF-8">
+<title>Certificates - D-PlaneOS</title>
+  <link rel="stylesheet" href="/assets/css/design-tokens.css">
+<link rel="stylesheet" href="/assets/css/m3-tokens.css">
+<link rel="stylesheet" href="/assets/css/m3-components.css">
+<link rel="stylesheet" href="/assets/css/m3-icons.css">
+  <link rel="stylesheet" href="/assets/css/enhanced-ui.css">
+<link rel="stylesheet" href="/assets/css/ui-components.css">
+<script src="/assets/js/core.js"></script>
+<script src="/assets/js/nav-flyout.js"></script>
+<script src="/assets/js/hybrid-router.js"></script>
+  <script src="/assets/js/enhanced-ui.js"></script>
+  <script src="/assets/js/connection-monitor.js"></script>
+  <script src="/assets/js/keyboard-shortcuts.js"></script>
+  <script src="/assets/js/form-validator.js"></script>
+<script src="/assets/js/ui-components.js"></script>
+  <link rel="stylesheet" href="/assets/css/material-symbols-local.css">
+  <link rel="stylesheet" href="/assets/css/ui-consistency.css">
+  <link rel="stylesheet" href="/assets/css/ui-polish.css">
+  <script src="/assets/js/daemon-api.js"></script>
+</head>
+<body>
+<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- This navigation maintains all security (CSRF, Auth) and real system state -->
+
+<nav class="nav-container">
+  <div class="nav-main">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <div class="logo">
+        D-PlaneOS
+        <span class="version-badge">v2.0.0</span>
+      </div>
+    </div>
+    
+    <div class="nav-links">
+      <button class="nav-link" onclick="navigateToSection('dashboard')" data-section="dashboard">
+        Dashboard
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('storage', this)" data-section="storage">
+        Storage
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('compute', this)" data-section="compute">
+        Compute
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('network', this)" data-section="network">
+        Network
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('identity', this)" data-section="identity">
+        Identity
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('security', this)" data-section="security">
+        Security
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('system', this)" data-section="system">
+        System
+      </button>
+    </div>
+    
+    <div class="nav-actions">
+      <button class="nav-action-btn" onclick="showKeyboardHelp()" title="Keyboard Shortcuts (?)">
+        <span class="material-symbols-rounded">keyboard</span>
+      </button>
+      <div class="connection-status online" id="navConnectionStatus">
+        <span class="status-dot"></span>
+        <span>Connected</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Storage Sub-Navigation -->
+  <div id="sub-storage" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="pools.html" class="sub-link" data-page="pools">
+        <span class="material-symbols-rounded">database</span>
+        ZFS Pools
+      </a>
+      <a href="pools-advanced.html" class="sub-link" data-page="pools-advanced">
+        <span class="material-symbols-rounded">photo_camera</span>
+        Snapshots
+      </a>
+      <a href="shares.html" class="sub-link" data-page="shares">
+        <span class="material-symbols-rounded">folder_shared</span>
+        Shares
+      </a>
+      <a href="replication.html" class="sub-link" data-page="replication">
+        <span class="material-symbols-rounded">sync</span>
+        Replication
+      </a>
+      <a href="files.html" class="sub-link" data-page="files">
+        <span class="material-symbols-rounded">folder_open</span>
+        File Explorer
+      </a>
+      <a href="quotas.html" class="sub-link" data-page="quotas">
+        <span class="material-symbols-rounded">pie_chart</span>
+        Quotas
+      </a>
+      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
+        <span class="material-symbols-rounded">schedule</span>
+        Snapshot Scheduler
+      </a>
+      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
+        <span class="material-symbols-rounded">admin_panel_settings</span>
+        ACL Manager
+      </a>
+      <a href="zfs-encryption.html" class="sub-link" data-page="zfs-encryption">
+        <span class="material-symbols-rounded">enhanced_encryption</span>
+        Encryption
+      </a>
+      <a href="files-enhanced.html" class="sub-link" data-page="files-enhanced">
+        <span class="material-symbols-rounded">upload_file</span>
+        File Upload
+      </a>
+      <a href="cloud-sync.html" class="sub-link" data-page="cloud-sync">
+        <span class="material-symbols-rounded">cloud_sync</span>
+        Cloud Sync
+      </a>
+    </div>
+  </div>
+
+  <!-- Compute Sub-Navigation -->
+  <div id="sub-compute" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="docker.html" class="sub-link" data-page="docker">
+        <span class="material-symbols-rounded">dns</span>
+        Docker Containers
+      </a>
+      <a href="modules.html" class="sub-link" data-page="modules">
+        <span class="material-symbols-rounded">extension</span>
+        App Modules
+      </a>
+    </div>
+  </div>
+
+  <!-- Network Sub-Navigation -->
+  <div id="sub-network" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="network.html" class="sub-link" data-page="network">
+        <span class="material-symbols-rounded">lan</span>
+        Network Settings
+      </a>
+      <a href="network-interfaces.html" class="sub-link" data-page="network-interfaces">
+        <span class="material-symbols-rounded">settings_ethernet</span>
+        Interfaces
+      </a>
+      <a href="network-dns.html" class="sub-link" data-page="network-dns">
+        <span class="material-symbols-rounded">dns</span>
+        DNS
+      </a>
+      <a href="network-routing.html" class="sub-link" data-page="network-routing">
+        <span class="material-symbols-rounded">route</span>
+        Routing
+      </a>
+    </div>
+  </div>
+
+  <!-- Identity Sub-Navigation -->
+  <div id="sub-identity" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="users.html" class="sub-link" data-page="users">
+        <span class="material-symbols-rounded">person</span>
+        Users
+      </a>
+      <a href="groups.html" class="sub-link" data-page="groups">
+        <span class="material-symbols-rounded">group</span>
+        Groups
+      </a>
+      <a href="directory-service.html" class="sub-link" data-page="directory-service">
+        <span class="material-symbols-rounded">domain</span>
+        Directory Service
+      </a>
+      <a href="rbac-management.html" class="sub-link" data-page="rbac-management">
+        <span class="material-symbols-rounded">admin_panel_settings</span>
+        Roles & Permissions
+      </a>
+    </div>
+  </div>
+
+  <!-- Security Sub-Navigation -->
+  <div id="sub-security" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="security.html" class="sub-link" data-page="security">
+        <span class="material-symbols-rounded">shield</span>
+        Security Settings
+      </a>
+      <a href="audit.html" class="sub-link" data-page="audit">
+        <span class="material-symbols-rounded">fact_check</span>
+        Audit Logs
+      </a>
+      <a href="firewall.html" class="sub-link" data-page="firewall">
+        <span class="material-symbols-rounded">local_fire_department</span>
+        Firewall
+      </a>
+      <a href="certificates.html" class="sub-link" data-page="certificates">
+        <span class="material-symbols-rounded">verified_user</span>
+        Certificates
+      </a>
+    </div>
+  </div>
+
+  <!-- System Sub-Navigation -->
+  <div id="sub-system" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="settings.html" class="sub-link" data-page="settings">
+        <span class="material-symbols-rounded">tune</span>
+        General Settings
+      </a>
+      <a href="logs.html" class="sub-link" data-page="logs">
+        <span class="material-symbols-rounded">description</span>
+        System Logs
+      </a>
+      <a href="ups.html" class="sub-link" data-page="ups">
+        <span class="material-symbols-rounded">battery_charging_full</span>
+        UPS Management
+      </a>
+      <a href="reporting.html" class="sub-link" data-page="reporting">
+        <span class="material-symbols-rounded">monitoring</span>
+        Reporting
+      </a>
+      <a href="power-management.html" class="sub-link" data-page="power-management">
+        <span class="material-symbols-rounded">power_settings_new</span>
+        Power Management
+      </a>
+      <a href="system-settings.html" class="sub-link" data-page="system-settings">
+        <span class="material-symbols-rounded">settings_suggest</span>
+        System Settings
+      </a>
+      <a href="system-monitoring.html" class="sub-link" data-page="system-monitoring">
+        <span class="material-symbols-rounded">monitor_heart</span>
+        Monitoring
+      </a>
+      <a href="hardware.html" class="sub-link" data-page="hardware">
+        <span class="material-symbols-rounded">developer_board</span>
+        Hardware
+      </a>
+      <a href="ipmi.html" class="sub-link" data-page="ipmi">
+        <span class="material-symbols-rounded">memory</span>
+        IPMI
+      </a>
+      <a href="removable-media-ui.html" class="sub-link" data-page="removable-media-ui">
+        <span class="material-symbols-rounded">usb</span>
+        Removable Media
+      </a>
+    </div>
+  </div>
+</nav>
+
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
+<main class="main">
+<div class="page-header">
+  <h1 class="page-title">SSL/TLS Certificates</h1>
+  <div class="page-actions">
+    <button class="btn btn-primary" onclick="showGenModal()"><span class="material-symbols-rounded" style="font-size:18px;">add</span> Generate Certificate</button>
+  </div>
+</div>
+
+<div class="card" id="activeCertCard">
+  <div class="card-header"><div class="card-title">Active Certificate</div></div>
+  <div id="activeCertInfo" style="padding:4px 0;font-size:14px;color:rgba(255,255,255,0.6);">Loading...</div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Installed Certificates</div>
+    <div class="card-action" onclick="loadCerts()"><span class="material-symbols-rounded" style="font-size:18px;">refresh</span></div>
+  </div>
+  <div id="certList" style="padding:20px;text-align:center;color:rgba(255,255,255,0.4);">Loading...</div>
+</div>
+
+<div id="genCertModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:rgba(30,41,59,0.98);border-radius:16px;padding:32px;max-width:500px;width:90%;border:1px solid rgba(255,255,255,0.1);">
+    <h3 style="margin:0 0 24px;font-size:18px;">Generate Self-Signed Certificate</h3>
+    <div style="display:grid;gap:16px;">
+      <div>
+        <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Certificate Name</label>
+        <input type="text" id="certName" value="dplaneos" placeholder="my-cert" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Common Name (CN)</label>
+        <input type="text" id="certCN" value="dplaneos.local" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Validity (days)</label>
+        <input type="number" id="certDays" value="365" min="1" max="3650" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Subject Alternative Names (comma-separated)</label>
+        <input type="text" id="certSANs" placeholder="192.168.1.100, nas.local" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:24px;">
+      <button class="btn" onclick="closeGenModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="generateCert()">Generate</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.cert-row{display:flex;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid rgba(255,255,255,0.06);}
+.cert-row:last-child{border-bottom:none;}
+.cert-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(74,222,128,0.1);}
+.cert-icon span{color:#4ade80;font-size:22px;}
+.cert-info{flex:1;}
+.cert-name{font-weight:600;font-size:15px;margin-bottom:4px;}
+.cert-meta{font-size:12px;color:rgba(255,255,255,0.5);line-height:1.6;}
+.cert-active-badge{padding:3px 10px;border-radius:20px;background:rgba(74,222,128,0.15);color:#4ade80;font-size:11px;font-weight:600;}
+.cert-actions{display:flex;gap:8px;}
+</style>
+
+<script>
+function getSessionId(){return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("session_id")||"";}
+function getUser(){return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("username")||"admin";}
+function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}
+
+var activeCert="";
+
+async function loadCerts(){
+  try{
+    var res=await fetch("/api/certs/list",{headers:{"X-Session-ID":getSessionId(),"X-User":getUser()}});
+    var data=await res.json();
+    activeCert=data.active_cert||"";
+    document.getElementById("activeCertInfo").textContent=activeCert||"No certificate configured";
+    
+    var certs=data.certs||[];
+    if(!certs.length){
+      document.getElementById("certList").innerHTML="<div style='padding:40px;text-align:center;color:rgba(255,255,255,0.4);'><span class='material-symbols-rounded' style='font-size:48px;display:block;margin-bottom:12px;'>verified_user</span>No certificates installed<br><span style='font-size:13px;'>Click <strong>Generate Certificate</strong> to create one</span></div>";
+      return;
+    }
+    
+    var html="";
+    certs.forEach(function(c){
+      var isActive=activeCert.indexOf(c.name)!==-1;
+      // Parse details
+      var details=(c.details||"").split("\n");
+      var subject="",expires="",issuer="";
+      details.forEach(function(d){
+        if(d.startsWith("subject="))subject=d.replace("subject=","").trim();
+        if(d.startsWith("notAfter="))expires=d.replace("notAfter=","").trim();
+        if(d.startsWith("issuer="))issuer=d.replace("issuer=","").trim();
+      });
+      
+      html+="<div class='cert-row'>"+
+        "<div class='cert-icon'><span class='material-symbols-rounded'>verified_user</span></div>"+
+        "<div class='cert-info'><div class='cert-name'>"+esc(c.name)+(isActive?" <span class='cert-active-badge'>Active</span>":"")+"</div>"+
+        "<div class='cert-meta'>Subject: "+esc(subject)+"<br>Expires: "+esc(expires)+"<br>Key: "+(c.has_key==="true"?"✓ Present":"✗ Missing")+"</div></div>"+
+        "<div class='cert-actions'>"+
+        (isActive?"":"<button class='btn' onclick=\"activateCert('"+esc(c.name)+"')\">Activate</button>")+
+        "</div></div>";
+    });
+    document.getElementById("certList").innerHTML=html;
+  }catch(e){document.getElementById("certList").textContent="Failed to load certificates";}
+}
+
+function showGenModal(){document.getElementById("genCertModal").style.display="flex";}
+function closeGenModal(){document.getElementById("genCertModal").style.display="none";}
+
+async function generateCert(){
+  var name=document.getElementById("certName").value.trim();
+  var cn=document.getElementById("certCN").value.trim();
+  var days=parseInt(document.getElementById("certDays").value)||365;
+  var sans=document.getElementById("certSANs").value.trim();
+  if(!name){if(window.EnhancedUI)EnhancedUI.toast("Name is required","error");return;}
+  try{
+    var res=await fetch("/api/certs/generate",{method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify({name:name,cn:cn,days:days,sans:sans})});
+    var data=await res.json();
+    if(data.success){
+      closeGenModal();
+      if(window.EnhancedUI)EnhancedUI.toast("Certificate generated: "+name,"success");
+      loadCerts();
+    }else{if(window.EnhancedUI)EnhancedUI.toast("Generation failed","error");}
+  }catch(e){if(window.EnhancedUI)EnhancedUI.toast("Error: "+e.message,"error");}
+}
+
+async function activateCert(name){
+  if(!confirm("Activate certificate '"+name+"'? This will reload nginx."))return;
+  try{
+    var res=await fetch("/api/certs/activate",{method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify({name:name})});
+    var data=await res.json();
+    if(data.success){
+      if(window.EnhancedUI)EnhancedUI.toast("Certificate activated — nginx reloaded","success");
+      loadCerts();
+    }else{if(window.EnhancedUI)EnhancedUI.toast("Activation failed","error");}
+  }catch(e){if(window.EnhancedUI)EnhancedUI.toast("Error: "+e.message,"error");}
+}
+
+document.addEventListener("DOMContentLoaded",loadCerts);
+</script>
+<script src="/assets/js/realtime-client.js"></script>
+</body></html>

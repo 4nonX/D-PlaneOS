@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><style>html{background:#0a0a0a}</style>
+<meta charset="UTF-8">
+<title>Reporting - D-PlaneOS</title>
+  <link rel="stylesheet" href="/assets/css/design-tokens.css">
+<link rel="stylesheet" href="/assets/css/m3-tokens.css">
+<link rel="stylesheet" href="/assets/css/m3-components.css">
+<link rel="stylesheet" href="/assets/css/m3-icons.css">
+  <link rel="stylesheet" href="/assets/css/enhanced-ui.css">
+<link rel="stylesheet" href="/assets/css/ui-components.css">
+<script src="/assets/js/core.js"></script>
+<script src="/assets/js/nav-flyout.js"></script>
+<script src="/assets/js/hybrid-router.js"></script>
+  <script src="/assets/js/enhanced-ui.js"></script>
+  <script src="/assets/js/connection-monitor.js"></script>
+  <script src="/assets/js/keyboard-shortcuts.js"></script>
+  <script src="/assets/js/form-validator.js"></script>
+<script src="/assets/js/ui-components.js"></script>
+  <link rel="stylesheet" href="/assets/css/material-symbols-local.css">
+  <link rel="stylesheet" href="/assets/css/ui-consistency.css">
+  <link rel="stylesheet" href="/assets/css/ui-polish.css">
+  <script src="/assets/js/daemon-api.js"></script>
+</head>
+<body>
+<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- This navigation maintains all security (CSRF, Auth) and real system state -->
+
+<nav class="nav-container">
+  <div class="nav-main">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <div class="logo">
+        D-PlaneOS
+        <span class="version-badge">v2.0.0</span>
+      </div>
+    </div>
+    
+    <div class="nav-links">
+      <button class="nav-link" onclick="navigateToSection('dashboard')" data-section="dashboard">
+        Dashboard
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('storage', this)" data-section="storage">
+        Storage
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('compute', this)" data-section="compute">
+        Compute
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('network', this)" data-section="network">
+        Network
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('identity', this)" data-section="identity">
+        Identity
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('security', this)" data-section="security">
+        Security
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('system', this)" data-section="system">
+        System
+      </button>
+    </div>
+    
+    <div class="nav-actions">
+      <button class="nav-action-btn" onclick="showKeyboardHelp()" title="Keyboard Shortcuts (?)">
+        <span class="material-symbols-rounded">keyboard</span>
+      </button>
+      <div class="connection-status online" id="navConnectionStatus">
+        <span class="status-dot"></span>
+        <span>Connected</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Storage Sub-Navigation -->
+  <div id="sub-storage" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="pools.html" class="sub-link" data-page="pools">
+        <span class="material-symbols-rounded">database</span>
+        ZFS Pools
+      </a>
+      <a href="pools-advanced.html" class="sub-link" data-page="pools-advanced">
+        <span class="material-symbols-rounded">photo_camera</span>
+        Snapshots
+      </a>
+      <a href="shares.html" class="sub-link" data-page="shares">
+        <span class="material-symbols-rounded">folder_shared</span>
+        Shares
+      </a>
+      <a href="replication.html" class="sub-link" data-page="replication">
+        <span class="material-symbols-rounded">sync</span>
+        Replication
+      </a>
+      <a href="files.html" class="sub-link" data-page="files">
+        <span class="material-symbols-rounded">folder_open</span>
+        File Explorer
+      </a>
+      <a href="quotas.html" class="sub-link" data-page="quotas">
+        <span class="material-symbols-rounded">pie_chart</span>
+        Quotas
+      </a>
+      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
+        <span class="material-symbols-rounded">schedule</span>
+        Snapshot Scheduler
+      </a>
+      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
+        <span class="material-symbols-rounded">admin_panel_settings</span>
+        ACL Manager
+      </a>
+      <a href="zfs-encryption.html" class="sub-link" data-page="zfs-encryption">
+        <span class="material-symbols-rounded">enhanced_encryption</span>
+        Encryption
+      </a>
+      <a href="files-enhanced.html" class="sub-link" data-page="files-enhanced">
+        <span class="material-symbols-rounded">upload_file</span>
+        File Upload
+      </a>
+      <a href="cloud-sync.html" class="sub-link" data-page="cloud-sync">
+        <span class="material-symbols-rounded">cloud_sync</span>
+        Cloud Sync
+      </a>
+    </div>
+  </div>
+
+  <!-- Compute Sub-Navigation -->
+  <div id="sub-compute" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="docker.html" class="sub-link" data-page="docker">
+        <span class="material-symbols-rounded">dns</span>
+        Docker Containers
+      </a>
+      <a href="modules.html" class="sub-link" data-page="modules">
+        <span class="material-symbols-rounded">extension</span>
+        App Modules
+      </a>
+    </div>
+  </div>
+
+  <!-- Network Sub-Navigation -->
+  <div id="sub-network" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="network.html" class="sub-link" data-page="network">
+        <span class="material-symbols-rounded">lan</span>
+        Network Settings
+      </a>
+      <a href="network-interfaces.html" class="sub-link" data-page="network-interfaces">
+        <span class="material-symbols-rounded">settings_ethernet</span>
+        Interfaces
+      </a>
+      <a href="network-dns.html" class="sub-link" data-page="network-dns">
+        <span class="material-symbols-rounded">dns</span>
+        DNS
+      </a>
+      <a href="network-routing.html" class="sub-link" data-page="network-routing">
+        <span class="material-symbols-rounded">route</span>
+        Routing
+      </a>
+    </div>
+  </div>
+
+  <!-- Identity Sub-Navigation -->
+  <div id="sub-identity" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="users.html" class="sub-link" data-page="users">
+        <span class="material-symbols-rounded">person</span>
+        Users
+      </a>
+      <a href="groups.html" class="sub-link" data-page="groups">
+        <span class="material-symbols-rounded">group</span>
+        Groups
+      </a>
+      <a href="directory-service.html" class="sub-link" data-page="directory-service">
+        <span class="material-symbols-rounded">domain</span>
+        Directory Service
+      </a>
+      <a href="rbac-management.html" class="sub-link" data-page="rbac-management">
+        <span class="material-symbols-rounded">admin_panel_settings</span>
+        Roles & Permissions
+      </a>
+    </div>
+  </div>
+
+  <!-- Security Sub-Navigation -->
+  <div id="sub-security" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="security.html" class="sub-link" data-page="security">
+        <span class="material-symbols-rounded">shield</span>
+        Security Settings
+      </a>
+      <a href="audit.html" class="sub-link" data-page="audit">
+        <span class="material-symbols-rounded">fact_check</span>
+        Audit Logs
+      </a>
+      <a href="firewall.html" class="sub-link" data-page="firewall">
+        <span class="material-symbols-rounded">local_fire_department</span>
+        Firewall
+      </a>
+      <a href="certificates.html" class="sub-link" data-page="certificates">
+        <span class="material-symbols-rounded">verified_user</span>
+        Certificates
+      </a>
+    </div>
+  </div>
+
+  <!-- System Sub-Navigation -->
+  <div id="sub-system" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="settings.html" class="sub-link" data-page="settings">
+        <span class="material-symbols-rounded">tune</span>
+        General Settings
+      </a>
+      <a href="logs.html" class="sub-link" data-page="logs">
+        <span class="material-symbols-rounded">description</span>
+        System Logs
+      </a>
+      <a href="ups.html" class="sub-link" data-page="ups">
+        <span class="material-symbols-rounded">battery_charging_full</span>
+        UPS Management
+      </a>
+      <a href="reporting.html" class="sub-link" data-page="reporting">
+        <span class="material-symbols-rounded">monitoring</span>
+        Reporting
+      </a>
+      <a href="power-management.html" class="sub-link" data-page="power-management">
+        <span class="material-symbols-rounded">power_settings_new</span>
+        Power Management
+      </a>
+      <a href="system-settings.html" class="sub-link" data-page="system-settings">
+        <span class="material-symbols-rounded">settings_suggest</span>
+        System Settings
+      </a>
+      <a href="system-monitoring.html" class="sub-link" data-page="system-monitoring">
+        <span class="material-symbols-rounded">monitor_heart</span>
+        Monitoring
+      </a>
+      <a href="hardware.html" class="sub-link" data-page="hardware">
+        <span class="material-symbols-rounded">developer_board</span>
+        Hardware
+      </a>
+      <a href="ipmi.html" class="sub-link" data-page="ipmi">
+        <span class="material-symbols-rounded">memory</span>
+        IPMI
+      </a>
+      <a href="removable-media-ui.html" class="sub-link" data-page="removable-media-ui">
+        <span class="material-symbols-rounded">usb</span>
+        Removable Media
+      </a>
+    </div>
+  </div>
+</nav>
+
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
+<main class="main">
+<div class="page-header">
+  <h1 class="page-title">Reporting</h1>
+  <div class="page-actions">
+    <select id="reportPeriod" onchange="loadHistory()" style="padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;">
+      <option value="day">Last 24 Hours</option>
+      <option value="week">Last 7 Days</option>
+    </select>
+  </div>
+</div>
+
+<div class="grid grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-title">CPU Load Average</div></div>
+    <canvas id="cpuChart" height="200"></canvas>
+    <div id="cpuCurrent" style="text-align:center;margin-top:12px;font-size:13px;color:rgba(255,255,255,0.5);"></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">Memory Usage</div></div>
+    <canvas id="memChart" height="200"></canvas>
+    <div id="memCurrent" style="text-align:center;margin-top:12px;font-size:13px;color:rgba(255,255,255,0.5);"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><div class="card-title">Storage Pool Usage</div></div>
+  <div id="poolBars" style="display:grid;gap:16px;"></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><div class="card-title">System Overview</div></div>
+  <div id="sysOverview" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;"></div>
+</div>
+
+<style>
+canvas{width:100%!important;max-height:200px;}
+.pool-bar-wrap{display:flex;align-items:center;gap:16px;}
+.pool-bar-label{min-width:120px;font-size:14px;font-weight:600;}
+.pool-bar-outer{flex:1;height:24px;background:rgba(255,255,255,0.06);border-radius:12px;overflow:hidden;position:relative;}
+.pool-bar-inner{height:100%;border-radius:12px;transition:width 0.6s ease;min-width:2px;}
+.pool-bar-inner.ok{background:linear-gradient(90deg,#4ade80,#22c55e);}
+.pool-bar-inner.warn{background:linear-gradient(90deg,#FBBF24,#F59E0B);}
+.pool-bar-inner.crit{background:linear-gradient(90deg,#F87171,#EF4444);}
+.pool-bar-text{min-width:80px;text-align:right;font-size:13px;color:rgba(255,255,255,0.6);}
+.stat-tile{background:rgba(255,255,255,0.04);border-radius:12px;padding:16px;text-align:center;}
+.stat-tile .val{font-size:24px;font-weight:700;margin-bottom:4px;}
+.stat-tile .lbl{font-size:12px;color:rgba(255,255,255,0.5);}
+</style>
+
+<script>
+function getSessionId(){return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("session_id")||"";}
+function getUser(){return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("username")||"admin";}
+
+var cpuChart=null, memChart=null;
+
+function initCharts(){
+  var cpuCtx=document.getElementById("cpuChart").getContext("2d");
+  var memCtx=document.getElementById("memChart").getContext("2d");
+  cpuChart=createChart(cpuCtx,"Load Average","rgba(96,165,250,0.8)","rgba(96,165,250,0.1)");
+  memChart=createChart(memCtx,"Memory %","rgba(167,139,250,0.8)","rgba(167,139,250,0.1)");
+}
+
+function createChart(ctx,label,color,fill){
+  // Simple canvas chart (no external deps)
+  ctx.canvas._chartData={label:label,color:color,fill:fill,points:[]};
+  return ctx;
+}
+
+function drawChart(ctx,points,label,color,fillColor,maxY){
+  var canvas=ctx.canvas;
+  var w=canvas.width=canvas.offsetWidth*2;
+  var h=canvas.height=canvas.offsetHeight*2;
+  ctx.scale(2,2);
+  var cw=canvas.offsetWidth, ch=canvas.offsetHeight;
+  var pad={t:10,r:10,b:30,l:50};
+  var gw=cw-pad.l-pad.r, gh=ch-pad.t-pad.b;
+  
+  ctx.clearRect(0,0,cw,ch);
+  if(!points.length)return;
+  
+  // Grid lines
+  ctx.strokeStyle="rgba(255,255,255,0.06)";
+  ctx.lineWidth=0.5;
+  for(var i=0;i<=4;i++){
+    var y=pad.t+gh*(i/4);
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+gw,y);ctx.stroke();
+    ctx.fillStyle="rgba(255,255,255,0.3)";ctx.font="11px system-ui";ctx.textAlign="right";
+    ctx.fillText((maxY*(1-i/4)).toFixed(1),pad.l-8,y+4);
+  }
+  
+  // Time labels
+  ctx.fillStyle="rgba(255,255,255,0.3)";ctx.font="11px system-ui";ctx.textAlign="center";
+  var step=Math.max(1,Math.floor(points.length/6));
+  for(var i=0;i<points.length;i+=step){
+    var x=pad.l+(i/(points.length-1))*gw;
+    var d=new Date(points[i].ts*1000);
+    ctx.fillText(d.getHours()+":"+String(d.getMinutes()).padStart(2,"0"),x,ch-8);
+  }
+  
+  // Area fill
+  ctx.beginPath();
+  ctx.moveTo(pad.l,pad.t+gh);
+  points.forEach(function(p,i){
+    var x=pad.l+(i/(points.length-1))*gw;
+    var y=pad.t+gh*(1-p.v/maxY);
+    ctx.lineTo(x,y);
+  });
+  ctx.lineTo(pad.l+gw,pad.t+gh);
+  ctx.closePath();
+  ctx.fillStyle=fillColor;ctx.fill();
+  
+  // Line
+  ctx.beginPath();
+  points.forEach(function(p,i){
+    var x=pad.l+(i/(points.length-1))*gw;
+    var y=pad.t+gh*(1-p.v/maxY);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();
+}
+
+async function loadHistory(){
+  var period=document.getElementById("reportPeriod").value;
+  try{
+    var res=await fetch("/api/metrics/history?period="+period,{headers:{"X-Session-ID":getSessionId(),"X-User":getUser()}});
+    var data=await res.json();
+    if(!data.success)return;
+    var history=data.history||[];
+    
+    // CPU chart
+    var cpuPoints=history.map(function(h){return{ts:h.ts,v:parseFloat(h.load1)||0};});
+    var cpuMax=Math.max(4,Math.max.apply(null,cpuPoints.map(function(p){return p.v;}))*1.2);
+    drawChart(document.getElementById("cpuChart").getContext("2d"),cpuPoints,"Load",
+      "rgba(96,165,250,0.8)","rgba(96,165,250,0.1)",cpuMax);
+    if(cpuPoints.length)document.getElementById("cpuCurrent").textContent="Current: "+cpuPoints[cpuPoints.length-1].v.toFixed(2);
+    
+    // Memory chart
+    var memPoints=history.map(function(h){
+      var total=parseFloat(h.mem_total)||1;
+      var avail=parseFloat(h.mem_avail)||0;
+      return{ts:h.ts,v:((total-avail)/total)*100};
+    });
+    drawChart(document.getElementById("memChart").getContext("2d"),memPoints,"Mem%",
+      "rgba(167,139,250,0.8)","rgba(167,139,250,0.1)",100);
+    if(memPoints.length)document.getElementById("memCurrent").textContent="Current: "+memPoints[memPoints.length-1].v.toFixed(1)+"%";
+  }catch(e){console.error("History load error:",e);}
+}
+
+async function loadCurrent(){
+  try{
+    var res=await fetch("/api/metrics/current",{headers:{"X-Session-ID":getSessionId(),"X-User":getUser()}});
+    var data=await res.json();
+    if(!data.success)return;
+    var m=data.metrics;
+    
+    // Pool bars
+    if(m.zpools){
+      var html="";
+      m.zpools.split("\n").forEach(function(line){
+        if(!line.trim())return;
+        var f=line.split("\t");
+        if(f.length<5)return;
+        var name=f[0],size=parseInt(f[1]),alloc=parseInt(f[2]),free=parseInt(f[3]),health=f[4];
+        var pct=size>0?((alloc/size)*100):0;
+        var cls=pct>90?"crit":pct>75?"warn":"ok";
+        var sizeGB=(size/1073741824).toFixed(1);
+        var allocGB=(alloc/1073741824).toFixed(1);
+        html+="<div class='pool-bar-wrap'>"+
+          "<span class='pool-bar-label'>"+name+"</span>"+
+          "<div class='pool-bar-outer'><div class='pool-bar-inner "+cls+"' style='width:"+pct.toFixed(1)+"%'></div></div>"+
+          "<span class='pool-bar-text'>"+allocGB+" / "+sizeGB+" GB</span></div>";
+      });
+      document.getElementById("poolBars").innerHTML=html||"<div style='text-align:center;color:rgba(255,255,255,0.4);'>No pools found</div>";
+    }
+    
+    // Overview tiles
+    var loadParts=(m.loadavg||"0 0 0").split(" ");
+    var ovHtml="<div class='stat-tile'><div class='val'>"+loadParts[0]+"</div><div class='lbl'>Load (1m)</div></div>"+
+      "<div class='stat-tile'><div class='val'>"+loadParts[1]+"</div><div class='lbl'>Load (5m)</div></div>"+
+      "<div class='stat-tile'><div class='val'>"+loadParts[2]+"</div><div class='lbl'>Load (15m)</div></div>";
+    if(m.memory){
+      var memTotal=parseInt(m.memory.MemTotal)||0;
+      var memAvail=parseInt(m.memory.MemAvailable)||0;
+      var memUsed=((memTotal-memAvail)/1048576).toFixed(1);
+      var memTotalGB=(memTotal/1048576).toFixed(1);
+      ovHtml+="<div class='stat-tile'><div class='val'>"+memUsed+" GB</div><div class='lbl'>RAM Used / "+memTotalGB+" GB</div></div>";
+    }
+    document.getElementById("sysOverview").innerHTML=ovHtml;
+  }catch(e){console.error("Current metrics error:",e);}
+}
+
+document.addEventListener("DOMContentLoaded",function(){
+  loadCurrent();
+  loadHistory();
+  setInterval(loadCurrent,30000);
+});
+</script>
+<script src="/assets/js/realtime-client.js"></script>
+</body></html>

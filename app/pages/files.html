@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><style>html{background:#0a0a0a}</style><style></style>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File Manager - D-PlaneOS</title>
+  <link rel="stylesheet" href="/assets/css/design-tokens.css">
+<link rel="stylesheet" href="/assets/css/m3-tokens.css">
+<link rel="stylesheet" href="/assets/css/m3-components.css">
+<link rel="stylesheet" href="/assets/css/m3-icons.css">
+  <link rel="stylesheet" href="/assets/css/enhanced-ui.css">
+<link rel="stylesheet" href="/assets/css/m3-animations.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #0a0a0a; color: #fff; overflow-x: hidden; }
+
+
+.logo { font-size: 20px; font-weight: 800; color: var(--primary); letter-spacing: -0.5px; cursor: pointer; }
+
+
+.nav-link:hover, 
+.main { max-width: 1600px; margin: 140px auto 60px; padding: 0 40px; }
+.page-header { margin-bottom: 48px; }
+.page-title { font-size: 32px; font-weight: 700; letter-spacing: -1.5px; margin-bottom: 12px; }
+.page-subtitle { font-size: 18px; color: rgba(255,255,255,0.6); }
+.pool-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-xl); padding: 32px; margin-bottom: 24px; border-left: 4px solid var(--primary); }
+.pool-header { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
+.pool-icon { font-size: 32px; color: var(--primary); }
+.pool-info { flex: 1; }
+.pool-name { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
+.pool-details { font-size: 15px; color: rgba(255,255,255,0.6); }
+.capacity-bar { height: 12px; background: rgba(255,255,255,0.05); border-radius: 24px; overflow: hidden; margin: 20px 0; }
+.capacity-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--primary)); border-radius: 24px; transition: width 0.5s; }
+/* Badge styles are in m3-components.css */
+.icon-btn { width: 40px; height: 40px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.8); cursor: pointer; transition: all 0.3s; border: none; }
+.icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.btn { background: rgba(255,255,255,0.1); color: #fff; padding: 12px 24px; border-radius: 10px; font-weight: 500; font-size: 14px; border: none; cursor: pointer; transition: all 0.3s; }
+.btn:hover { background: rgba(255,255,255,0.15); }
+.btn-primary { background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); }
+.btn-primary:hover { box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4); }
+.fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: #fff; }
+.fab:hover { transform: translateY(-4px); box-shadow: 0 12px 48px rgba(102, 126, 234, 0.6); }
+</style>
+<style type="text/css" id="operaUserStyle"></style><link rel="stylesheet" href="/assets/css/ui-components.css">
+<script src="/assets/js/core.js"></script>
+<script src="/assets/js/nav-flyout.js"></script>
+<script src="/assets/js/hybrid-router.js"></script>
+  <script src="/assets/js/enhanced-ui.js"></script>
+  <script src="/assets/js/connection-monitor.js"></script>
+  <script src="/assets/js/keyboard-shortcuts.js"></script>
+  <script src="/assets/js/form-validator.js"></script>
+  <link rel="stylesheet" href="/assets/css/material-symbols-local.css">
+  <link rel="stylesheet" href="/assets/css/ui-consistency.css">
+  <link rel="stylesheet" href="/assets/css/ui-polish.css">
+  <script src="/assets/js/daemon-api.js"></script>
+<style>
+body { font-family: sans-serif; margin: 0; padding: 20px; background: #0a0a0a; color: #fff; }
+.toolbar { display: flex; gap: 10px; margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+.btn { padding: 10px 20px; background: #58a6ff; border: none; border-radius: 4px; color: white; cursor: pointer; }
+.btn:hover { background: #79c0ff; }
+.breadcrumb { padding: 10px; background: rgba(255,255,255,0.03); border-radius: 4px; margin-bottom: 15px; }
+.file-list { display: grid; gap: 10px; }
+.file-item { display: flex; align-items: center; gap: 15px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+.file-item:hover { background: rgba(255,255,255,0.1); }
+.file-icon { font-size: 32px; }
+.file-info { flex: 1; }
+.file-name { font-weight: bold; margin-bottom: 5px; }
+.file-meta { font-size: 12px; opacity: 0.7; }
+.file-actions { display: flex; gap: 5px; }
+.file-actions button { padding: 8px 12px; background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: white; cursor: pointer; }
+.loading { text-align: center; padding: 40px; opacity: 0.6; }
+</style>
+</head>
+<body>
+
+<nav class="nav-container">
+  <div class="nav-main">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <div class="logo">
+        D-PlaneOS
+        <span class="version-badge">v2.0.0</span>
+      </div>
+    </div>
+    
+    <div class="nav-links">
+      <button class="nav-link" onclick="navigateToSection('dashboard')" data-section="dashboard">
+        Dashboard
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('storage', this)" data-section="storage">
+        Storage
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('compute', this)" data-section="compute">
+        Compute
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('network', this)" data-section="network">
+        Network
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('identity', this)" data-section="identity">
+        Identity
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('security', this)" data-section="security">
+        Security
+      </button>
+      <button class="nav-link" onclick="toggleSubNav('system', this)" data-section="system">
+        System
+      </button>
+    </div>
+    
+    <div class="nav-actions">
+      <button class="nav-action-btn" onclick="showKeyboardHelp()" title="Keyboard Shortcuts (?)">
+        <span class="material-symbols-rounded">keyboard</span>
+      </button>
+      <div class="connection-status online" id="navConnectionStatus">
+        <span class="status-dot"></span>
+        <span>Connected</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Storage Sub-Navigation -->
+  <div id="sub-storage" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="pools.html" class="sub-link" data-page="pools">
+        <span class="material-symbols-rounded">database</span>
+        ZFS Pools
+      </a>
+      <a href="pools-advanced.html" class="sub-link" data-page="pools-advanced">
+        <span class="material-symbols-rounded">photo_camera</span>
+        Snapshots
+      </a>
+      <a href="shares.html" class="sub-link" data-page="shares">
+        <span class="material-symbols-rounded">folder_shared</span>
+        Shares
+      </a>
+      <a href="replication.html" class="sub-link" data-page="replication">
+        <span class="material-symbols-rounded">sync</span>
+        Replication
+      </a>
+      <a href="files.html" class="sub-link" data-page="files">
+        <span class="material-symbols-rounded">folder_open</span>
+        File Explorer
+      </a>
+      <a href="quotas.html" class="sub-link" data-page="quotas">
+        <span class="material-symbols-rounded">pie_chart</span>
+        Quotas
+      </a>
+      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
+        <span class="material-symbols-rounded">schedule</span>
+        Snapshot Scheduler
+      </a>
+      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
+        <span class="material-symbols-rounded">admin_panel_settings</span>
+        ACL Manager
+      </a>
+      <a href="zfs-encryption.html" class="sub-link" data-page="zfs-encryption">
+        <span class="material-symbols-rounded">enhanced_encryption</span>
+        Encryption
+      </a>
+      <a href="files-enhanced.html" class="sub-link" data-page="files-enhanced">
+        <span class="material-symbols-rounded">upload_file</span>
+        File Upload
+      </a>
+      <a href="cloud-sync.html" class="sub-link" data-page="cloud-sync">
+        <span class="material-symbols-rounded">cloud_sync</span>
+        Cloud Sync
+      </a>
+    </div>
+  </div>
+
+  <!-- Compute Sub-Navigation -->
+  <div id="sub-compute" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="docker.html" class="sub-link" data-page="docker">
+        <span class="material-symbols-rounded">dns</span>
+        Docker Containers
+      </a>
+      <a href="modules.html" class="sub-link" data-page="modules">
+        <span class="material-symbols-rounded">extension</span>
+        App Modules
+      </a>
+    </div>
+  </div>
+
+  <!-- Network Sub-Navigation -->
+  <div id="sub-network" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="network.html" class="sub-link" data-page="network">
+        <span class="material-symbols-rounded">lan</span>
+        Network Settings
+      </a>
+      <a href="network-interfaces.html" class="sub-link" data-page="network-interfaces">
+        <span class="material-symbols-rounded">settings_ethernet</span>
+        Interfaces
+      </a>
+      <a href="network-dns.html" class="sub-link" data-page="network-dns">
+        <span class="material-symbols-rounded">dns</span>
+        DNS
+      </a>
+      <a href="network-routing.html" class="sub-link" data-page="network-routing">
+        <span class="material-symbols-rounded">route</span>
+        Routing
+      </a>
+    </div>
+  </div>
+
+  <!-- Identity Sub-Navigation -->
+  <div id="sub-identity" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="users.html" class="sub-link" data-page="users">
+        <span class="material-symbols-rounded">person</span>
+        Users
+      </a>
+      <a href="groups.html" class="sub-link" data-page="groups">
+        <span class="material-symbols-rounded">group</span>
+        Groups
+      </a>
+      <a href="directory-service.html" class="sub-link" data-page="directory-service">
+        <span class="material-symbols-rounded">domain</span>
+        Directory Service
+      </a>
+      <a href="rbac-management.html" class="sub-link" data-page="rbac-management">
+        <span class="material-symbols-rounded">admin_panel_settings</span>
+        Roles & Permissions
+      </a>
+    </div>
+  </div>
+
+  <!-- Security Sub-Navigation -->
+  <div id="sub-security" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="security.html" class="sub-link" data-page="security">
+        <span class="material-symbols-rounded">shield</span>
+        Security Settings
+      </a>
+      <a href="audit.html" class="sub-link" data-page="audit">
+        <span class="material-symbols-rounded">fact_check</span>
+        Audit Logs
+      </a>
+      <a href="firewall.html" class="sub-link" data-page="firewall">
+        <span class="material-symbols-rounded">local_fire_department</span>
+        Firewall
+      </a>
+      <a href="certificates.html" class="sub-link" data-page="certificates">
+        <span class="material-symbols-rounded">verified_user</span>
+        Certificates
+      </a>
+    </div>
+  </div>
+
+  <!-- System Sub-Navigation -->
+  <div id="sub-system" class="nav-sub">
+    <div class="nav-sub-inner">
+      <a href="settings.html" class="sub-link" data-page="settings">
+        <span class="material-symbols-rounded">tune</span>
+        General Settings
+      </a>
+      <a href="logs.html" class="sub-link" data-page="logs">
+        <span class="material-symbols-rounded">description</span>
+        System Logs
+      </a>
+      <a href="ups.html" class="sub-link" data-page="ups">
+        <span class="material-symbols-rounded">battery_charging_full</span>
+        UPS Management
+      </a>
+      <a href="reporting.html" class="sub-link" data-page="reporting">
+        <span class="material-symbols-rounded">monitoring</span>
+        Reporting
+      </a>
+      <a href="power-management.html" class="sub-link" data-page="power-management">
+        <span class="material-symbols-rounded">power_settings_new</span>
+        Power Management
+      </a>
+      <a href="system-settings.html" class="sub-link" data-page="system-settings">
+        <span class="material-symbols-rounded">settings_suggest</span>
+        System Settings
+      </a>
+      <a href="system-monitoring.html" class="sub-link" data-page="system-monitoring">
+        <span class="material-symbols-rounded">monitor_heart</span>
+        Monitoring
+      </a>
+      <a href="hardware.html" class="sub-link" data-page="hardware">
+        <span class="material-symbols-rounded">developer_board</span>
+        Hardware
+      </a>
+      <a href="ipmi.html" class="sub-link" data-page="ipmi">
+        <span class="material-symbols-rounded">memory</span>
+        IPMI
+      </a>
+      <a href="removable-media-ui.html" class="sub-link" data-page="removable-media-ui">
+        <span class="material-symbols-rounded">usb</span>
+        Removable Media
+      </a>
+    </div>
+  </div>
+</nav>
+
+<main class="main">
+<h1>File Manager</h1>
+
+<div class="toolbar">
+  <button class="btn" onclick="goUp()">⬆️ Up</button>
+  <button class="btn" onclick="refresh()">🔄 Refresh</button>
+  <button class="btn" onclick="createFolder()">📁 New Folder</button>
+  <button class="btn" onclick="toggleTrashPanel()" style="margin-left:auto;">♻ Recycle Bin</button>
+</div>
+
+<div class="breadcrumb" id="breadcrumb">/</div>
+<div id="status" class="loading">Loading...</div>
+<div id="files" class="file-list"></div>
+</main>
+
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
+<script>
+let currentPath = '/';
+
+async function loadFiles(path = currentPath) {
+  const status = document.getElementById('status');
+  const filesDiv = document.getElementById('files');
+  const breadcrumb = document.getElementById('breadcrumb');
+  
+  status.textContent = 'Loading...';
+  filesDiv.innerHTML = '';
+  
+  try {
+    const data = await daemonAPI.files_list(path);
+    
+    if (!data.success) {
+      status.textContent = `Error: ${data.error || 'Failed to load files'}`;
+      return;
+    }
+    
+    currentPath = data.path || path;
+    breadcrumb.textContent = currentPath;
+    
+    const files = data.files || [];
+    status.textContent = `${files.length} items`;
+    
+    if (files.length === 0) {
+      filesDiv.innerHTML = '<div style="text-align:center; padding:40px; opacity:0.5;">Empty directory</div>';
+      return;
+    }
+    
+    files.sort((a, b) => {
+      if (a.is_dir && !b.is_dir) return -1;
+      if (!a.is_dir && b.is_dir) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    
+    files.forEach(file => {
+      const item = document.createElement('div');
+      item.className = 'file-item';
+      
+      const icon = file.is_dir ? '📁' : '📄';
+      const size = file.is_dir ? 'Directory' : formatSize(file.size);
+      const date = new Date(file.mod_time * 1000).toLocaleString();
+      
+      item.innerHTML = `
+        <div class="file-icon">${icon}</div>
+        <div class="file-info">
+          <div class="file-name">${escapeHtml(file.name)}</div>
+          <div class="file-meta">${size} • ${file.mode} • ${date}</div>
+        </div>
+        <div class="file-actions">
+          ${file.is_dir ? '' : '<button onclick="downloadFile(event, \'' + escapeHtml(file.path) + '\')">⬇️</button>'}
+          <button onclick="moveToTrash(event, '${escapeHtml(file.path)}')" title="Move to Trash" style="font-size:14px;">♻</button>
+          <button onclick="deleteFile(event, '${escapeHtml(file.path)}')" title="Delete permanently" style="opacity:0.4;font-size:10px;">✕</button>
+        </div>
+      `;
+      
+      if (file.is_dir) {
+        item.addEventListener('click', (e) => {
+          if (!e.target.closest('button')) {
+            loadFiles(file.path);
+          }
+        });
+      }
+      
+      filesDiv.appendChild(item);
+    });
+    
+  } catch (error) {
+    status.textContent = `Error: ${error.message}`;
+    console.error('Failed to load files:', error);
+  }
+}
+
+function formatSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function goUp() {
+  if (currentPath === '/') return;
+  const parent = currentPath.split('/').slice(0, -1).join('/') || '/';
+  loadFiles(parent);
+}
+
+function refresh() {
+  loadFiles(currentPath);
+}
+
+async function createFolder() {
+  const name = prompt('Folder name:');
+  if (!name) return;
+  
+  const path = currentPath + (currentPath.endsWith('/') ? '' : '/') + name;
+  
+  try {
+    const result = await daemonAPI.files_mkdir(path);
+    if (result.success) {
+      alert('Folder created');
+      refresh();
+    } else {
+      alert('Error: ' + (result.error || 'Failed to create folder'));
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+  }
+}
+
+async function deleteFile(event, path) {
+  event.stopPropagation();
+  
+  if (!confirm(`Delete ${path}?`)) return;
+  
+  try {
+    const result = await daemonAPI.files_delete(path);
+    if (result.success) {
+      alert('Deleted');
+      refresh();
+    } else {
+      alert('Error: ' + (result.error || 'Failed to delete'));
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+  }
+}
+
+function downloadFile(event, path) {
+  event.stopPropagation();
+  window.location.href = '/download?path=' + encodeURIComponent(path);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(window.location.search);
+  const startPath = params.get('path') || '/';
+  loadFiles(startPath);
+});
+
+// === RECYCLE BIN ===
+async function moveToTrash(event, path) {
+  event.stopPropagation();
+  if (!confirm('Move to trash?\n' + path)) return;
+  try {
+    const res = await fetch('/api/trash/move', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},
+      body: JSON.stringify({path: path})
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (window.EnhancedUI) EnhancedUI.toast('Moved to trash', 'success');
+      refresh();
+    } else {
+      alert('Trash error: ' + (data.error || 'failed'));
+    }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+function getSessionId() {
+  return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/, '$1') || localStorage.getItem('session_id') || '';
+}
+function getUser() {
+  return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/, '$1') || localStorage.getItem('username') || 'admin';
+}
+
+var trashPanelOpen = false;
+async function toggleTrashPanel() {
+  var panel = document.getElementById('trashPanel');
+  if (!panel) {
+    // Create panel
+    panel = document.createElement('div');
+    panel.id = 'trashPanel';
+    panel.style.cssText = 'position:fixed;right:0;top:0;bottom:0;width:380px;background:rgba(20,27,40,0.98);border-left:1px solid rgba(255,255,255,0.1);z-index:9998;transform:translateX(100%);transition:transform 0.3s ease;padding:24px;overflow-y:auto;';
+    panel.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h3 style="margin:0;font-size:18px;">Recycle Bin</h3><button onclick="toggleTrashPanel()" style="background:none;border:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:20px;">✕</button></div><div id="trashItems">Loading...</div><div style="margin-top:16px;"><button class="btn" onclick="emptyTrash()" style="width:100%;background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#EF4444;">Empty Trash</button></div>';
+    document.body.appendChild(panel);
+  }
+  trashPanelOpen = !trashPanelOpen;
+  panel.style.transform = trashPanelOpen ? 'translateX(0)' : 'translateX(100%)';
+  if (trashPanelOpen) loadTrash();
+}
+
+async function loadTrash() {
+  try {
+    var res = await fetch('/api/trash/list', {headers:{'X-Session-ID':getSessionId(),'X-User':getUser()}});
+    var data = await res.json();
+    var items = data.items || [];
+    var el = document.getElementById('trashItems');
+    if (!items.length) { el.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">Trash is empty</div>'; return; }
+    el.innerHTML = items.map(function(item) {
+      var d = document.createElement('div'); d.textContent = item.name; var safeName = d.innerHTML;
+      var origPath = item.original_path || 'unknown';
+      d.textContent = origPath; var safeOrig = d.innerHTML;
+      return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+        '<div style="font-size:14px;font-weight:500;">' + safeName.substring(safeName.indexOf('_') + 1) + '</div>' +
+        '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin:4px 0;">From: ' + safeOrig + '</div>' +
+        '<div style="font-size:11px;color:rgba(255,255,255,0.3);">' + (item.trashed_at || '') + '</div>' +
+        '<button onclick="restoreTrash(\'' + safeName.replace(/'/g,"\\'") + '\')" style="margin-top:6px;padding:4px 10px;border:1px solid rgba(74,222,128,0.3);background:rgba(74,222,128,0.08);border-radius:6px;color:#4ade80;cursor:pointer;font-size:12px;">Restore</button></div>';
+    }).join('');
+  } catch(e) { document.getElementById('trashItems').textContent = 'Error loading trash'; }
+}
+
+async function restoreTrash(name) {
+  try {
+    var res = await fetch('/api/trash/restore', {method:'POST',headers:{'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},body:JSON.stringify({name:name})});
+    var data = await res.json();
+    if (data.success) { if (window.EnhancedUI) EnhancedUI.toast('Restored to ' + data.restored_to, 'success'); loadTrash(); refresh(); }
+    else { alert('Restore failed'); }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function emptyTrash() {
+  if (!confirm('Permanently delete ALL items in trash? This cannot be undone.')) return;
+  try {
+    await fetch('/api/trash/empty', {method:'POST',headers:{'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},body:JSON.stringify({})});
+    if (window.EnhancedUI) EnhancedUI.toast('Trash emptied', 'success');
+    loadTrash();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+</script>
+
+</body>
+</html>

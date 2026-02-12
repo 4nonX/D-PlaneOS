@@ -1,789 +1,325 @@
-# D-PlaneOS Recovery Playbook
-
-**Version:** 1.5.0  
-**Purpose:** System recovery procedures for administrators  
-**Audience:** System administrators, DevOps, support staff
-
----
+# D-PlaneOS v2.0.0 — Recovery & Administration Guide
 
 ## Quick Reference
 
-| Scenario | Page | Severity |
-|----------|------|----------|
-| Lost admin password | [→](#lost-admin-password) | 🟡 Medium |
-| Database corruption | [→](#database-corruption) | 🔴 Critical |
-| Web interface down | [→](#web-interface-down) | 🔴 Critical |
-| System won't boot | [→](#system-wont-boot) | 🔴 Critical |
-| Pool degraded | [→](#pool-degraded) | 🔴 Critical |
-| Accidental pool deletion | [→](#accidental-pool-deletion) | 🔴 Critical |
-| Container issues | [→](#container-issues) | 🟡 Medium |
-| Disk failure | [→](#disk-failure) | 🟠 High |
-| System compromise suspected | [→](#security-incident) | 🔴 Critical |
+| Problem | Solution |
+|---------|----------|
+| Service won't start | `journalctl -u dplaneos -n 50` |
+| Database locked | `systemctl restart dplaneos` |
+| Database corrupted | Restore from backup (see below) |
+| Lost admin access | Reset session table (see below) |
+| Pool not importing | `zpool import -f <pool>` |
+| Web UI unreachable | Check reverse proxy + `curl http://127.0.0.1:9000/health` |
+| High memory usage | Check `MemoryMax` in systemd, restart service |
 
 ---
 
-## Prerequisites
+## 1. Service Management
 
-### Required Access
-- Root or sudo access to the system
-- Physical or SSH access to the server
-- Access to backup storage (if applicable)
+### Check Status
 
-### Required Knowledge
-- Basic Linux command line
-- Understanding of ZFS concepts
-- System paths:
-  - `/var/dplane/` - D-PlaneOS installation
-  - `/var/dplane/database/dplane.db` - Main database
-  - `/var/dplane/backups/` - Automatic backups
-  - `/var/log/nginx/` - Web server logs
+```bash
+systemctl status dplaneos
+```
+
+### View Logs
+
+```bash
+# Last 50 lines
+journalctl -u dplaneos -n 50
+
+# Follow live
+journalctl -u dplaneos -f
+
+# Since last boot
+journalctl -u dplaneos -b
+```
+
+### Restart
+
+```bash
+sudo systemctl restart dplaneos
+```
+
+Graceful shutdown: the daemon drains active connections before stopping.
+
+### Verify Health
+
+```bash
+curl http://127.0.0.1:9000/health
+# Expected: {"status":"ok","version":"2.0.0"}
+```
 
 ---
 
-## Recovery Scenarios
+## 2. Database Recovery
 
-### Lost Admin Password
+The SQLite database lives at `/var/lib/dplaneos/dplaneos.db`.
 
-**Symptoms:**
-- Cannot login to web interface
-- Know username but forgot password
+### Automatic Backups
 
-**Recovery Steps:**
+`dplaned` creates a backup on every startup and daily via `VACUUM INTO`:
 
-1. **Access system via SSH/console**
-   ```bash
-   ssh root@your-server
-   ```
+- Default: `/var/lib/dplaneos/dplaneos.db.backup`
+- Custom: set via `-backup-path /path/to/backup.db`
 
-2. **Reset password to default (admin/admin)**
-   ```bash
-   sqlite3 /var/dplane/database/dplane.db "UPDATE users SET password='$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE username='admin'"
-   ```
+### Restore from Backup
 
-3. **Verify reset**
-   ```bash
-   # Try login at http://your-server
-   # Username: admin
-   # Password: admin
-   ```
-
-4. **Change password immediately**
-   - Login to web interface
-   - Navigate to user settings
-   - Set new strong password
-
-**Alternative: Create new admin user**
 ```bash
-# If you want a different username
-sqlite3 /var/dplane/database/dplane.db
-> INSERT INTO users (username, password, email) 
-  VALUES ('newadmin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin@localhost');
-> .quit
+# Stop the service
+sudo systemctl stop dplaneos
+
+# Replace corrupted database
+sudo cp /var/lib/dplaneos/dplaneos.db.backup /var/lib/dplaneos/dplaneos.db
+
+# Remove WAL files (they belong to the old DB)
+sudo rm -f /var/lib/dplaneos/dplaneos.db-wal
+sudo rm -f /var/lib/dplaneos/dplaneos.db-shm
+
+# Start the service (schema auto-init will fill any missing tables)
+sudo systemctl start dplaneos
 ```
 
-**Prevention:**
-- Store password in password manager
-- Document password in secure location
-- Consider creating backup admin account
+### Database Corruption Check
+
+```bash
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db "PRAGMA integrity_check;"
+# Expected: ok
+```
+
+### Complete Database Reset
+
+If both primary and backup are corrupted, you can start fresh. All tables and default data (roles, permissions, admin user) are recreated automatically:
+
+```bash
+sudo systemctl stop dplaneos
+sudo rm -f /var/lib/dplaneos/dplaneos.db*
+sudo systemctl start dplaneos
+# Check logs: should show "Seeded 4 built-in RBAC roles" etc.
+```
+
+**Note**: this resets all sessions, user accounts, LDAP config, and notification settings. ZFS pools, shares, and Docker containers are unaffected (they live on disk, not in the DB).
 
 ---
 
-### Database Corruption
+## 3. Authentication Recovery
 
-**Symptoms:**
-- "System database is corrupted" error
-- Web interface shows database errors
-- Cannot login even with correct credentials
+### Locked Out (No Valid Session)
 
-**Diagnosis:**
+Sessions are stored in SQLite. If all sessions are expired or the DB is corrupted:
+
 ```bash
-# Check database file
-ls -lh /var/dplane/database/dplane.db
+sudo systemctl stop dplaneos
 
-# Test database integrity
-sqlite3 /var/dplane/database/dplane.db "PRAGMA integrity_check;"
-# Should return: ok
+# Clear all sessions (forces re-login)
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db "DELETE FROM sessions;"
 
-# If corrupted, will show errors
+sudo systemctl start dplaneos
 ```
 
-**Recovery Steps:**
+### Reset Admin User
 
-**Option 1: Restore from automatic backup**
 ```bash
-# List available backups
-ls -lh /var/dplane/backups/
-
-# Choose most recent backup
-BACKUP=$(ls -t /var/dplane/backups/dplane-*.db | head -1)
-echo "Using backup: $BACKUP"
-
-# Stop services
-systemctl stop nginx php8.2-fpm
-
-# Restore database
-cp /var/dplane/database/dplane.db /var/dplane/database/dplane.db.corrupted
-cp $BACKUP /var/dplane/database/dplane.db
-chown www-data:www-data /var/dplane/database/dplane.db
-chmod 644 /var/dplane/database/dplane.db
-
-# Start services
-systemctl start php8.2-fpm nginx
-
-# Verify
-curl http://localhost/
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db "
+  INSERT OR REPLACE INTO users (id, username, display_name, email, active)
+  VALUES (1, 'admin', 'Administrator', 'admin@localhost', 1);
+"
 ```
-
-**Option 2: Dump and restore**
-```bash
-# If database is partially readable
-sqlite3 /var/dplane/database/dplane.db .dump > /tmp/dump.sql
-
-# Create new database
-mv /var/dplane/database/dplane.db /var/dplane/database/dplane.db.old
-sqlite3 /var/dplane/database/dplane.db < /var/dplane/system/database/schema.sql
-
-# Restore data
-sqlite3 /var/dplane/database/dplane.db < /tmp/dump.sql
-
-# Fix permissions
-chown www-data:www-data /var/dplane/database/dplane.db
-chmod 644 /var/dplane/database/dplane.db
-```
-
-**Option 3: Fresh database (LAST RESORT)**
-```bash
-# WARNING: Loses all settings and audit log
-# But pools/datasets are NOT affected (they're in ZFS)
-
-systemctl stop nginx php8.2-fpm
-
-mv /var/dplane/database/dplane.db /var/dplane/database/dplane.db.corrupt
-sqlite3 /var/dplane/database/dplane.db < /var/dplane/system/database/schema.sql
-chown www-data:www-data /var/dplane/database/dplane.db
-chmod 644 /var/dplane/database/dplane.db
-
-systemctl start php8.2-fpm nginx
-
-# Login with: admin / admin
-# Reconfigure settings
-```
-
-**Prevention:**
-- Regular backups: `0 2 * * * cp /var/dplane/database/dplane.db /backup/`
-- Monitor disk space
-- Use ZFS for /var/dplane if possible
-- Enable ZFS snapshots of root filesystem
 
 ---
 
-### Web Interface Down
+## 4. ZFS Recovery
 
-**Symptoms:**
-- Cannot access http://server-ip
-- "Connection refused" or timeout
-- 502 Bad Gateway
+### Pool Won't Import
 
-**Diagnosis:**
 ```bash
-# Check if services are running
-systemctl status nginx
-systemctl status php8.2-fpm
+# List available pools
+sudo zpool import
 
-# Check if ports are listening
-ss -tlnp | grep :80
+# Force import (e.g., after hardware move)
+sudo zpool import -f <poolname>
 
-# Check logs
-tail -50 /var/log/nginx/error.log
-journalctl -u nginx -n 50
-journalctl -u php8.2-fpm -n 50
+# Import with different mountpoint
+sudo zpool import -f -R /mnt <poolname>
 ```
-
-**Recovery Steps:**
-
-**Issue 1: Nginx not running**
-```bash
-# Start nginx
-systemctl start nginx
-
-# If fails, check config
-nginx -t
-
-# If config error, restore from package
-cd /tmp
-tar -xzf /path/to/dplaneos-v1.3.2.tar.gz
-cp dplaneos-v1.3.2/system/dashboard /var/www/dplane -r
-systemctl restart nginx
-```
-
-**Issue 2: PHP-FPM not running**
-```bash
-# Start PHP-FPM
-systemctl start php8.2-fpm
-
-# If fails, check config
-php-fpm8.2 -t
-
-# Check socket exists
-ls -la /var/run/php/php8.2-fpm.sock
-```
-
-**Issue 3: Permission issues**
-```bash
-# Fix permissions
-chown -R www-data:www-data /var/dplane
-chmod -R 755 /var/dplane/system
-chmod 644 /var/dplane/database/dplane.db
-
-# Fix web root
-chown -R www-data:www-data /var/www/dplane
-```
-
-**Issue 4: Port conflict**
-```bash
-# Check what's using port 80
-lsof -i :80
-
-# If another service is using it, stop it or change D-PlaneOS port
-# Edit /etc/nginx/sites-available/dplaneos
-# Change: listen 80; to listen 8080;
-systemctl restart nginx
-```
-
-**Prevention:**
-- Monitor services with external tool
-- Set up automatic service restart
-- Configure webhook alerts
-
----
-
-### System Won't Boot
-
-**Symptoms:**
-- Server won't boot to OS
-- ZFS import failure on boot
-- System hangs at boot
-
-**Recovery Steps:**
-
-**Option 1: Boot from rescue media**
-```bash
-# Boot from Ubuntu/Debian live USB
-# Mount root filesystem
-mkdir /mnt/root
-mount /dev/sdX1 /mnt/root
-
-# Chroot into system
-mount --bind /dev /mnt/root/dev
-mount --bind /proc /mnt/root/proc
-mount --bind /sys /mnt/root/sys
-chroot /mnt/root
-
-# Now you can repair system
-```
-
-**Option 2: ZFS import issues**
-```bash
-# Boot into single user mode or rescue
-
-# Check pool status
-zpool import
-
-# Force import pool
-zpool import -f poolname
-
-# If pool is degraded but bootable
-zpool scrub poolname
-zpool status -v poolname
-```
-
-**Option 3: Grub issues**
-```bash
-# From rescue media
-mount /dev/sdX1 /mnt
-mount --bind /dev /mnt/dev
-mount --bind /proc /mnt/proc
-mount --bind /sys /mnt/sys
-chroot /mnt
-
-# Reinstall grub
-grub-install /dev/sdX
-update-grub
-
-# Reboot
-exit
-reboot
-```
-
-**Prevention:**
-- Regular system backups
-- Test restore procedures
-- Keep rescue media ready
-- Document boot device order
-
----
 
 ### Pool Degraded
 
-**Symptoms:**
-- Pool status shows DEGRADED
-- Email/webhook alert received
-- Dashboard shows pool health warning
-
-**Diagnosis:**
 ```bash
 # Check pool status
-zpool status -v poolname
+sudo zpool status <poolname>
 
-# Check disk health
-for disk in /dev/sd?; do
-  echo "=== $disk ==="
-  smartctl -H $disk
-done
+# Replace failed disk
+sudo zpool replace <poolname> <old-device> <new-device>
 
-# Check system logs
-dmesg | grep -i error
-journalctl -n 100 | grep -i zfs
+# Start scrub (verify data integrity)
+sudo zpool scrub <poolname>
 ```
 
-**Recovery Steps:**
+### Encrypted Dataset Locked
 
-**Scenario 1: Disk removed but reattached**
 ```bash
-# Disk was temporarily disconnected
-# Check if disk is visible
-lsblk
+# List locked datasets
+sudo zfs list -o name,keystatus -r <poolname>
 
-# Online the disk
-zpool online poolname /dev/sdX
+# Unlock (prompts for password)
+sudo zfs load-key <poolname/dataset>
 
-# Verify
-zpool status poolname
+# Mount after unlocking
+sudo zfs mount <poolname/dataset>
 ```
 
-**Scenario 2: Disk failed**
-```bash
-# Disk is permanently failed
-# Have replacement disk ready
-
-# Replace disk (if hot-swap)
-# Otherwise, shutdown and replace
-
-# After replacement
-zpool replace poolname /dev/sdX_old /dev/sdX_new
-
-# Monitor resilver
-watch zpool status -v poolname
-
-# Will take hours for large pools
-```
-
-**Scenario 3: Temporary error**
-```bash
-# Sometimes ZFS marks disk degraded after transient error
-# Clear errors if disk is actually healthy
-
-# Check if disk passes SMART test
-smartctl -t short /dev/sdX
-# Wait 2 minutes
-smartctl -a /dev/sdX
-
-# If healthy, clear errors
-zpool clear poolname /dev/sdX
-
-# Verify
-zpool status poolname
-```
-
-**Prevention:**
-- Use redundant RAID (mirror, raidz)
-- Monitor SMART data
-- Replace disks showing warnings
-- Keep spare disks available
-- Set up alert webhooks
+Or use the web UI: Storage → Encryption → Unlock.
 
 ---
 
-### Accidental Pool Deletion
+## 5. Reverse Proxy Issues
 
-**Symptoms:**
-- Pool no longer appears in `zpool list`
-- Data is gone
-- Dashboard shows no pools
+`dplaned` listens on `127.0.0.1:9000` by default. If the web UI is unreachable:
 
-**Reality Check:**
-⚠️ **If pool was destroyed, data is GONE**
-⚠️ **ZFS destroy is immediate and permanent**
-⚠️ **Only backups can recover data**
-
-**Possible Recovery (if recent):**
+### Check Direct Access
 
 ```bash
-# Check if pool still exists but not imported
-zpool import
-
-# If pool shows up, import it
-zpool import poolname
-
-# If pool shows up but damaged
-zpool import -F poolname
-
-# If pool completely gone, check backups
+curl http://127.0.0.1:9000/health
 ```
 
-**Data Recovery Options:**
+If this works but the browser doesn't, the issue is in the reverse proxy.
 
-1. **Replication backup**
-   ```bash
-   # If you configured replication
-   # On backup server:
-   zfs send backup/poolname@latest | ssh original-server zfs receive poolname
-   ```
+### nginx Example Config
 
-2. **File-level backups**
-   ```bash
-   # If you backed up files externally
-   # Recreate pool and restore files
-   zpool create poolname /dev/sdX /dev/sdY
-   rsync -avP /backup/location/ /poolname/
-   ```
+```nginx
+server {
+    listen 443 ssl;
+    server_name nas.example.com;
 
-3. **Snapshot recovery (if pool exists)**
-   ```bash
-   # If pool exists and you have snapshots
-   zfs list -t snapshot
-   zfs rollback poolname@snapshot-name
-   ```
+    ssl_certificate /etc/ssl/certs/nas.pem;
+    ssl_certificate_key /etc/ssl/private/nas.key;
 
-**Prevention:**
-- **ALWAYS** have replication or external backups
-- Enable confirmation prompts (D-PlaneOS already does this)
-- Test restore procedures regularly
-- Consider ZFS send/receive replication
-- Document recovery procedures
+    location / {
+        proxy_pass http://127.0.0.1:9000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
-**NOTE:** D-PlaneOS requires pool name confirmation before destruction, but human error is still possible.
-
----
-
-### Container Issues
-
-**Symptoms:**
-- Container won't start
-- Container stuck in restart loop
-- Cannot access container services
-
-**Diagnosis:**
-```bash
-# Check container status
-docker ps -a
-
-# Check container logs
-docker logs containername
-
-# Check Docker daemon
-systemctl status docker
-journalctl -u docker -n 50
-```
-
-**Recovery Steps:**
-
-**Issue 1: Container won't start**
-```bash
-# Check why it failed
-docker logs containername
-
-# Common fixes:
-# - Port conflict
-docker ps | grep PORT
-# Kill conflicting container or change port
-
-# - Volume missing
-docker inspect containername | grep -A 10 Mounts
-# Recreate volumes
-
-# - Remove and recreate
-docker rm containername
-# Redeploy via D-PlaneOS UI
-```
-
-**Issue 2: Docker daemon issues**
-```bash
-# Restart Docker
-systemctl restart docker
-
-# If fails, check disk space
-df -h
-
-# Check Docker storage
-docker system df
-docker system prune  # Remove unused data
-```
-
-**Issue 3: Compose file corruption**
-```bash
-# Check compose files
-ls -la /var/dplane/compose/
-
-# Validate syntax
-cd /var/dplane/compose
-docker-compose -f filename.yml config
-
-# Recreate if needed via UI
-```
-
-**Prevention:**
-- Monitor container resources
-- Set restart policies
-- Keep compose files backed up
-- Document container configs
-
----
-
-### Disk Failure
-
-**Symptoms:**
-- SMART alerts
-- I/O errors in logs
-- System slowness
-- Pool degraded status
-
-**Diagnosis:**
-```bash
-# Check all disks
-for disk in /dev/sd?; do
-  echo "=== $disk ==="
-  smartctl -H $disk
-  smartctl -A $disk | grep -E "Reallocated|Current_Pending|Offline"
-done
-
-# Check system logs
-dmesg | tail -100 | grep -i error
-```
-
-**Immediate Actions:**
-
-1. **If disk is failing:**
-   ```bash
-   # Prepare replacement
-   # Order new disk immediately
-   
-   # If pool is redundant (mirror/raidz)
-   # System can run degraded temporarily
-   
-   # If no redundancy
-   # BACKUP DATA IMMEDIATELY
-   rsync -avP /poolname/ /external-backup/
-   ```
-
-2. **Replace disk:**
-   ```bash
-   # See "Pool Degraded" section above
-   # Use zpool replace command
-   ```
-
-**Prevention:**
-- Use redundant configurations
-- Monitor SMART data weekly
-- Replace disks at first sign of failure
-- Keep spare disks on hand
-- Test replacements before deployment
-
----
-
-### Security Incident
-
-**Symptoms:**
-- Suspicious audit log entries
-- Unexpected system changes
-- Unknown containers running
-- High resource usage
-- Alerts from monitoring
-
-**Immediate Response:**
-
-1. **Isolate system**
-   ```bash
-   # Stop web access
-   systemctl stop nginx
-   
-   # Block network (if needed)
-   iptables -A INPUT -p tcp --dport 80 -j DROP
-   iptables -A INPUT -p tcp --dport 443 -j DROP
-   ```
-
-2. **Investigate**
-   ```bash
-   # Check audit log
-   sqlite3 /var/dplane/database/dplane.db \
-     "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 100"
-   
-   # Check for security blocks
-   grep SECURITY /var/log/nginx/error.log
-   
-   # Check active sessions
-   ls -la /var/lib/php/sessions/
-   
-   # Check running containers
-   docker ps
-   
-   # Check system processes
-   ps aux | grep -v "\[" | head -50
-   ```
-
-3. **Contain**
-   ```bash
-   # Kill suspicious processes
-   kill -9 PID
-   
-   # Stop suspicious containers
-   docker stop suspicious-container
-   docker rm suspicious-container
-   
-   # Clear sessions
-   rm /var/lib/php/sessions/sess_*
-   ```
-
-4. **Recover**
-   ```bash
-   # Change admin password
-   sqlite3 /var/dplane/database/dplane.db \
-     "UPDATE users SET password='NEW_HASH' WHERE username='admin'"
-   
-   # Restore from backup if compromised
-   # See "Database Corruption" section
-   
-   # Review and tighten security
-   # See SECURITY.md and THREAT-MODEL.md
-   ```
-
-5. **Post-Incident**
-   - Review all audit logs
-   - Check for backdoors
-   - Update all passwords
-   - Review firewall rules
-   - Enable TLS if not already
-   - Consider full reinstall if deeply compromised
-
-**Prevention:**
-- Use strong passwords
-- Enable webhook alerts
-- Monitor audit logs
-- Use HTTPS
-- Restrict network access
-- Keep system updated
-
----
-
-## Emergency Contacts
-
-### Critical Paths
-
-```bash
-# System files
-/var/dplane/                    # Installation directory
-/var/dplane/database/dplane.db  # Main database
-/var/dplane/backups/            # Automatic backups
-/var/www/dplane                 # Web root (symlink)
-
-# Logs
-/var/log/nginx/error.log        # Web server errors
-/var/log/nginx/access.log       # Access log
-/var/log/syslog                 # System log
-
-# Services
-systemctl status nginx          # Web server
-systemctl status php8.2-fpm     # PHP processor
-systemctl status docker         # Container runtime
-```
-
-### Quick Commands
-
-```bash
-# Restart all services
-systemctl restart nginx php8.2-fpm docker
-
-# Check system health
-zpool status
-docker ps
-df -h
-free -h
-
-# Emergency stop
-systemctl stop nginx php8.2-fpm
-
-# Full backup
-tar -czf /tmp/dplane-backup.tar.gz /var/dplane
-
-# Check version
-cat /var/dplane/VERSION
+    location /ws/ {
+        proxy_pass http://127.0.0.1:9000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
 ```
 
 ---
 
-## Testing Recovery Procedures
+## 6. Performance Issues
 
-### Monthly Tests
+### High Memory
 
-1. **Test password reset**
-   - Reset password to test value
-   - Verify login works
-   - Reset back to real password
+```bash
+# Check daemon memory
+systemctl status dplaneos | grep Memory
 
-2. **Test database backup/restore**
-   - Copy database to test location
-   - Restore from backup
-   - Verify data intact
+# The systemd service limits memory to 512M
+# If hitting limits, check for:
+# - Large audit log table → purge old entries
+# - Many active WebSocket connections
+# - ZFS ARC pressure (kernel, not dplaned)
+```
 
-3. **Test service restart**
-   - Stop services
-   - Verify stops cleanly
-   - Start services
-   - Verify starts cleanly
+### Database Slow
 
-### Quarterly Tests
+```bash
+# Force WAL checkpoint (reduces WAL file size)
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db "PRAGMA wal_checkpoint(TRUNCATE);"
 
-1. **Test pool resilver**
-   - Offline a disk (in redundant pool)
-   - Online it again
-   - Verify resilver works
+# Check database size
+ls -lh /var/lib/dplaneos/dplaneos.db*
 
-2. **Test container restore**
-   - Remove a non-critical container
-   - Restore from compose file
-   - Verify works correctly
+# Manual VACUUM (rewrites entire DB, compacts space)
+sudo systemctl stop dplaneos
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db "VACUUM;"
+sudo systemctl start dplaneos
+```
 
-### Annual Tests
+### Audit Log Growth
 
-1. **Test full system restore**
-   - Set up test instance
-   - Restore from complete backup
-   - Verify all functionality
+```bash
+# Count audit entries
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db "SELECT COUNT(*) FROM audit_logs;"
 
-2. **Test disaster recovery**
-   - Simulate complete system loss
-   - Restore on new hardware
-   - Document time and issues
+# Purge entries older than 90 days
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db "
+  DELETE FROM audit_logs WHERE timestamp < datetime('now', '-90 days');
+"
+```
 
 ---
 
-## Conclusion
+## 7. Reinstallation
 
-**Key Principles:**
-1. **Backups are mandatory** - No backup = no recovery
-2. **Test recovery regularly** - Untested backup = no backup
-3. **Document everything** - Future you will thank you
-4. **Have spare parts** - Disk failure at 2 AM is not fun
-5. **Monitor proactively** - Fix issues before they're emergencies
+### Clean Install (Preserves Data)
 
-**Resources:**
-- `SECURITY.md` - Security procedures
-- `THREAT-MODEL.md` - Security architecture
-- `CHANGELOG.md` - Version history
-- `/var/dplane/backups/` - Automatic backups
+```bash
+# Stop service
+sudo systemctl stop dplaneos
+
+# Install new version
+tar xzf dplaneos-v2.0.0-production-vendored.tar.gz
+cd dplaneos
+sudo make install
+
+# Start service (auto-migrates schema if needed)
+sudo systemctl start dplaneos
+```
+
+ZFS pools, Docker containers, and network configuration are not affected — they live in the kernel/system, not in `dplaned`.
+
+### Complete Uninstall
+
+```bash
+sudo systemctl stop dplaneos
+sudo systemctl disable dplaneos
+sudo rm -f /etc/systemd/system/dplaned.service
+sudo rm -rf /opt/dplaneos
+sudo rm -rf /var/lib/dplaneos
+sudo rm -rf /var/log/dplaneos
+sudo systemctl daemon-reload
+```
 
 ---
 
-**Document Version:** 1.0  
-**System Version:** 1.5.0  
-**Last Updated:** 2026-01-28
+## 8. Diagnostic Commands
+
+```bash
+# Service status
+systemctl status dplaneos
+
+# Health check
+curl -s http://127.0.0.1:9000/health | python3 -m json.tool
+
+# API test (requires valid session)
+curl -s -H "X-Session-ID: <token>" -H "X-User: admin" \
+  http://127.0.0.1:9000/api/zfs/pools
+
+# Database tables
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db ".tables"
+
+# Active sessions
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db \
+  "SELECT username, datetime(created_at, 'unixepoch') FROM sessions;"
+
+# RBAC roles
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db \
+  "SELECT name, display_name, is_system FROM roles;"
+
+# Recent audit entries
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db \
+  "SELECT timestamp, user, action, resource FROM audit_logs ORDER BY id DESC LIMIT 20;"
+
+# Binary version
+/opt/dplaneos/daemon/dplaned -version 2>/dev/null || \
+  curl -s http://127.0.0.1:9000/health | grep version
+```

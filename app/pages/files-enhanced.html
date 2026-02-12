@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><style>html{background:#0a0a0a}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Upload - D-PlaneOS</title>
+  <link rel="stylesheet" href="/assets/css/design-tokens.css">
+  <link rel="stylesheet" href="/assets/css/m3-tokens.css">
+  <link rel="stylesheet" href="/assets/css/m3-components.css">
+  <link rel="stylesheet" href="/assets/css/m3-icons.css">
+  <link rel="stylesheet" href="/assets/css/enhanced-ui.css">
+  <link rel="stylesheet" href="/assets/css/ui-components.css">
+  <link rel="stylesheet" href="/assets/css/material-symbols-local.css">
+  <link rel="stylesheet" href="/assets/css/ui-consistency.css">
+  <link rel="stylesheet" href="/assets/css/ui-polish.css">
+  <script src="/assets/js/core.js"></script>
+<script src="/assets/js/nav-flyout.js"></script>
+<script src="/assets/js/hybrid-router.js"></script>
+  <script src="/assets/js/enhanced-ui.js"></script>
+  <script src="/assets/js/connection-monitor.js"></script>
+  <script src="/assets/js/keyboard-shortcuts.js"></script>
+  <script src="/assets/js/daemon-api.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #0a0a0a; color: #fff; overflow-x: hidden; }
+
+.main { max-width: 1600px; margin: 140px auto 60px; padding: 0 40px; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+.page-title { font-size: 32px; font-weight: 700; letter-spacing: -1.5px; }
+.page-meta { font-size: 15px; color: rgba(255,255,255,0.5); margin-top: 4px; }
+
+/* Upload zone */
+.upload-zone {
+  border: 2px dashed rgba(255,255,255,0.12);
+  border-radius: 20px;
+  padding: 48px 32px;
+  text-align: center;
+  background: rgba(255,255,255,0.02);
+  transition: all 0.3s;
+  cursor: pointer;
+  margin-bottom: 32px;
+}
+.upload-zone:hover { border-color: rgba(138,156,255,0.4); background: rgba(255,255,255,0.03); }
+.upload-zone.drag-over { border-color: var(--primary); background: rgba(138,156,255,0.06); border-style: solid; }
+.upload-zone .material-symbols-rounded { font-size: 48px; color: var(--primary); margin-bottom: 12px; display: block; }
+.upload-zone h3 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+.upload-zone p { color: rgba(255,255,255,0.5); font-size: 14px; }
+
+/* Upload queue */
+.upload-queue { display: none; }
+.upload-queue.active { display: block; }
+.queue-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.queue-header h3 { font-size: 16px; font-weight: 600; }
+
+.upload-item {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 8px;
+  transition: border-color 0.3s;
+}
+.upload-item.uploading { border-color: rgba(138,156,255,0.3); }
+.upload-item.success { border-color: rgba(0,255,127,0.3); }
+.upload-item.error { border-color: rgba(255,82,82,0.3); }
+
+.upload-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.upload-item-name { font-size: 14px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-item-size { font-size: 12px; color: rgba(255,255,255,0.4); font-family: monospace; margin: 0 12px; }
+.upload-item-status { padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.upload-item-status.queued { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.5); }
+.upload-item-status.uploading { background: rgba(138,156,255,0.15); color: var(--primary); }
+.upload-item-status.success { background: rgba(0,255,127,0.1); color: var(--success); }
+.upload-item-status.error { background: rgba(255,82,82,0.1); color: var(--error); }
+
+.progress-bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+.progress-fill { height: 100%; background: var(--primary); transition: width 0.3s ease; border-radius: 2px; }
+.progress-text { display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,0.4); }
+.progress-text .speed { color: var(--primary); font-weight: 600; }
+
+.btn { padding: 10px 20px; border-radius: 12px; border: none; cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 14px; }
+.btn-primary { background: var(--primary); color: #000; }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-ghost { background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
+.btn-ghost:hover { background: rgba(255,255,255,0.08); }
+
+@media (max-width: 768px) {
+  .main { margin-top: 140px; padding: 0 20px; }
+  .page-title { font-size: 24px; }
+  .upload-zone { padding: 32px 20px; }
+}
+</style>
+</head>
+<body>
+<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<nav class="nav-container">
+  <div class="nav-main">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <div class="logo">D-PlaneOS <span class="version-badge">v2.0.0</span></div>
+    </div>
+    <div class="nav-links">
+      <button class="nav-link" onclick="navigateToSection('dashboard')" data-section="dashboard">Dashboard</button>
+      <button class="nav-link" onclick="toggleSubNav('storage', this)" data-section="storage">Storage</button>
+      <button class="nav-link" onclick="toggleSubNav('compute', this)" data-section="compute">Compute</button>
+      <button class="nav-link" onclick="toggleSubNav('network', this)" data-section="network">Network</button>
+      <button class="nav-link" onclick="toggleSubNav('identity', this)" data-section="identity">Identity</button>
+      <button class="nav-link" onclick="toggleSubNav('security', this)" data-section="security">Security</button>
+      <button class="nav-link" onclick="toggleSubNav('system', this)" data-section="system">System</button>
+    </div>
+    <div class="nav-actions">
+      <button class="nav-action-btn" onclick="showKeyboardHelp()" title="Keyboard Shortcuts (?)">
+        <span class="material-symbols-rounded">keyboard</span>
+      </button>
+      <div class="connection-status online" id="navConnectionStatus">
+        <span class="status-dot"></span><span>Connected</span>
+      </div>
+    </div>
+  </div>
+  <div id="sub-storage" class="nav-sub"><div class="nav-sub-inner">
+    <a href="pools.html" class="sub-link" data-page="pools"><span class="material-symbols-rounded">database</span> ZFS Pools</a>
+    <a href="pools-advanced.html" class="sub-link" data-page="pools-advanced"><span class="material-symbols-rounded">photo_camera</span> Snapshots</a>
+    <a href="shares.html" class="sub-link" data-page="shares"><span class="material-symbols-rounded">folder_shared</span> Shares</a>
+    <a href="replication.html" class="sub-link" data-page="replication"><span class="material-symbols-rounded">sync</span> Replication</a>
+    <a href="files.html" class="sub-link" data-page="files"><span class="material-symbols-rounded">folder_open</span> File Explorer</a>
+    <a href="quotas.html" class="sub-link" data-page="quotas"><span class="material-symbols-rounded">pie_chart</span> Quotas</a>
+      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
+        <span class="material-symbols-rounded">schedule</span>
+        Snapshot Scheduler
+      </a>
+      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
+        <span class="material-symbols-rounded">admin_panel_settings</span>
+        ACL Manager
+      </a>
+      <a href="zfs-encryption.html" class="sub-link" data-page="zfs-encryption">
+        <span class="material-symbols-rounded">enhanced_encryption</span>
+        Encryption
+      </a>
+      <a href="files-enhanced.html" class="sub-link" data-page="files-enhanced">
+        <span class="material-symbols-rounded">upload_file</span>
+        File Upload
+      </a>
+      <a href="cloud-sync.html" class="sub-link" data-page="cloud-sync">
+        <span class="material-symbols-rounded">cloud_sync</span>
+        Cloud Sync
+      </a>
+  </div></div>
+  <div id="sub-compute" class="nav-sub"><div class="nav-sub-inner">
+    <a href="docker.html" class="sub-link" data-page="docker"><span class="material-symbols-rounded">dns</span> Docker Containers</a>
+      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
+        <span class="material-symbols-rounded">schedule</span>
+        Snapshot Scheduler
+      </a>
+      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
+        <span class="material-symbols-rounded">admin_panel_settings</span>
+        ACL Manager
+      </a>
+    <a href="modules.html" class="sub-link" data-page="modules"><span class="material-symbols-rounded">extension</span> App Modules</a>
+  </div></div>
+  <div id="sub-network" class="nav-sub"><div class="nav-sub-inner">
+    <a href="network.html" class="sub-link" data-page="network"><span class="material-symbols-rounded">lan</span> Network Settings</a>
+    <a href="network-interfaces.html" class="sub-link" data-page="network-interfaces"><span class="material-symbols-rounded">settings_ethernet</span> Interfaces</a>
+    <a href="network-dns.html" class="sub-link" data-page="network-dns"><span class="material-symbols-rounded">dns</span> DNS</a>
+    <a href="network-routing.html" class="sub-link" data-page="network-routing"><span class="material-symbols-rounded">route</span> Routing</a>
+  </div></div>
+  <div id="sub-identity" class="nav-sub"><div class="nav-sub-inner">
+    <a href="users.html" class="sub-link" data-page="users"><span class="material-symbols-rounded">person</span> Users</a>
+    <a href="groups.html" class="sub-link" data-page="groups"><span class="material-symbols-rounded">group</span> Groups</a>
+    <a href="directory-service.html" class="sub-link" data-page="directory-service"><span class="material-symbols-rounded">domain</span> Directory Service</a>
+    <a href="rbac-management.html" class="sub-link" data-page="rbac-management"><span class="material-symbols-rounded">admin_panel_settings</span> Roles &amp; Permissions</a>
+  </div></div>
+  <div id="sub-security" class="nav-sub"><div class="nav-sub-inner">
+    <a href="security.html" class="sub-link" data-page="security"><span class="material-symbols-rounded">shield</span> Security Settings</a>
+    <a href="audit.html" class="sub-link" data-page="audit"><span class="material-symbols-rounded">fact_check</span> Audit Logs</a>
+      <a href="firewall.html" class="sub-link" data-page="firewall">
+        <span class="material-symbols-rounded">local_fire_department</span>
+        Firewall
+      </a>
+      <a href="certificates.html" class="sub-link" data-page="certificates">
+        <span class="material-symbols-rounded">verified_user</span>
+        Certificates
+      </a>
+  </div></div>
+  <div id="sub-system" class="nav-sub"><div class="nav-sub-inner">
+    <a href="settings.html" class="sub-link" data-page="settings"><span class="material-symbols-rounded">tune</span> General Settings</a>
+      <a href="firewall.html" class="sub-link" data-page="firewall">
+        <span class="material-symbols-rounded">local_fire_department</span>
+        Firewall
+      </a>
+      <a href="certificates.html" class="sub-link" data-page="certificates">
+        <span class="material-symbols-rounded">verified_user</span>
+        Certificates
+      </a>
+    <a href="logs.html" class="sub-link" data-page="logs"><span class="material-symbols-rounded">description</span> System Logs</a>
+    <a href="ups.html" class="sub-link" data-page="ups"><span class="material-symbols-rounded">battery_charging_full</span> UPS Management</a>
+      <a href="reporting.html" class="sub-link" data-page="reporting">
+        <span class="material-symbols-rounded">monitoring</span>
+        Reporting
+      </a>
+      <a href="power-management.html" class="sub-link" data-page="power-management">
+        <span class="material-symbols-rounded">power_settings_new</span>
+        Power Management
+      </a>
+      <a href="system-settings.html" class="sub-link" data-page="system-settings">
+        <span class="material-symbols-rounded">settings_suggest</span>
+        System Settings
+      </a>
+      <a href="system-monitoring.html" class="sub-link" data-page="system-monitoring">
+        <span class="material-symbols-rounded">monitor_heart</span>
+        Monitoring
+      </a>
+      <a href="hardware.html" class="sub-link" data-page="hardware">
+        <span class="material-symbols-rounded">developer_board</span>
+        Hardware
+      </a>
+      <a href="ipmi.html" class="sub-link" data-page="ipmi">
+        <span class="material-symbols-rounded">memory</span>
+        IPMI
+      </a>
+      <a href="removable-media-ui.html" class="sub-link" data-page="removable-media-ui">
+        <span class="material-symbols-rounded">usb</span>
+        Removable Media
+      </a>
+  </div></div>
+</nav>
+
+<script>
+function navigateToSection(s){if(s==='dashboard')window.location.href='index.html';}
+function toggleSubNav(section,button){
+  document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
+  if(button)button.classList.add('active');
+  document.querySelectorAll('.nav-sub').forEach(s=>s.classList.remove('active'));
+  const sub=document.getElementById('sub-'+section);
+  if(sub){sub.classList.add('active');document.body.classList.add('has-subnav');}
+}
+(function(){
+  const currentPage=window.location.pathname.split('/').pop()||'index.html';
+  const pageMap={
+    'index.html':{section:'dashboard',page:null},
+    'pools.html':{section:'storage',page:'pools'},
+    'pools-advanced.html':{section:'storage',page:'pools-advanced'},
+    'shares.html':{section:'storage',page:'shares'},
+    'replication.html':{section:'storage',page:'replication'},
+    'files.html':{section:'storage',page:'files'},
+    'files-enhanced.html':{section:'storage',page:'files'},
+    'quotas.html':{section:'storage',page:'quotas'},
+    'docker.html':{section:'compute',page:'docker'},
+    'modules.html':{section:'compute',page:'modules'},
+    'network.html':{section:'network',page:'network'},
+    'users.html':{section:'identity',page:'users'},
+    'groups.html':{section:'identity',page:'groups'},
+    'directory-service.html':{section:'identity',page:'directory-service'},
+    'security.html':{section:'security',page:'security'},
+    'audit.html':{section:'security',page:'audit'},
+    'settings.html':{section:'system',page:'settings'},
+    'logs.html':{section:'system',page:'logs'},
+    'ups.html':{section:'system',page:'ups'}
+  };
+  const c=pageMap[currentPage];
+  if(c){
+    const btn=document.querySelector(`[data-section="${c.section}"]`);
+    if(btn)btn.classList.add('active');
+    if(c.section!=='dashboard'){
+      const sub=document.getElementById('sub-'+c.section);
+      if(sub){sub.classList.add('active');document.body.classList.add('has-subnav');
+        if(c.page){const pl=sub.querySelector(`[data-page="${c.page}"]`);if(pl)pl.classList.add('active');}
+      }
+    }
+  }
+})();
+function showKeyboardHelp(){if(window.EnhancedUI)EnhancedUI.toast('g+d Dashboard | g+s Storage | ? Help','info',5000);}
+</script>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">File Upload</h1>
+      <p class="page-meta">Chunked upload with resume support</p>
+    </div>
+    <div style="display: flex; gap: 12px;">
+      <a href="files.html" class="btn btn-ghost">
+        <span class="material-symbols-rounded" style="font-size:18px;">folder_open</span>
+        File Explorer
+      </a>
+      <a href="reporting.html" class="sub-link" data-page="reporting">
+        <span class="material-symbols-rounded">monitoring</span>
+        Reporting
+      </a>
+      <a href="power-management.html" class="sub-link" data-page="power-management">
+        <span class="material-symbols-rounded">power_settings_new</span>
+        Power Management
+      </a>
+    </div>
+  </div>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <span class="material-symbols-rounded">cloud_upload</span>
+    <h3>Drop files here or click to browse</h3>
+    <p>Large files are automatically split into 10 MB chunks</p>
+    <input type="file" id="fileInput" multiple style="display:none;" onchange="handleFileSelect(event)">
+  </div>
+
+  <!-- Upload Queue -->
+  <div class="upload-queue" id="uploadQueue">
+    <div class="queue-header">
+      <h3 id="queueTitle">Uploads</h3>
+      <button class="btn btn-ghost" onclick="clearCompleted()" style="padding:6px 12px; font-size:13px;">
+        <span class="material-symbols-rounded" style="font-size:16px;">delete_sweep</span>
+        Clear completed
+      </button>
+    </div>
+    <div id="uploadList"></div>
+  </div>
+</div>
+
+<script>
+const CHUNK_SIZE = 10 * 1024 * 1024;
+const currentPath = '/';
+let queue = [];
+let uploading = false;
+
+// Drag & drop
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  enqueue(Array.from(e.dataTransfer.files));
+});
+
+function handleFileSelect(e) {
+  enqueue(Array.from(e.target.files));
+  e.target.value = '';
+}
+
+function enqueue(files) {
+  document.getElementById('uploadQueue').classList.add('active');
+  files.forEach(file => {
+    const item = {
+      id: Date.now() + Math.random(),
+      file, status: 'queued', progress: 0,
+      uploaded: 0, chunks: Math.ceil(file.size / CHUNK_SIZE),
+      speed: 0, start: null
+    };
+    queue.push(item);
+    renderItem(item);
+  });
+  if (!uploading) processNext();
+}
+
+function renderItem(item) {
+  const el = document.createElement('div');
+  el.id = 'u-' + item.id;
+  el.className = 'upload-item queued';
+  el.innerHTML = `
+    <div class="upload-item-header">
+      <div class="upload-item-name" title="${esc(item.file.name)}">${esc(item.file.name)}</div>
+      <div class="upload-item-size">${fmt(item.file.size)}</div>
+      <div class="upload-item-status queued">Queued</div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+    <div class="progress-text"><span class="pct">0%</span><span class="speed"></span></div>
+  `;
+  document.getElementById('uploadList').appendChild(el);
+}
+
+function updateItem(item) {
+  const el = document.getElementById('u-' + item.id);
+  if (!el) return;
+  el.className = 'upload-item ' + item.status;
+  el.querySelector('.upload-item-status').className = 'upload-item-status ' + item.status;
+  el.querySelector('.upload-item-status').textContent =
+    item.status === 'uploading' ? 'Uploading' :
+    item.status === 'success' ? 'Done' :
+    item.status === 'error' ? 'Failed' : 'Queued';
+  el.querySelector('.progress-fill').style.width = item.progress + '%';
+  el.querySelector('.pct').textContent = item.progress.toFixed(1) + '%';
+  if (item.speed > 0)
+    el.querySelector('.speed').textContent = fmt(item.speed) + '/s';
+}
+
+async function processNext() {
+  if (queue.length === 0) { uploading = false; return; }
+  uploading = true;
+  const item = queue.shift();
+  item.status = 'uploading';
+  item.start = Date.now();
+  updateItem(item);
+
+  try {
+    if (item.file.size > CHUNK_SIZE) {
+      for (let i = 0; i < item.chunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, item.file.size);
+        const chunk = item.file.slice(start, end);
+        const fd = new FormData();
+        fd.append('chunk', chunk);
+        fd.append('filename', item.file.name);
+        fd.append('path', currentPath);
+        fd.append('chunkIndex', i);
+        fd.append('totalChunks', item.chunks);
+        fd.append('fileSize', item.file.size);
+        const r = await fetch('/api/files/upload', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Chunk upload failed');
+        item.uploaded = end;
+        item.progress = (end / item.file.size) * 100;
+        item.speed = item.uploaded / ((Date.now() - item.start) / 1000);
+        updateItem(item);
+      }
+    } else {
+      const fd = new FormData();
+      fd.append('file', item.file);
+      fd.append('path', currentPath);
+      const r = await fetch('/api/files/upload', { method: 'POST', body: fd });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error || 'Upload failed');
+      item.progress = 100;
+    }
+    item.status = 'success';
+    item.progress = 100;
+  } catch (e) {
+    item.status = 'error';
+    console.error('Upload error:', e);
+  }
+  updateItem(item);
+  processNext();
+}
+
+function clearCompleted() {
+  document.querySelectorAll('.upload-item.success').forEach(el => el.remove());
+}
+
+function fmt(bytes) {
+  if (bytes === 0) return '0 B';
+  const u = ['B','KB','MB','GB','TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + u[i];
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+</script>
+<script src="/assets/js/realtime-client.js"></script>
+</body>
+</html>

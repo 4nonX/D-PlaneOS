@@ -1,552 +1,178 @@
-# D-PlaneOS Threat Model
+# D-PlaneOS v2.0.0 — Threat Model
 
-**Version:** 1.5.0  
-**Last Updated:** 2026-01-28  
-**Status:** Production
+## System Context
 
----
+D-PlaneOS is a NAS operating system managing storage (ZFS), containers (Docker), network, and identity on a single server. It runs as one Go binary (`dplaned`) and serves a web UI on localhost. External access is via reverse proxy.
 
-## Executive Summary
-
-This document defines the security boundaries, attack surfaces, and protection mechanisms of D-PlaneOS. It is designed for:
-
-- **System Administrators** evaluating risk
-- **Security Auditors** reviewing architecture
-- **Contributors** understanding security requirements
-
-**Trust Model:** Defense in depth with clearly defined boundaries between user input, web layer, command execution, and system operations.
-
----
-
-## System Architecture
+**Trust boundary**: the reverse proxy. Everything behind it (dplaned, SQLite, ZFS commands) is trusted. Everything in front (browser, network) is untrusted.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   User / Browser                     │ ← Untrusted
-└──────────────────────┬──────────────────────────────┘
-                       │ HTTPS/HTTP
-                       │ (Trust Boundary #1)
-                       ↓
-┌─────────────────────────────────────────────────────┐
-│              Nginx Web Server                        │
-│              + PHP-FPM                               │ ← Session Auth
-└──────────────────────┬──────────────────────────────┘
-                       │ Internal
-                       │ (Trust Boundary #2)
-                       ↓
-┌─────────────────────────────────────────────────────┐
-│              API Layer (PHP)                         │
-│              - Input Validation                      │
-│              - Command Broker                        │ ← Input Sanitization
-└──────────────────────┬──────────────────────────────┘
-                       │ exec() with validation
-                       │ (Trust Boundary #3)
-                       ↓
-┌─────────────────────────────────────────────────────┐
-│              System Commands                         │
-│              - ZFS (via sudo)                        │
-│              - Docker (via sudo)                     │ ← Privilege Boundary
-│              - SMART (via sudo)                      │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│                    UNTRUSTED                     │
+│  Browser ──── Internet ──── Reverse Proxy        │
+└──────────────────────┬──────────────────────────┘
+                       │ TLS terminated
+┌──────────────────────┴──────────────────────────┐
+│                     TRUSTED                      │
+│  dplaned (Go) ── SQLite ── exec.Command ── ZFS  │
+│                              │                   │
+│                     /dev/sd* │ /mnt/*            │
+└─────────────────────────────────────────────────┘
 ```
 
----
+## Assets
 
-## Trust Boundaries
+| Asset | Value | Location |
+|-------|-------|----------|
+| User data (files, datasets) | CRITICAL | ZFS pools on `/mnt/*` |
+| ZFS pool metadata | CRITICAL | Pool vdevs |
+| Encryption keys (loaded) | CRITICAL | Kernel memory (ZFS) |
+| SQLite database | HIGH | `/var/lib/dplaneos/dplaneos.db` |
+| Session tokens | HIGH | SQLite `sessions` table |
+| LDAP bind password | HIGH | SQLite `ldap_config` table |
+| Telegram bot token | MEDIUM | SQLite `telegram_config` table |
+| Audit logs | MEDIUM | SQLite `audit_logs` table |
+| Configuration | LOW | SQLite tables + CLI flags |
 
-### Boundary #1: Network → Web Server
+## Threat Actors
 
-**Protection Mechanisms:**
-- HTTPS (if configured via reverse proxy)
-- Session-based authentication
-- 30-minute session timeout
-- Rate limiting on login attempts
+| Actor | Capability | Goal |
+|-------|-----------|------|
+| Remote unauthenticated | HTTP requests to reverse proxy | Data theft, service disruption |
+| Remote authenticated (low-priv) | Valid session, `viewer` or `user` role | Privilege escalation, unauthorized data access |
+| Local network attacker | Can reach port 9000 if misconfigured | Full API access without TLS |
+| Physical attacker | Access to hardware | Disk theft, boot manipulation |
+| Malicious container | Docker container with host mounts | Escape to host filesystem |
 
-**Threats Mitigated:**
-- Unauthorized access
-- Session hijacking (with HTTPS)
-- Brute force attacks
+## Threats & Mitigations
 
-**Threats NOT Mitigated:**
-- DDoS (requires external mitigation)
-- Network sniffing on HTTP (use HTTPS)
+### T1: Command Injection via API Parameters
 
----
+**Vector**: Attacker sends `{"pool":"tank; rm -rf /"}` to ZFS endpoint.
 
-### Boundary #2: Web Server → API Layer
+**Mitigation**:
+- All parameters validated by allowlist validators (`ValidatePoolName`, `ValidateDevicePath`, etc.)
+- Go `exec.Command` passes arguments as array — no shell interpolation
+- Tested: `; rm -rf /`, `$(reboot)`, backticks, pipe operators — all return HTTP 400
 
-**Protection Mechanisms:**
-- Session validation on every request
-- CSRF protection (session-bound)
-- Input validation per parameter type
-- SQL injection protection (parameterized queries)
+**Residual risk**: LOW. Would require a bug in Go's `exec.Command` itself.
 
-**Threats Mitigated:**
-- Unauthorized API access
-- CSRF attacks
-- SQL injection
-- XSS (output escaping)
+### T2: Authentication Bypass
 
-**Threats NOT Mitigated:**
-- Authenticated user performing malicious actions (by design)
+**Vector**: Attacker crafts requests without valid session.
 
----
+**Mitigation**:
+- Session middleware on every request (except `/health`)
+- Fail-closed: DB errors → reject
+- Token format validation + DB lookup + username match
+- No anonymous API access
 
-### Boundary #3: API Layer → System Commands
+**Residual risk**: LOW.
 
-**Protection Mechanisms (v1.3.1+):**
-- Command injection detection (active)
-- Pattern blocking: `&&`, `||`, `;`, `|`, `` ` ``, `$`, `>`, `<`
-- Token validation (alphanumeric + specific chars only)
-- Command Broker infrastructure (available for strict whitelist)
+### T3: Privilege Escalation (RBAC Bypass)
 
-**Threats Mitigated:**
-- Command injection via user input
-- Shell escape attacks
-- Privilege escalation via command manipulation
+**Vector**: `viewer` role user attempts `storage:write` operations.
 
-**Threats NOT Mitigated:**
-- Bugs in ZFS/Docker themselves
-- Kernel vulnerabilities
+**Mitigation**:
+- RBAC middleware checks resource:action permission before handler runs
+- System roles (`admin`, `operator`, `user`, `viewer`) are immutable (`is_system = 1`)
+- Role assignments support expiry
 
----
+**Residual risk**: LOW. Some endpoints don't yet have RBAC middleware applied (they use session auth only). Future work.
 
-### Boundary #4: System Commands → Storage/Containers
+### T4: SQL Injection
 
-**Protection Mechanisms:**
-- sudoers with specific command whitelist
-- No password required for whitelisted commands only
-- www-data user isolation
-- File system permissions
+**Vector**: Malicious input in API parameters reaches SQL queries.
 
-**Threats Mitigated:**
-- Unauthorized system access
-- Lateral movement from web compromise
+**Mitigation**:
+- All SQL uses parameterized queries (`?` placeholders)
+- No string concatenation in SQL construction
+- Input validation rejects metacharacters before they reach the DB layer
 
-**Threats NOT Mitigated:**
-- Root compromise (if attacker gains root, all bets off)
-- Physical access to storage
+**Residual risk**: NEGLIGIBLE.
 
----
+### T5: Cross-Site Scripting (XSS)
 
-## Attack Surfaces
+**Vector**: Stored XSS via file names, share names, or configuration values.
 
-### 1. Web Interface
+**Mitigation**:
+- Frontend uses `textContent` for dynamic data (not `innerHTML`)
+- API responses are JSON (not rendered HTML)
+- Content-Security-Policy headers recommended at reverse proxy level
 
-**Exposure:** HTTP/HTTPS port (default: 80/443)
+**Residual risk**: LOW. Some pages use `innerHTML` for HTML templates — these should be audited.
 
-**Attack Vectors:**
-- Authentication bypass
-- Session hijacking
-- XSS
-- CSRF
+### T6: Denial of Service
 
-**Current Protection:**
-| Attack Type | Protection | Status |
-|-------------|------------|--------|
-| Auth bypass | Session validation | ✅ Active |
-| Session hijacking | HTTPS + timeouts | 🟡 HTTPS external |
-| XSS | Output escaping | ✅ Active |
-| CSRF | Session binding | ✅ Active |
-| Brute force | Rate limiting | ✅ Active |
+**Vector**: Flood of API requests exhausts resources.
 
----
+**Mitigation**:
+- Rate limiting middleware
+- systemd `MemoryMax=512M` prevents OOM
+- SQLite `busy_timeout=30000` prevents lock starvation
+- Buffered audit logging prevents I/O stalls
+- Graceful shutdown drains connections
 
-### 2. API Endpoints
+**Residual risk**: MEDIUM. A determined attacker with valid credentials could trigger expensive operations (ZFS scrub, Docker pull). Rate limiting helps but doesn't fully prevent this.
 
-**Exposure:** Same as web interface (authenticated only)
+### T7: Data at Rest (Stolen Hardware)
 
-**Attack Vectors:**
-- Command injection
-- SQL injection
-- Parameter tampering
-- Unauthorized operations
+**Vector**: Attacker steals physical server or disks.
 
-**Current Protection:**
-| Attack Type | Protection | Status |
-|-------------|------------|--------|
-| Command injection | Pattern detection | ✅ Active (v1.3.1+) |
-| SQL injection | Parameterized queries | ✅ Active |
-| Parameter tampering | Type validation | ✅ Active |
-| Unauth operations | Session check | ✅ Active |
+**Mitigation**:
+- ZFS native encryption supported (AES-256-GCM)
+- Encryption keys unloaded on shutdown
+- UI supports lock/unlock/change-key operations
 
----
+**Residual risk**: LOW if encryption is enabled. HIGH if not — user responsibility.
 
-### 3. Database
+### T8: Man-in-the-Middle
 
-**Exposure:** Internal only (SQLite file)
+**Vector**: Attacker intercepts traffic between browser and server.
 
-**Attack Vectors:**
-- File tampering (if OS compromised)
-- Database corruption
-- Privilege escalation via DB
+**Mitigation**:
+- `dplaned` listens on localhost only by default
+- TLS termination at reverse proxy (nginx/caddy/Pangolin)
+- Session tokens in headers (not URL parameters)
 
-**Current Protection:**
-| Attack Type | Protection | Status |
-|-------------|------------|--------|
-| File tampering | File permissions | ✅ Active |
-| Corruption | Integrity checks | ✅ Active (v1.3.1+) |
-| Unauthorized access | No remote access | ✅ By design |
+**Residual risk**: LOW if properly configured. HIGH if exposed directly to network without TLS.
 
----
+### T9: LDAP Credential Exposure
 
-### 4. System Commands
+**Vector**: LDAP bind password stored in SQLite, accessible to root.
 
-**Exposure:** Internal only (via sudo)
+**Mitigation**:
+- Password stored in DB (not plaintext config file)
+- Only accessible via authenticated API
+- Bind password not returned in GET responses (redacted)
 
-**Attack Vectors:**
-- Privilege escalation
-- Command injection
-- Unauthorized command execution
+**Residual risk**: MEDIUM. Root access to the server exposes the DB file. This is inherent to single-server NAS architecture.
 
-**Current Protection:**
-| Attack Type | Protection | Status |
-|-------------|------------|--------|
-| Privilege escalation | sudoers whitelist | ✅ Active |
-| Command injection | Pattern blocking | ✅ Active (v1.3.1+) |
-| Unauth commands | sudoers restriction | ✅ Active |
+### T10: Container Escape
 
----
+**Vector**: Malicious Docker container with host filesystem mount.
 
-## Threat Actors & Scenarios
+**Mitigation**:
+- D-PlaneOS manages containers but doesn't control their security policies
+- Users must configure bind mounts and network policies appropriately
 
-### Threat Actor #1: Remote Attacker (No Access)
+**Residual risk**: HIGH. This is a Docker-level concern, not a D-PlaneOS concern. User education required.
 
-**Capabilities:**
-- Network access to web interface
-- Standard web attack tools
-- No credentials
+## Attack Surface Summary
 
-**Likely Attacks:**
-1. Brute force login
-2. Exploit web vulnerabilities (XSS, CSRF)
-3. Attempt SQL/Command injection
+| Surface | Exposure | Mitigations |
+|---------|----------|-------------|
+| HTTP API (85 routes) | All authenticated except `/health` | Session + RBAC + input validation |
+| WebSocket (`/ws/monitor`) | Authenticated | Session validation before upgrade |
+| `exec.Command` (ZFS, Docker, system) | Internal only | Allowlist validators, no shell |
+| SQLite database | Filesystem access | WAL mode, backup, permissions |
+| Systemd service | Root process | MemoryMax, RestartSec, graceful shutdown |
 
-**Mitigations:**
-- ✅ Rate limiting
-- ✅ Session security
-- ✅ Input validation
-- ✅ Command injection protection
+## Future Security Work
 
-**Residual Risk:** 🟢 Low (multiple layers)
-
----
-
-### Threat Actor #2: Authenticated User (Malicious)
-
-**Capabilities:**
-- Valid login credentials
-- Full API access
-- Knowledge of system
-
-**Likely Attacks:**
-1. Data destruction (destroy pools/datasets)
-2. Container manipulation
-3. Resource exhaustion
-
-**Mitigations:**
-- ✅ Audit logging (all actions recorded)
-- ✅ Confirmation required for destructive ops
-- 🟡 Limited: Authenticated users trusted by design
-
-**Residual Risk:** 🟡 Medium (by design - single user system)
-
----
-
-### Threat Actor #3: Compromised Web Server
-
-**Capabilities:**
-- Full access to www-data user
-- Can execute PHP code
-- Can make system calls via sudo
-
-**Likely Attacks:**
-1. Privilege escalation
-2. Lateral movement
-3. Data exfiltration
-
-**Mitigations:**
-- ✅ sudoers whitelist (limited commands)
-- ✅ www-data isolation (no login shell)
-- ✅ Command validation
-- 🟡 No privilege drop beyond www-data
-
-**Residual Risk:** 🟡 Medium (sudo whitelist limits scope)
-
----
-
-### Threat Actor #4: Physical Access
-
-**Capabilities:**
-- Direct hardware access
-- Can reboot system
-- Can access storage devices
-
-**Likely Attacks:**
-1. Boot from USB, mount filesystems
-2. Extract database
-3. Modify system files
-
-**Mitigations:**
-- ❌ Not in scope (secure your hardware)
-- 🔵 Recommendation: Encrypt disks at OS level
-- 🔵 Recommendation: BIOS/UEFI password
-
-**Residual Risk:** 🔴 High (physical access = game over)
-
----
-
-## Known Limitations
-
-### Security Limitations
-
-1. **Single User System**
-   - Only one admin account
-   - No role-based access control
-   - All authenticated users have full access
-   - **Mitigation:** Don't share credentials
-
-2. **No Built-in TLS**
-   - Default installation uses HTTP
-   - Passwords transmitted in clear (if no reverse proxy)
-   - **Mitigation:** Use reverse proxy with TLS (Caddy, nginx)
-
-3. **SQLite Concurrency**
-   - Write locks can cause delays under heavy load
-   - Potential DoS via database contention
-   - **Mitigation:** Read-only fallback mode, monitoring
-
-4. **Sudo Whitelist Scope**
-   - www-data can run specific commands without password
-   - If web layer compromised, attacker has these commands
-   - **Mitigation:** Commands are validated, whitelist is minimal
-
-5. **No API Authentication Tokens**
-   - Only session-based auth
-   - No programmatic API access without session
-   - **Mitigation:** Plan for v2.x
-
----
-
-### Operational Limitations
-
-1. **No Built-in Backup**
-   - System doesn't auto-backup itself
-   - Database can be lost if not backed up
-   - **Mitigation:** Use replication feature, external backups
-
-2. **No High Availability**
-   - Single point of failure
-   - No failover support
-   - **Mitigation:** Enterprise deployments use external HA
-
-3. **No Audit Alert Integration**
-   - Audit log exists but no automatic alerting
-   - Requires external monitoring
-   - **Mitigation:** Use webhook alerts (v1.3.0+)
-
----
-
-## Out of Scope
-
-The following threats are explicitly **out of scope** for D-PlaneOS:
-
-1. **Network Security**
-   - Firewall configuration
-   - Network segmentation
-   - DDoS mitigation
-   - **Responsibility:** System administrator
-
-2. **Physical Security**
-   - Server room access
-   - Hardware tampering
-   - Theft
-   - **Responsibility:** Facility management
-
-3. **Host OS Hardening**
-   - Kernel security
-   - System updates
-   - SELinux/AppArmor
-   - **Responsibility:** System administrator
-
-4. **Backup & Disaster Recovery**
-   - Offsite backups
-   - Disaster recovery planning
-   - Business continuity
-   - **Responsibility:** System administrator
-
-5. **Compliance**
-   - GDPR, HIPAA, etc.
-   - Data retention policies
-   - Legal requirements
-   - **Responsibility:** Organization
-
----
-
-## Security Assumptions
-
-D-PlaneOS security model assumes:
-
-1. ✅ **Trusted Network**
-   - System deployed on trusted/isolated network
-   - Or behind properly configured firewall
-   - Or using HTTPS reverse proxy
-
-2. ✅ **Secure Host OS**
-   - Ubuntu/Debian installation is hardened
-   - System updates are applied
-   - No other compromised services on host
-
-3. ✅ **Physical Security**
-   - Server is in physically secure location
-   - No unauthorized physical access
-   - BIOS/boot process secured
-
-4. ✅ **Administrator Trustworthiness**
-   - Admin users are vetted
-   - Credentials are protected
-   - No credential sharing
-
-5. ✅ **Regular Monitoring**
-   - Audit logs are reviewed
-   - Alert webhooks are configured
-   - Anomalies are investigated
-
-**If any assumption is violated, security guarantees may not hold.**
-
----
-
-## Incident Response
-
-### If You Suspect Compromise
-
-1. **Immediate Actions:**
-   ```bash
-   # Check audit log for suspicious activity
-   sqlite3 /var/dplane/database/dplane.db \
-     "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 100"
-   
-   # Check system logs
-   grep SECURITY /var/log/nginx/error.log
-   
-   # Check active sessions
-   ls -la /var/lib/php/sessions/
-   ```
-
-2. **Containment:**
-   ```bash
-   # Stop web services
-   systemctl stop nginx php8.2-fpm
-   
-   # Block network access (if needed)
-   iptables -A INPUT -p tcp --dport 80 -j DROP
-   ```
-
-3. **Investigation:**
-   - Review audit log for unauthorized actions
-   - Check for unexpected pools/datasets/containers
-   - Verify user accounts in database
-   - Check for modified system files
-
-4. **Recovery:**
-   - Restore from backup if compromised
-   - Change admin password
-   - Review and tighten firewall rules
-   - Consider TLS deployment
-
----
-
-## Security Best Practices
-
-### Deployment Recommendations
-
-1. **Network Security**
-   ```bash
-   # Allow only specific IPs
-   ufw allow from 192.168.1.0/24 to any port 80
-   ufw enable
-   ```
-
-2. **TLS Deployment**
-   ```bash
-   # Use Caddy as reverse proxy
-   apt install caddy
-   # Configure Caddy with automatic HTTPS
-   ```
-
-3. **Regular Backups**
-   ```bash
-   # Automated database backup
-   0 2 * * * cp /var/dplane/database/dplane.db \
-     /backup/dplane-$(date +\%Y\%m\%d).db
-   ```
-
-4. **Monitoring**
-   ```bash
-   # Watch for security events
-   tail -f /var/log/nginx/error.log | grep SECURITY
-   ```
-
-5. **Strong Password**
-   ```bash
-   # Change default admin password immediately
-   # Use 20+ character random password
-   ```
-
----
-
-## Security Contact
-
-**Report Security Vulnerabilities:**
-
-- Create GitHub issue with `security` label
-- Email: security@dplaneos.example (if configured)
-- Do NOT publicly disclose until patched
-
-**Response Time:**
-- Critical: 24 hours
-- High: 72 hours  
-- Medium: 1 week
-
----
-
-## Changelog
-
-### v1.5.0
-- Enhanced sudoers with least-privilege separation
-- Explicit command whitelist per operation
-- Comprehensive threat model documentation
-- Recovery playbook for administrators
-
-### v1.3.1
-- Command injection protection (active)
-- Database integrity checks
-
-### v1.3.0
-- Enhanced audit logging
-- Webhook alerts
-
----
-
-## Conclusion
-
-D-PlaneOS implements defense in depth with multiple security layers. While not immune to all attacks, it provides enterprise-grade protection for its threat model scope.
-
-**Key Strengths:**
-- Clear trust boundaries
-- Multiple protection layers
-- Comprehensive audit trail
-- Active command injection protection
-
-**Key Limitations:**
-- Single user system
-- Requires external TLS
-- Physical access = compromise
-
-**Recommendation:** Suitable for production use in trusted environments with proper network security and monitoring.
-
----
-
-**Document Version:** 1.0  
-**System Version:** 1.5.0  
-**Reviewed:** 2026-01-28
+- [ ] Per-endpoint RBAC enforcement (currently some endpoints use session auth only)
+- [ ] Linux capabilities instead of full root
+- [ ] API request signing for critical operations
+- [ ] CSP headers in frontend responses
+- [ ] Encrypted SQLite database (SQLCipher)
+- [ ] 2FA support for web login
