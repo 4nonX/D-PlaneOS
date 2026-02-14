@@ -58,6 +58,19 @@ Navigate to **Identity → Directory Service** to configure. Supports:
 - **Storage:** ZFS (native kernel module) + ZED hook for real-time disk failure alerts
 - **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 34 permissions), injection-hardened, OOM-protected (512MB limit)
 
+## Installation
+
+### Debian/Ubuntu (Standard)
+```bash
+sudo bash install.sh
+```
+
+### NixOS
+```bash
+cd nixos
+sudo bash setup-nixos.sh
+sudo nixos-rebuild switch --flake .#dplaneos
+
 ## Documentation
 
 - `CHANGELOG-v2.0.0.md` — What's new

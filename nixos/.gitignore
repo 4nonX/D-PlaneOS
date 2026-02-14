@@ -1,0 +1,13 @@
+# NixOS Flake lock wird committed (absichtlich — pinnt Versionen)
+# flake.lock
+
+# Nix build outputs
+result
+result-*
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
