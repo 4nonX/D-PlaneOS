@@ -1,110 +1,110 @@
-# D-PlaneOS auf NixOS — Komplettanleitung für Einsteiger
+# D-PlaneOS on NixOS — Complete Installation Guide
 
-> **Zielgruppe**: Du hast noch nie NixOS benutzt. Du willst ein NAS.
-> Diese Anleitung bringt dich von "leerer Server" zu "D-PlaneOS läuft" — Schritt für Schritt, ohne Vorwissen.
-
----
-
-## Was ist NixOS (30-Sekunden-Version)
-
-NixOS ist ein Linux, bei dem das **gesamte System in einer einzigen Textdatei** definiert wird: `configuration.nix`. Du beschreibst dort alles — welche Programme installiert sind, welche Services laufen, welche Firewall-Regeln gelten. Danach sagst du `sudo nixos-rebuild switch` und NixOS baut das System exakt so, wie du es beschrieben hast.
-
-**Warum für ein NAS?**
-- Kaputtes Update? → `sudo nixos-rebuild switch --rollback` — ein Befehl und alles ist wie vorher
-- Server stirbt? → NixOS auf neuer Hardware installieren, `configuration.nix` kopieren, ZFS-Pool importieren — fertig
-- Dein gesamtes NAS ist in einer Datei versionierbar (Git)
+> **Audience**: You've never used NixOS before. You want a NAS.
+> This guide takes you from "empty server" to "D-PlaneOS running" — step by step, no prior knowledge required.
 
 ---
 
-## Was du brauchst
+## What is NixOS (30-Second Version)
 
-- Einen PC/Server für das NAS (mindestens 4 GB RAM, besser 8+)
-- Einen USB-Stick (mindestens 2 GB) für den NixOS-Installer
-- Eine **separate Boot-Disk** (SSD/HDD/NVMe) — NixOS wird hier installiert
-- Deine Daten-Disks (werden als ZFS-Pool verwendet — **nicht** für NixOS)
-- Einen zweiten Computer um diese Anleitung zu lesen und die Config zu bearbeiten
-- Netzwerkkabel (WLAN geht auch, ist aber bei der Installation umständlicher)
+NixOS is a Linux distribution where the **entire system is defined in a single text file**: `configuration.nix`. You describe everything — packages, services, firewall rules. Then you run `sudo nixos-rebuild switch` and NixOS builds the system exactly as described.
+
+**Why is this great for a NAS?**
+- Broken update? → `sudo nixos-rebuild switch --rollback` — one command and everything is restored
+- Server dies? → Install NixOS on new hardware, copy `configuration.nix`, import ZFS pool — done
+- Your entire NAS config is version-controllable (Git)
 
 ---
 
-## Teil 1: NixOS installieren (ca. 20 Minuten)
+## Requirements
 
-### Schritt 1.1 — ISO herunterladen
+- A PC/server for the NAS (minimum 4 GB RAM, recommended 8+)
+- A USB stick (minimum 2 GB) for the NixOS installer
+- A **separate boot disk** (SSD/HDD/NVMe) — NixOS goes here
+- Your data disks (used for the ZFS pool — **not** for NixOS)
+- A second computer to follow this guide
+- Ethernet cable (WiFi works too but is harder during install)
 
-Geh auf **https://nixos.org/download** und lade das **Minimal ISO image** herunter (64-bit). Nicht die Graphical ISO — wir brauchen kein Desktop.
+---
 
-### Schritt 1.2 — USB-Stick erstellen
+## Part 1: Installing NixOS (~20 minutes)
 
-**Windows:** Benutze [Rufus](https://rufus.ie/) oder [balenaEtcher](https://etcher.balena.io/)
+### Step 1.1 — Download ISO
+
+Go to **https://nixos.org/download** and download the **Minimal ISO image** (64-bit). Not the Graphical ISO — we don't need a desktop.
+
+### Step 1.2 — Create USB Stick
+
+**Windows:** Use [Rufus](https://rufus.ie/) or [balenaEtcher](https://etcher.balena.io/)
 **Mac/Linux:**
 ```bash
-# Finde deinen USB-Stick (VORSICHT: richtiges Gerät wählen!)
+# Find your USB stick (CAREFUL: pick the right device!)
 lsblk
 
-# Schreibe das ISO (ersetze /dev/sdX mit deinem USB-Stick)
+# Write the ISO (replace /dev/sdX with your USB stick)
 sudo dd if=nixos-minimal-*.iso of=/dev/sdX bs=4M status=progress
 ```
 
-### Schritt 1.3 — Vom USB-Stick booten
+### Step 1.3 — Boot from USB
 
-1. USB-Stick in den NAS-Server stecken
-2. Server starten, ins BIOS gehen (meist F2, F12 oder DEL beim Hochfahren)
-3. Boot-Reihenfolge: USB-Stick als erstes
-4. Speichern und neustarten
+1. Plug USB stick into the NAS server
+2. Start the server, enter BIOS (usually F2, F12, or DEL during boot)
+3. Boot order: set USB stick first
+4. Save and reboot
 
-Du landest auf einer Kommandozeile: `[nixos@nixos:~]$` — das ist der NixOS Live-Installer.
+You'll land on a command line: `[nixos@nixos:~]$` — this is the NixOS live installer.
 
-### Schritt 1.4 — Internet prüfen
+### Step 1.4 — Check Internet
 
 ```bash
 ping -c 3 google.com
 ```
 
-Wenn das funktioniert → weiter. Wenn nicht:
+If it works → continue. If not:
 
 ```bash
-# WLAN (falls nötig):
+# WiFi (if needed):
 sudo systemctl start wpa_supplicant
 wpa_cli
 > add_network
-> set_network 0 ssid "DeinWLANName"
-> set_network 0 psk "DeinWLANPasswort"
+> set_network 0 ssid "YourWiFiName"
+> set_network 0 psk "YourWiFiPassword"
 > enable_network 0
 > quit
 ```
 
-### Schritt 1.5 — Boot-Disk partitionieren
+### Step 1.5 — Partition the Boot Disk
 
-**ACHTUNG: Das löscht ALLES auf der gewählten Disk. Stelle sicher, dass du die richtige Disk wählst — NICHT deine Daten-Disks!**
+**WARNING: This erases EVERYTHING on the selected disk. Make sure you pick the right one — NOT your data disks!**
 
 ```bash
-# Zeige alle Disks an
+# Show all disks
 lsblk
 
-# Beispiel: /dev/sda ist deine Boot-SSD (120GB)
-#           /dev/sdb, /dev/sdc, /dev/sdd sind deine Daten-Disks → NICHT ANFASSEN
+# Example: /dev/sda is your boot SSD (120GB)
+#          /dev/sdb, /dev/sdc, /dev/sdd are data disks → DON'T TOUCH
 ```
 
-**Für UEFI-Systeme** (die meisten modernen Server/PCs seit ~2012):
+**For UEFI systems** (most modern servers/PCs since ~2012):
 
 ```bash
-# Partitionieren
+# Partition
 sudo parted /dev/sda -- mklabel gpt
 sudo parted /dev/sda -- mkpart ESP fat32 1MB 512MB
 sudo parted /dev/sda -- set 1 esp on
 sudo parted /dev/sda -- mkpart primary 512MB 100%
 
-# Formatieren
+# Format
 sudo mkfs.fat -F 32 -n BOOT /dev/sda1
 sudo mkfs.ext4 -L nixos /dev/sda2
 
-# Mounten
+# Mount
 sudo mount /dev/disk/by-label/nixos /mnt
 sudo mkdir -p /mnt/boot
 sudo mount /dev/disk/by-label/BOOT /mnt/boot
 ```
 
-**Für ältere BIOS/MBR-Systeme:**
+**For older BIOS/MBR systems:**
 
 ```bash
 sudo parted /dev/sda -- mklabel msdos
@@ -115,389 +115,229 @@ sudo mkfs.ext4 -L nixos /dev/sda1
 sudo mount /dev/disk/by-label/nixos /mnt
 ```
 
-### Schritt 1.6 — NixOS Grundconfig generieren
+### Step 1.6 — Generate Base Config
 
 ```bash
 sudo nixos-generate-config --root /mnt
 ```
 
-Das erstellt zwei Dateien:
-- `/mnt/etc/nixos/hardware-configuration.nix` — automatisch erkannte Hardware (NIEMALS manuell bearbeiten)
-- `/mnt/etc/nixos/configuration.nix` — hier kommt unsere D-PlaneOS Config rein
+This creates two files:
+- `/mnt/etc/nixos/hardware-configuration.nix` — auto-detected hardware (NEVER edit manually)
+- `/mnt/etc/nixos/configuration.nix` — we'll replace this with D-PlaneOS config
 
-### Schritt 1.7 — D-PlaneOS Config einspielen
+### Step 1.7 — Copy D-PlaneOS Config
 
-Jetzt ersetzt du die generierte `configuration.nix` mit unserer. Du hast zwei Optionen:
+Replace the generated `configuration.nix` with ours:
 
-**Option A: Direkt auf dem Server bearbeiten:**
+**Option A: Clone the repo:**
 ```bash
-sudo nano /mnt/etc/nixos/configuration.nix
+nix-shell -p git --run "git clone https://github.com/4nonX/D-PlaneOS /tmp/dplaneos"
+sudo cp /tmp/dplaneos/nixos/configuration-standalone.nix /mnt/etc/nixos/configuration.nix
+sudo cp /tmp/dplaneos/nixos/setup-nixos.sh /mnt/root/setup-nixos.sh
 ```
-Lösche alles und kopiere den kompletten Inhalt von `configuration.nix` (die mitgelieferte Datei) hinein.
 
-**Option B: Von einem anderen PC per USB-Stick:**
-Kopiere `configuration.nix` auf einen zweiten USB-Stick, stecke ihn ein und:
+**Option B: From a second USB stick:**
 ```bash
-# Zweiten USB-Stick finden
 lsblk
 sudo mount /dev/sdX1 /media
-
-# Kopieren
-sudo cp /media/configuration.nix /mnt/etc/nixos/configuration.nix
+sudo cp /media/configuration-standalone.nix /mnt/etc/nixos/configuration.nix
+sudo cp /media/setup-nixos.sh /mnt/root/setup-nixos.sh
 sudo umount /media
 ```
 
-### Schritt 1.8 — Setup-Script ausführen
-
-Statt die 5 Stellen manuell zu suchen, gibt es ein Script das alles für dich erledigt:
-
-```bash
-# Kopiere das Setup-Script (vom gleichen USB-Stick oder direkt)
-sudo cp /media/setup-nixos.sh /mnt/root/setup-nixos.sh
-
-# Hinweis: Das Script wird NACH dem ersten Reboot ausgeführt,
-# nicht jetzt! Weiter mit Schritt 1.9.
-```
-
-Falls du das Script nicht hast, kannst du die 5 Stellen auch manuell bearbeiten:
-
-```bash
-sudo nano /mnt/etc/nixos/configuration.nix
-# Suche mit Ctrl+W nach "HIER" — es gibt 5 Stellen
-```
-
-| # | Was | Wo in der Datei | Beispiel |
-|---|-----|-----------------|----------|
-| 1 | ZFS Pool-Name | `zpools = [ "tank" ];` | Dein Poolname, z.B. `"datapool"` |
-| 2 | Host-ID | `networking.hostId = "..."` | Wird automatisch generiert (siehe unten) |
-| 3 | Zeitzone | `time.timeZone = "..."` | z.B. `"Europe/Berlin"` |
-| 4 | UEFI oder BIOS | Boot-Loader Sektion | Siehe unten |
-| 5 | Admin-Passwort | Nach Installation | `sudo passwd admin` |
-
-**Host-ID generieren** (muss pro Maschine einzigartig sein — ZFS braucht das):
-```bash
-head -c4 /dev/urandom | od -A none -t x4 | tr -d ' '
-# Gibt z.B. aus: a8f3b2c1
-# Diesen Wert bei networking.hostId eintragen
-```
-
-**UEFI oder BIOS?** Du hast in Schritt 1.5 entweder UEFI oder BIOS gewählt. Die Config muss dazu passen. In der Datei steht:
-
-Für **UEFI** (der häufigste Fall):
-```nix
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
-```
-
-Für **BIOS/MBR**:
-```nix
-  boot.loader.grub.enable = true;
-  boot.loader.grub.device = "/dev/sda";
-```
-
-### Schritt 1.9 — Installieren!
+### Step 1.8 — Install
 
 ```bash
 sudo nixos-install
 ```
 
-Das dauert 5-15 Minuten (je nach Internet-Geschwindigkeit). Am Ende wirst du nach einem **Root-Passwort** gefragt — wähle ein sicheres.
+This takes 5-15 minutes (depending on internet speed). At the end you'll be asked for a **root password** — choose a secure one.
 
 ```bash
-# Fertig! Neustart.
+# Done! Reboot.
 sudo reboot
 ```
 
-**USB-Stick entfernen!** Der Server startet jetzt von der Boot-Disk in dein neues NixOS.
+**Remove the USB stick!** The server now boots from the boot disk into your new NixOS.
 
 ---
 
-## Teil 2: D-PlaneOS einrichten (ca. 5 Minuten)
+## Part 2: Setting Up D-PlaneOS (~5 minutes)
 
-### Schritt 2.1 — Einloggen
+### Step 2.1 — Log In
 
-Nach dem Neustart siehst du einen Login-Prompt. Logge dich ein:
+After reboot you'll see a login prompt:
 
 ```
-Benutzer: root
-Passwort: (was du bei nixos-install gewählt hast)
+User: root
+Password: (what you chose during nixos-install)
 ```
 
-### Schritt 2.1b — Setup-Script ausführen (empfohlen)
-
-Falls du das Setup-Script kopiert hast:
+### Step 2.2 — Run Setup Script
 
 ```bash
 bash /root/setup-nixos.sh
 ```
 
-Das Script erledigt automatisch:
-- Host-ID generieren und eintragen
-- Zeitzone bestätigen oder ändern
-- ZFS Pool-Name prüfen
-- Bootloader erkennen (UEFI/BIOS)
+The script automatically:
+- Generates and applies a unique ZFS host ID
+- Confirms or changes the timezone
+- Checks the ZFS pool name
+- Detects UEFI/BIOS boot loader
 
-Danach:
+### Step 2.3 — Build the System
+
 ```bash
 sudo nixos-rebuild switch
 ```
 
-**Beim ersten Mal** wird der Build wegen fehlender Paket-Hashes fehlschlagen. Das Script erklärt dir genau wie du das in 3 Minuten löst (Hash aus Fehlermeldung kopieren → eintragen → nochmal bauen).
+**First build will fail** due to missing package hashes. This is expected!
 
-### Schritt 2.2 — IP-Adresse herausfinden
+1. The error shows the correct hash: `got: sha256-AbCdEf...=`
+2. Edit the config: `sudo nano /etc/nixos/configuration.nix`
+3. Search for `AAAA` (Ctrl+W), replace with the correct hash
+4. Rebuild: `sudo nixos-rebuild switch`
+5. Repeat if a second hash error appears (vendorHash)
+
+After max 3 attempts, everything builds.
+
+### Step 2.4 — Find Your IP
 
 ```bash
 ip addr show | grep "inet "
-# Suche die Adresse die NICHT 127.0.0.1 ist
-# Beispiel: 192.168.178.42
+# Look for the address that is NOT 127.0.0.1
+# Example: 192.168.1.42
 ```
 
-### Schritt 2.3 — ZFS-Pool importieren
+### Step 2.5 — Import ZFS Pool
 
-**Wenn du einen bestehenden ZFS-Pool hast** (z.B. von einer TrueNAS/Debian Migration):
+**If you have an existing ZFS pool** (e.g. from TrueNAS/Debian migration):
 ```bash
-# Zeige verfügbare Pools
 zpool import
-
-# Importiere deinen Pool
-zpool import tank
-# (ersetze "tank" mit deinem Pool-Namen)
-
-# Prüfe ob er da ist
+zpool import tank    # replace "tank" with your pool name
 zpool status
 ```
 
-**Wenn du einen neuen Pool erstellen willst:**
+**If you need to create a new pool:**
 ```bash
-# Zeige verfügbare Disks
 lsblk
 
-# Erstelle einen Mirror-Pool (2 Disks, empfohlen)
+# Mirror (2 disks, recommended)
 zpool create tank mirror /dev/sdb /dev/sdc
 
-# ODER: RAIDZ1 (3+ Disks, eine darf ausfallen)
+# OR: RAIDZ1 (3+ disks, one can fail)
 zpool create tank raidz1 /dev/sdb /dev/sdc /dev/sdd
 
-# Docker-Dataset erstellen
+# Docker dataset
 zfs create tank/docker
 ```
 
-### Schritt 2.4 — Prüfen ob alles läuft
+### Step 2.6 — Open Browser
 
-```bash
-# Daemon läuft?
-systemctl status dplaned
-# Sollte "active (running)" zeigen
-
-# Nginx läuft?
-systemctl status nginx
-# Sollte "active (running)" zeigen
-
-# Alle Services OK?
-systemctl --failed
-# Sollte leer sein
-```
-
-### Schritt 2.5 — Browser öffnen
-
-Auf deinem normalen PC, öffne den Browser:
+On your regular PC:
 
 ```
-http://192.168.178.42
+http://192.168.1.42
 ```
-(Ersetze mit der IP aus Schritt 2.2)
+(Replace with the IP from step 2.4)
 
-Oder probiere:
+Or try:
 ```
 http://dplaneos.local
 ```
-(Funktioniert dank mDNS auf den meisten Betriebssystemen automatisch)
 
-**Du siehst den D-PlaneOS Setup-Wizard!** Folge den Anweisungen im Browser.
+**You should see the D-PlaneOS Setup Wizard!**
 
 ---
 
-## Teil 3: Alltag — die 5 Befehle die du brauchst
+## Part 3: Daily Operations — The 5 Commands You Need
 
-### Etwas ändern
+### Change something
 ```bash
-# Config bearbeiten
 sudo nano /etc/nixos/configuration.nix
-
-# Anwenden
 sudo nixos-rebuild switch
 ```
 
-### Etwas kaputt gemacht?
+### Something broke?
 ```bash
-# Zurück zum letzten funktionierenden Stand
 sudo nixos-rebuild switch --rollback
 ```
 
-### System updaten
+### Update the system
 ```bash
-# NixOS + alle Pakete aktualisieren
 sudo nix-channel --update
 sudo nixos-rebuild switch
 ```
 
-### Server neustarten
+### Reboot
 ```bash
 sudo reboot
 ```
 
-### Status prüfen
+### Check status
 ```bash
-systemctl status dplaned    # D-PlaneOS Daemon
-zpool status                 # ZFS Pools
-docker ps                    # Docker Container
+systemctl status dplaned    # D-PlaneOS daemon
+zpool status                 # ZFS pools
+docker ps                    # Docker containers
 ```
 
 ---
 
-## Häufige Probleme
+## Troubleshooting
 
-### "error: hash mismatch" bei nixos-rebuild
+### "hash mismatch" during nixos-rebuild
 
-Die `sha256-FIXME` Hashes in der Config müssen ausgefüllt werden. Wenn der D-PlaneOS v2.0.0 Release auf GitHub getaggt ist:
+The sha256 hashes in the config need to be filled in. See Step 2.3.
 
-```bash
-# Installiere das Prefetch-Tool
-nix-shell -p nix-prefetch-github
-
-# Hole den Hash
-nix-prefetch-github 4nonX dplaneos --rev v2.0.0
-# → Gibt dir den sha256 Hash, den du bei "hash = " einträgst
-```
-
-Für den `vendorHash` (Go dependencies): Setze ihn erstmal auf `""` und lass `nixos-rebuild switch` laufen — die Fehlermeldung zeigt dir den korrekten Hash.
-
-### ZFS Pool wird nicht importiert
+### ZFS pool not imported at boot
 
 ```bash
-# Manuell importieren
 sudo zpool import -f tank
-
-# Prüfen ob hostId stimmt
-cat /etc/machine-id
-# Muss zum Wert in configuration.nix passen
+# Check that hostId in configuration.nix matches your machine
 ```
 
-### "D-PlaneOS zeigt leere Seite"
+### D-PlaneOS shows blank page
 
 ```bash
-# Daemon-Logs anschauen
-journalctl -u dplaned -f
-
-# Nginx-Logs anschauen
-journalctl -u nginx -f
+journalctl -u dplaned -f    # Daemon logs
+journalctl -u nginx -f      # Web server logs
 ```
 
-### SSH funktioniert nicht
+### SSH not working
 
-Die Config erlaubt nur SSH-Key-Login. Wenn du noch keinen Key eingetragen hast:
-
+The config enables password login by default. If you disabled it:
 ```bash
-# Temporär Passwort-Login erlauben (auf dem Server direkt):
+# On the server directly:
 sudo nano /etc/nixos/configuration.nix
-# Ändere: PasswordAuthentication = false;
-# Zu:     PasswordAuthentication = true;
+# Change: PasswordAuthentication = false;
+# To:     PasswordAuthentication = true;
 sudo nixos-rebuild switch
-
-# Jetzt von deinem PC aus:
-ssh admin@dplaneos.local
-# Passwort eingeben
-
-# Dann SSH-Key einrichten und Passwort-Login wieder deaktivieren
 ```
 
-### Ich will ein Paket installieren
+### Installing packages
 
-**Nicht** `apt install` — das gibt es auf NixOS nicht. Stattdessen:
+**Not** `apt install` — that doesn't exist on NixOS. Instead:
 
 ```bash
-# Temporär (nur für diese Session):
+# Temporary (current session only):
 nix-shell -p vim
 
-# Permanent (überlebt Neustarts):
+# Permanent (survives reboots):
 sudo nano /etc/nixos/configuration.nix
-# Unter environment.systemPackages hinzufügen:
-#   vim
-# Dann:
+# Add to environment.systemPackages: vim
 sudo nixos-rebuild switch
-```
-
-### Samba-Shares werden nicht angezeigt
-
-```bash
-# Prüfe ob die Share-Config existiert
-cat /var/lib/dplaneos/smb-shares.conf
-
-# Prüfe Samba-Status
-systemctl status smbd
-testparm -s
-```
-
----
-
-## Für Fortgeschrittene
-
-### Config in Git versionieren
-
-```bash
-cd /etc/nixos
-sudo git init
-sudo git add .
-sudo git commit -m "D-PlaneOS v2.0.0 - Ersteinrichtung"
-
-# Nach jeder Änderung:
-sudo git add -A && sudo git commit -m "Beschreibung der Änderung"
-sudo nixos-rebuild switch
-```
-
-### Alle Boot-Generationen anzeigen
-
-```bash
-# Jedes nixos-rebuild erstellt eine "Generation" — wie ein Snapshot
-sudo nix-env --list-generations --profile /nix/var/nix/profiles/system
-
-# Zu einer bestimmten Generation zurück:
-sudo nixos-rebuild switch --rollback
-# Oder beim Booten: im GRUB-Menü ältere Generation auswählen
-```
-
-### Automatische Updates (optional)
-
-Füge in die `configuration.nix` ein:
-```nix
-  system.autoUpgrade = {
-    enable = true;
-    dates = "04:00";  # Jeden Tag um 4 Uhr morgens
-    allowReboot = false;  # Kein automatischer Reboot
-  };
 ```
 
 ---
 
 ## Cheat Sheet: NixOS vs. Debian
 
-| Ich will... | Debian | NixOS |
-|-------------|--------|-------|
-| Paket installieren | `apt install vim` | In `configuration.nix` hinzufügen + `nixos-rebuild switch` |
-| Service starten | `systemctl enable nginx` | `services.nginx.enable = true;` + rebuild |
-| Config bearbeiten | `nano /etc/nginx/nginx.conf` | `nano /etc/nixos/configuration.nix` + rebuild |
+| I want to... | Debian | NixOS |
+|--------------|--------|-------|
+| Install a package | `apt install vim` | Add to `configuration.nix` + `nixos-rebuild switch` |
+| Start a service | `systemctl enable nginx` | `services.nginx.enable = true;` + rebuild |
+| Edit config | `nano /etc/nginx/nginx.conf` | `nano /etc/nixos/configuration.nix` + rebuild |
 | Update | `apt update && apt upgrade` | `nix-channel --update && nixos-rebuild switch` |
-| Rollback | 😢 manuell reparieren | `nixos-rebuild switch --rollback` |
-| Welche Pakete hab ich? | `dpkg -l` | Steht alles in `configuration.nix` |
-| Firewall-Port öffnen | `ufw allow 8080` | `networking.firewall.allowedTCPPorts = [ 8080 ];` + rebuild |
-
----
-
-## Dateien in diesem Paket
-
-| Datei | Zweck |
-|-------|-------|
-| `configuration.nix` | **Die eine Datei die dein NAS definiert** — kopieren nach `/etc/nixos/` |
-| `setup-nixos.sh` | **Setup-Helper** — füllt Host-ID, Zeitzone, Pool automatisch aus |
-| `NIXOS-INSTALL-GUIDE.md` | Diese Anleitung |
-| `NIXOS-README.md` | Technische Details für Fortgeschrittene |
+| Rollback | manually fix things | `nixos-rebuild switch --rollback` |
+| What packages do I have? | `dpkg -l` | It's all in `configuration.nix` |
+| Open firewall port | `ufw allow 8080` | `networking.firewall.allowedTCPPorts = [ 8080 ];` + rebuild |

@@ -1,28 +1,28 @@
 # ═══════════════════════════════════════════════════════════════
-#  D-PlaneOS v2.0.0 — NixOS Konfiguration (Flake-Version)
+#  D-PlaneOS v2.0.0 — NixOS Configuration (Flake Version)
 # ═══════════════════════════════════════════════════════════════
 #
 #  Installation:
-#    1. git clone https://github.com/4nonX/dplaneos-nixos
-#    2. cd dplaneos-nixos
+#    1. git clone https://github.com/4nonX/D-PlaneOS
+#    2. cd D-PlaneOS/nixos
 #    3. sudo bash setup-nixos.sh
 #    4. sudo nixos-rebuild switch --flake .#dplaneos
 #
-#  Kaputt? → sudo nixos-rebuild switch --rollback
+#  Broken? → sudo nixos-rebuild switch --rollback
 #
 # ═══════════════════════════════════════════════════════════════
 
-# dplaned, dplaneos-frontend, dplaneos-recovery kommen vom Flake
+# dplaned, dplaneos-frontend, dplaneos-recovery are provided by the flake
 { config, pkgs, lib, dplaned, dplaneos-frontend, dplaneos-recovery, ... }:
 
 let
 
   # ┌─────────────────────────────────────────────────────────┐
-  # │  HIER ÄNDERN (1/4): Dein ZFS Pool-Name                 │
+  # │  CHANGE HERE (1/4): Your ZFS pool name                  │
   # └─────────────────────────────────────────────────────────┘
   zpools = [ "tank" ];
 
-  # Samba Arbeitsgruppe
+  # Samba workgroup
   sambaWorkgroup = "WORKGROUP";
 
 in {
@@ -33,22 +33,22 @@ in {
 
   system.stateVersion = "24.11";
 
-  # Flakes aktivieren (damit --flake funktioniert)
+  # Enable flakes
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   networking.hostName = "dplaneos";
 
   # ┌─────────────────────────────────────────────────────────┐
-  # │  HIER ÄNDERN (2/4): Host-ID für ZFS                    │
+  # │  CHANGE HERE (2/4): ZFS host ID                          │
   # │                                                         │
-  # │  Generiere eine mit:                                    │
+  # │  Generate one with:                                     │
   # │    head -c4 /dev/urandom | od -A none -t x4 | tr -d ' '│
-  # │  Oder lass setup-nixos.sh das automatisch machen.       │
+  # │  Or let setup-nixos.sh handle it automatically.         │
   # └─────────────────────────────────────────────────────────┘
-  networking.hostId = "HIER_AENDERN";
+  networking.hostId = "CHANGE_ME";
 
   # ┌─────────────────────────────────────────────────────────┐
-  # │  HIER ÄNDERN (3/4): Zeitzone                            │
+  # │  CHANGE HERE (3/4): Timezone                             │
   # └─────────────────────────────────────────────────────────┘
   time.timeZone = "Europe/Berlin";
 
@@ -59,17 +59,17 @@ in {
   # ═══════════════════════════════════════════════════════════
 
   # ┌─────────────────────────────────────────────────────────┐
-  # │  HIER ÄNDERN (4/4): Bootloader                          │
+  # │  CHANGE HERE (4/4): Boot loader                          │
   # │                                                         │
-  # │  Option A: UEFI (Standard seit ~2012) → so lassen       │
-  # │  Option B: Altes BIOS → A auskommentieren, B einkomm.  │
+  # │  Option A: UEFI (default, most PCs since ~2012)         │
+  # │  Option B: Legacy BIOS → comment out A, uncomment B     │
   # └─────────────────────────────────────────────────────────┘
 
   # Option A: UEFI
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
-  # Option B: BIOS/MBR
+  # Option B: Legacy BIOS/MBR
   # boot.loader.grub.enable = true;
   # boot.loader.grub.device = "/dev/sda";
 
@@ -86,25 +86,27 @@ in {
     interval = "monthly";
   };
 
+  # Automatic snapshots — time machine for your data
   services.zfs.autoSnapshot = {
     enable = true;
-    frequent = 4;
+    frequent = 4;    # Every 15 min, keep 4
     hourly = 24;
     daily = 7;
     weekly = 4;
     monthly = 12;
   };
 
-  # ARC: 1 GB pro TB Speicher, min 4 GB
-  #   16 GB RAM → 8589934592 (8 GB)
-  #   32 GB RAM → 17179869184 (16 GB)  ← aktuell
+  # ZFS ARC (read cache)
+  # Rule of thumb: 1 GB per TB of storage, min 4 GB
+  #   16 GB RAM → 8589934592  (8 GB)
+  #   32 GB RAM → 17179869184 (16 GB)  ← current
   #   64 GB RAM → 34359738368 (32 GB)
   boot.kernelParams = [
     "zfs.zfs_arc_max=17179869184"
   ];
 
   # ═══════════════════════════════════════════════════════════
-  #  KERNEL TUNING
+  #  KERNEL TUNING (optimized for NAS workloads)
   # ═══════════════════════════════════════════════════════════
 
   boot.kernel.sysctl = {
@@ -117,7 +119,7 @@ in {
   };
 
   # ═══════════════════════════════════════════════════════════
-  #  NGINX
+  #  NGINX (reverse proxy for D-PlaneOS web UI)
   # ═══════════════════════════════════════════════════════════
 
   services.nginx = {
@@ -212,7 +214,7 @@ in {
   ];
 
   # ═══════════════════════════════════════════════════════════
-  #  SAMBA
+  #  SAMBA (Windows file sharing)
   # ═══════════════════════════════════════════════════════════
 
   services.samba = {
@@ -234,6 +236,7 @@ in {
       "aio write size" = "16384";
     };
 
+    # Shares managed dynamically by the D-PlaneOS daemon
     extraConfig = "include = /var/lib/dplaneos/smb-shares.conf";
   };
 
@@ -255,15 +258,16 @@ in {
   };
 
   # ═══════════════════════════════════════════════════════════
-  #  NETZWERK
+  #  NETWORKING
   # ═══════════════════════════════════════════════════════════
 
   networking.firewall = {
     enable = true;
-    allowedTCPPorts = [ 80 443 445 2049 ];
-    allowedUDPPorts = [ 5353 ];
+    allowedTCPPorts = [ 80 443 445 2049 ];  # HTTP, HTTPS, SMB, NFS
+    allowedUDPPorts = [ 5353 ];              # mDNS
   };
 
+  # Makes NAS discoverable as "dplaneos.local" on local network
   services.avahi = {
     enable = true;
     nssmdns4 = true;
@@ -289,7 +293,7 @@ in {
   ];
 
   # ═══════════════════════════════════════════════════════════
-  #  SSH + BENUTZER
+  #  SSH + USERS
   # ═══════════════════════════════════════════════════════════
 
   services.openssh = {
@@ -297,6 +301,9 @@ in {
     settings = {
       PermitRootLogin = "yes";
       PasswordAuthentication = true;
+      # After initial setup, switch to SSH keys:
+      # PermitRootLogin = "prohibit-password";
+      # PasswordAuthentication = false;
     };
   };
 
@@ -308,12 +315,14 @@ in {
   security.sudo.wheelNeedsPassword = true;
 
   # ═══════════════════════════════════════════════════════════
-  #  BACKUPS
+  #  SCHEDULED TASKS
   # ═══════════════════════════════════════════════════════════
 
   services.cron = {
     enable = true;
     systemCronJobs = [
+      # Database backup daily at 3 AM, 30-day retention
+      # Uses sqlite3 .backup for WAL-safe consistent snapshots
       "0 3 * * *  root  ${pkgs.sqlite}/bin/sqlite3 /var/lib/dplaneos/dplaneos.db \".backup /var/lib/dplaneos/backups/dplaneos-$(date +\\%Y\\%m\\%d).db\" && find /var/lib/dplaneos/backups -mtime +30 -delete"
     ];
   };
