@@ -1,4 +1,4 @@
-# D-PlaneOS v2.0.0 — Debian based ZFS NAS Operating System
+# D-PlaneOS v2.0.0 — Debian / NixOS based ZFS NAS Operating System
 
 Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
 
