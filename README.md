@@ -17,11 +17,7 @@ Web UI: `https://your-server` (nginx reverse proxy on port 443 → daemon on 900
 
 > **Rebuilding from source?** You need Go 1.22+ and gcc: `make build` compiles fresh.
 
-<<<<<<< HEAD
-### Off-Pool Database Backup (recommended for mission critical data)
-=======
 ### Off-Pool Database Backup (recommended for large scale deployment)
->>>>>>> 08f95230b046b2f19ee282a41a2fc1660c09d429
 
 Edit `/etc/systemd/system/dplaned.service` and add `-backup-path`:
 ```
