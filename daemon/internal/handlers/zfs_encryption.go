@@ -1,11 +1,10 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
+	"dplaned/internal/cmdutil"
 	"strings"
 
 	"dplaned/internal/security"
@@ -27,18 +26,14 @@ type EncryptedDataset struct {
 
 // ListEncryptedDatasets lists all encrypted ZFS datasets
 func (h *ZFSEncryptionHandler) ListEncryptedDatasets(w http.ResponseWriter, r *http.Request) {
-	cmd := exec.Command("zfs", "list", "-H", "-o", "name,encryption,keystatus,keylocation,keyformat", "-t", "filesystem,volume")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
+	out, err := cmdutil.RunFast("zfs", "list", "-H", "-o", "name,encryption,keystatus,keylocation,keyformat", "-t", "filesystem,volume")
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to list datasets: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	datasets := make([]EncryptedDataset, 0)
 
 	for _, line := range lines {
@@ -82,10 +77,9 @@ func (h *ZFSEncryptionHandler) UnlockDataset(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Create temporary key file
-	cmd := exec.Command("zfs", "load-key", req.Dataset)
-	cmd.Stdin = strings.NewReader(req.Key)
+	out, err := cmdutil.RunWithStdin(cmdutil.TimeoutMedium, req.Key, "zfs", "load-key", req.Dataset)
 	
-	if output, err := cmd.CombinedOutput(); err != nil {
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -114,8 +108,8 @@ func (h *ZFSEncryptionHandler) LockDataset(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	cmd := exec.Command("zfs", "unload-key", req.Dataset)
-	if output, err := cmd.CombinedOutput(); err != nil {
+	out, err := cmdutil.RunFast("zfs", "unload-key", req.Dataset)
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -157,19 +151,19 @@ func (h *ZFSEncryptionHandler) CreateEncryptedDataset(w http.ResponseWriter, r *
 		return
 	}
 
-	cmd := exec.Command("zfs", "create", 
+	out, err := cmdutil.RunWithStdin(cmdutil.TimeoutMedium, req.Key+"\n"+req.Key+"\n",
+		"zfs", "create",
 		"-o", fmt.Sprintf("encryption=%s", req.Encryption),
 		"-o", "keyformat=passphrase",
 		"-o", "keylocation=prompt",
 		req.Name,
 	)
-	cmd.Stdin = strings.NewReader(req.Key + "\n" + req.Key + "\n")
 	
-	if output, err := cmd.CombinedOutput(); err != nil {
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"error":   fmt.Sprintf("Failed to create: %v - %s", err, string(output)),
+			"error":   fmt.Sprintf("Failed to create: %v - %s", err, string(out)),
 		})
 		return
 	}
@@ -196,14 +190,14 @@ func (h *ZFSEncryptionHandler) ChangeKey(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	cmd := exec.Command("zfs", "change-key", req.Dataset)
-	cmd.Stdin = strings.NewReader(req.OldKey + "\n" + req.NewKey + "\n" + req.NewKey + "\n")
+	out, err = cmdutil.RunWithStdin(cmdutil.TimeoutMedium, req.OldKey+"\n"+req.NewKey+"\n"+req.NewKey+"\n",
+		"zfs", "change-key", req.Dataset)
 	
-	if output, err := cmd.CombinedOutput(); err != nil {
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"error":   fmt.Sprintf("Failed to change key: %v - %s", err, string(output)),
+			"error":   fmt.Sprintf("Failed to change key: %v - %s", err, string(out)),
 		})
 		return
 	}

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,7 +9,12 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
+
+// Shared DB path for settings access
+var alertDBPath = "/var/lib/dplaneos/dplaneos.db"
 
 // ═══════════════════════════════════════════════════════════════
 //  SMTP EMAIL ALERTING
@@ -27,16 +33,21 @@ type SMTPConfig struct {
 // GetSMTPConfig returns current SMTP configuration
 // GET /api/alerts/smtp
 func GetSMTPConfig(w http.ResponseWriter, r *http.Request) {
-	output, err := executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
-		"/var/lib/dplaneos/dplaneos.db",
-		"SELECT value FROM settings WHERE key='smtp_config';",
-	})
-	if err != nil || strings.TrimSpace(output) == "" {
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	if err != nil {
+		respondOK(w, map[string]interface{}{"success": true, "configured": false})
+		return
+	}
+	defer db.Close()
+
+	var value string
+	err = db.QueryRow("SELECT value FROM settings WHERE key = ?", "smtp_config").Scan(&value)
+	if err != nil || value == "" {
 		respondOK(w, map[string]interface{}{"success": true, "configured": false})
 		return
 	}
 	var cfg SMTPConfig
-	if json.Unmarshal([]byte(strings.TrimSpace(output)), &cfg) != nil {
+	if json.Unmarshal([]byte(value), &cfg) != nil {
 		respondOK(w, map[string]interface{}{"success": true, "configured": false})
 		return
 	}
@@ -57,10 +68,18 @@ func SaveSMTPConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, _ := json.Marshal(cfg)
-	executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
-		"/var/lib/dplaneos/dplaneos.db",
-		fmt.Sprintf("INSERT OR REPLACE INTO settings (key, value) VALUES ('smtp_config', '%s');", strings.ReplaceAll(string(data), "'", "''")),
-	})
+
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	if err != nil {
+		respondErrorSimple(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+	_, err = db.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", "smtp_config", string(data))
+	if err != nil {
+		respondErrorSimple(w, "Failed to save", http.StatusInternalServerError)
+		return
+	}
 	respondOK(w, map[string]interface{}{"success": true})
 }
 
@@ -90,15 +109,19 @@ func TestSMTP(w http.ResponseWriter, r *http.Request) {
 
 // SendSMTPAlert sends an alert email (called internally by other handlers)
 func SendSMTPAlert(subject, body string) {
-	output, err := executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
-		"/var/lib/dplaneos/dplaneos.db",
-		"SELECT value FROM settings WHERE key='smtp_config';",
-	})
-	if err != nil || strings.TrimSpace(output) == "" {
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	if err != nil {
+		return
+	}
+	defer db.Close()
+
+	var value string
+	err = db.QueryRow("SELECT value FROM settings WHERE key = ?", "smtp_config").Scan(&value)
+	if err != nil || value == "" {
 		return // SMTP not configured
 	}
 	var cfg SMTPConfig
-	if json.Unmarshal([]byte(strings.TrimSpace(output)), &cfg) != nil {
+	if json.Unmarshal([]byte(value), &cfg) != nil {
 		return
 	}
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: [D-PlaneOS] %s\r\n\r\n%s\r\n",
@@ -129,16 +152,21 @@ type ScrubSchedule struct {
 // GetScrubSchedules returns configured scrub schedules
 // GET /api/zfs/scrub/schedule
 func GetScrubSchedules(w http.ResponseWriter, r *http.Request) {
-	output, err := executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
-		"/var/lib/dplaneos/dplaneos.db",
-		"SELECT value FROM settings WHERE key='scrub_schedules';",
-	})
-	if err != nil || strings.TrimSpace(output) == "" {
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	if err != nil {
+		respondOK(w, map[string]interface{}{"success": true, "schedules": []ScrubSchedule{}})
+		return
+	}
+	defer db.Close()
+
+	var value string
+	err = db.QueryRow("SELECT value FROM settings WHERE key = ?", "scrub_schedules").Scan(&value)
+	if err != nil || value == "" {
 		respondOK(w, map[string]interface{}{"success": true, "schedules": []ScrubSchedule{}})
 		return
 	}
 	var schedules []ScrubSchedule
-	json.Unmarshal([]byte(strings.TrimSpace(output)), &schedules)
+	json.Unmarshal([]byte(value), &schedules)
 	respondOK(w, map[string]interface{}{"success": true, "schedules": schedules})
 }
 
@@ -164,12 +192,13 @@ func SaveScrubSchedules(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Save to DB
+	// Save to DB (prepared statement — safe against SQL injection)
 	data, _ := json.Marshal(schedules)
-	executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
-		"/var/lib/dplaneos/dplaneos.db",
-		fmt.Sprintf("INSERT OR REPLACE INTO settings (key, value) VALUES ('scrub_schedules', '%s');", strings.ReplaceAll(string(data), "'", "''")),
-	})
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	if err == nil {
+		defer db.Close()
+		db.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", "scrub_schedules", string(data))
+	}
 
 	// Generate crontab entries
 	var crontab strings.Builder

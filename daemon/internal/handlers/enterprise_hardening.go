@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -286,7 +287,7 @@ func (h *NixOSGuardHandler) ApplyWithWatchdog(w http.ResponseWriter, r *http.Req
 		defer watchdogMu.Unlock()
 		if watchdogActive {
 			// Auto-rollback — nobody confirmed
-			exec.Command("/run/current-system/sw/bin/nixos-rebuild", "switch", "--rollback").Run()
+			if _, err := cmdutil.RunSlow("/run/current-system/sw/bin/nixos-rebuild", "switch", "--rollback"); err != nil { log.Printf("ERROR: nixos rollback failed: %v", err) }
 			watchdogActive = false
 		}
 	})
@@ -453,10 +454,14 @@ func (h *AuditRotationHandler) RotateAuditLogs(w http.ResponseWriter, r *http.Re
 
 	// Delete old entries
 	cutoff := time.Now().AddDate(0, 0, -req.KeepDays).Format("2006-01-02 15:04:05")
-	_, err := executeCommandWithTimeout(TimeoutMedium, "/usr/bin/sqlite3", []string{
-		"/var/lib/dplaneos/dplaneos.db",
-		fmt.Sprintf("DELETE FROM audit_log WHERE timestamp < '%s';", cutoff),
-	})
+	rotDB, dbErr := sql.Open("sqlite3", "/var/lib/dplaneos/dplaneos.db?_journal_mode=WAL&cache=shared")
+	var err error
+	if dbErr == nil {
+		defer rotDB.Close()
+		_, err = rotDB.Exec("DELETE FROM audit_log WHERE timestamp < ?", cutoff)
+	} else {
+		err = dbErr
+	}
 	if err != nil {
 		respondOK(w, map[string]interface{}{
 			"success": false,

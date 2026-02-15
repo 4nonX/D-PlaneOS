@@ -37,7 +37,7 @@ func (h *DockerHandler) ContainerLogs(w http.ResponseWriter, r *http.Request) {
 		lines = "200"
 	}
 
-	output, err := exec.Command("/usr/bin/docker", "logs", "--tail", lines, containerName).CombinedOutput()
+	output, err := cmdutil.RunMedium("/usr/bin/docker", "logs", "--tail", lines, containerName)
 	if err != nil {
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"success": false,

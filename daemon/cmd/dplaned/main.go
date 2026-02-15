@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"strings"
 	"time"
@@ -576,8 +577,9 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// Simple rate limiting middleware (per IP)
+// Thread-safe rate limiting middleware (per IP)
 var (
+	rateLimitMu   sync.Mutex
 	requestCounts = make(map[string][]time.Time)
 	maxRequests   = 100
 	timeWindow    = time.Minute
@@ -587,6 +589,7 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip := r.RemoteAddr
 
+		rateLimitMu.Lock()
 		now := time.Now()
 		if timestamps, exists := requestCounts[ip]; exists {
 			// Remove old timestamps
@@ -600,6 +603,7 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 
 			// Check rate limit
 			if len(recent) >= maxRequests {
+				rateLimitMu.Unlock()
 				audit.LogSecurityEvent(
 					fmt.Sprintf("Rate limit exceeded: %d requests in %v", len(recent), timeWindow),
 					r.Header.Get("X-User"),
@@ -612,6 +616,7 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 
 		// Add current request
 		requestCounts[ip] = append(requestCounts[ip], now)
+		rateLimitMu.Unlock()
 
 		next.ServeHTTP(w, r)
 	})

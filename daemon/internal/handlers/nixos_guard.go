@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"dplaned/internal/cmdutil"
 	"os/exec"
 	"strings"
 	"time"
@@ -45,7 +46,7 @@ func (h *NixOSGuardHandler) DetectNixOS(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// Get current generation
-		if out, err := exec.Command("nixos-rebuild", "list-generations", "--no-build-nix").CombinedOutput(); err == nil {
+		if out, err := cmdutil.RunMedium("nixos-rebuild", "list-generations", "--no-build-nix"); err == nil {
 			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 			if len(lines) > 0 {
 				result["current_generation"] = strings.TrimSpace(lines[len(lines)-1])

@@ -406,6 +406,6 @@ func (h *ShareCRUDHandler) regenerateSMBConf() {
 	}
 
 	// Reload samba
-	exec.Command("smbcontrol", "all", "reload-config").Run()
+	if _, err := cmdutil.RunFast("smbcontrol", "all", "reload-config"); err != nil { log.Printf("WARN: smbcontrol reload: %v", err) }
 	log.Printf("SMB config regenerated and reloaded (VFS: tm=%d sc=%d rb=%d)", globalTimeMachine, globalShadowCopy, globalRecycleBin)
 }

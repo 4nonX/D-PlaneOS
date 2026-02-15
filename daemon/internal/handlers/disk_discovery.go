@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
+	"dplaned/internal/cmdutil"
+	"os"
 	"strings"
 )
 
@@ -43,8 +44,7 @@ func HandleDiskDiscovery(w http.ResponseWriter, r *http.Request) {
 
 func discoverDisks() ([]DiskInfo, error) {
 	// Use lsblk to get disk information
-	cmd := exec.Command("lsblk", "-J", "-o", "NAME,SIZE,TYPE,MODEL,SERIAL,MOUNTPOINT")
-	output, err := cmd.Output()
+	lsblkOut, err := cmdutil.RunFast("lsblk", "-J", "-o", "NAME,SIZE,TYPE,MODEL,SERIAL,MOUNTPOINT")
 	if err != nil {
 		return nil, err
 	}
@@ -88,13 +88,12 @@ func discoverDisks() ([]DiskInfo, error) {
 }
 
 func isInZFSPool(diskName string) bool {
-	cmd := exec.Command("zpool", "status")
-	output, err := cmd.Output()
+	zpoolOut, err := cmdutil.RunFast("zpool", "status")
 	if err != nil {
 		return false
 	}
 	
-	return strings.Contains(string(output), diskName)
+	return strings.Contains(string(zpoolOut), diskName)
 }
 
 func detectDiskType(name string) string {
@@ -103,13 +102,12 @@ func detectDiskType(name string) string {
 	}
 	
 	// Check rotation rate
-	cmd := exec.Command("cat", "/sys/block/"+name+"/queue/rotational")
-	output, err := cmd.Output()
+	rotData, err := os.ReadFile("/sys/block/" + name + "/queue/rotational")
 	if err != nil {
 		return "Unknown"
 	}
 	
-	if strings.TrimSpace(string(output)) == "0" {
+	if strings.TrimSpace(string(rotData)) == "0" {
 		return "SSD"
 	}
 	
@@ -249,8 +247,7 @@ func HandlePoolCreate(w http.ResponseWriter, r *http.Request) {
 	
 	args = append(args, request.Disks...)
 	
-	cmd := exec.Command("zpool", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := cmdutil.RunSlow("zpool", args...)
 	
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")

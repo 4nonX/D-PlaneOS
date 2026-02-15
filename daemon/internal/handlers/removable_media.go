@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
+	"dplaned/internal/cmdutil"
+	"log"
 
 	"dplaned/internal/security"
 )
@@ -27,8 +28,7 @@ type Device struct {
 // ListDevices lists all removable devices
 func (h *RemovableMediaHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	// Use lsblk to list removable devices
-	cmd := exec.Command("lsblk", "-J", "-o", "NAME,SIZE,MODEL,MOUNTPOINT,RM,TYPE")
-	output, err := cmd.CombinedOutput()
+	output, err := cmdutil.RunFast("lsblk", "-J", "-o", "NAME,SIZE,MODEL,MOUNTPOINT,RM,TYPE")
 	
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to list devices: %v", err), http.StatusInternalServerError)
@@ -97,11 +97,11 @@ func (h *RemovableMediaHandler) MountDevice(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Create mount point if it doesn't exist
-	exec.Command("mkdir", "-p", req.MountPoint).Run()
+	if _, err := cmdutil.RunFast("mkdir", "-p", req.MountPoint); err != nil { log.Printf("WARN: mkdir: %v", err) }
 
 	// Mount the device
-	cmd := exec.Command("mount", req.Device, req.MountPoint)
-	if output, err := cmd.CombinedOutput(); err != nil {
+	output, err := cmdutil.RunMedium("mount", req.Device, req.MountPoint)
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -130,8 +130,8 @@ func (h *RemovableMediaHandler) UnmountDevice(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	cmd := exec.Command("umount", req.Device)
-	if output, err := cmd.CombinedOutput(); err != nil {
+	output, err := cmdutil.RunFast("umount", req.Device)
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -161,11 +161,11 @@ func (h *RemovableMediaHandler) EjectDevice(w http.ResponseWriter, r *http.Reque
 	}
 
 	// First unmount
-	exec.Command("umount", req.Device).Run()
+	if _, err := cmdutil.RunFast("umount", req.Device); err != nil { log.Printf("WARN: pre-eject umount: %v", err) }
 
 	// Then eject
-	cmd := exec.Command("eject", req.Device)
-	if output, err := cmd.CombinedOutput(); err != nil {
+	output, err := cmdutil.RunFast("eject", req.Device)
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,

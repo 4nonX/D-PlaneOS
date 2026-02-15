@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -183,15 +184,21 @@ func (h *ZFSHandler) ListDatasets(w http.ResponseWriter, r *http.Request) {
 
 // Helper functions
 
-// executeCommand runs a command and returns ONLY stdout.
+// executeCommand runs a command with timeout and returns ONLY stdout.
 // Stderr is logged separately to prevent warning messages (e.g. "pool is DEGRADED")
 // from being misinterpreted as data by the ZFS parsers.
 func executeCommand(path string, args []string) (string, error) {
-	cmd := exec.Command(path, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		log.Printf("ZFS TIMEOUT [%s %v] after 30s", path, args)
+		return stdout.String(), fmt.Errorf("command timed out after 30s: %s %v", path, args)
+	}
 	if stderrStr := strings.TrimSpace(stderr.String()); stderrStr != "" {
 		log.Printf("ZFS stderr [%s %v]: %s", path, args, stderrStr)
 	}

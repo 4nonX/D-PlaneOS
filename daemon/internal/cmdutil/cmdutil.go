@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -62,5 +63,23 @@ func RunSlow(name string, args ...string) ([]byte, error) {
 func RunNoTimeout(name string, args ...string) ([]byte, error) {
 	cmd := exec.Command(name, args...)
 	return cmd.CombinedOutput()
+}
+
+// RunWithStdin executes a command with timeout and pipes stdinData to its stdin.
+// Use for: zfs load-key, zfs create (encryption), zfs change-key — commands that
+// require passphrase input via stdin.
+func RunWithStdin(timeout time.Duration, stdinData string, name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdin = strings.NewReader(stdinData)
+	output, err := cmd.CombinedOutput()
+
+	if ctx.Err() == context.DeadlineExceeded {
+		return output, fmt.Errorf("command timed out after %v: %s %v", timeout, name, args)
+	}
+
+	return output, err
 }
 
