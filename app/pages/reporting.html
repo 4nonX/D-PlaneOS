@@ -23,7 +23,7 @@
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <nav class="nav-container">
@@ -31,7 +31,7 @@
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -626,4 +626,72 @@ document.addEventListener("DOMContentLoaded",function(){
 });
 </script>
 <script src="/assets/js/realtime-client.js"></script>
+<!-- v2.1.0: Real-time Metrics, IOStat, ZFS Events -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const s = document.createElement('div');
+  s.style.marginTop = '48px';
+  s.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">System Metrics</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">Live Performance • I/O Stats • Events</p>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;" id="metrics-cards"></div>
+
+    <!-- IOStat -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid var(--md-sys-color-primary);">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-primary);">speed</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">ZFS I/O Statistics</div></div>
+        <button class="btn" onclick="loadIOStat()" style="background:rgba(255,255,255,0.05);">Refresh</button>
+      </div>
+      <div id="iostat-data" style="font-family:monospace;font-size:13px;color:rgba(255,255,255,0.6);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);white-space:pre;overflow-x:auto;"></div>
+    </div>
+
+    <!-- ZFS Events -->
+    <div class="card" style="padding:32px;border-left:4px solid #f59e0b;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#f59e0b;">event_note</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">ZFS Event Log</div></div>
+        <button class="btn" onclick="loadEvents()" style="background:rgba(255,255,255,0.05);">Refresh</button>
+      </div>
+      <div id="events-data" style="font-family:monospace;font-size:12px;color:rgba(255,255,255,0.5);max-height:400px;overflow-y:auto;"></div>
+    </div>
+  `;
+  main.appendChild(s);
+  loadMetrics(); loadIOStat(); loadEvents();
+  setInterval(loadMetrics, 15000);
+});
+async function loadMetrics() {
+  try { const r = await csrfFetch('/api/system/metrics'); const d = await r.json();
+    if (!d.success) return;
+    const cards = [
+      {label:'CPU Usage',value:(d.cpu_percent||0).toFixed(1)+'%',icon:'memory',color:d.cpu_percent>80?'#ef4444':'var(--md-sys-color-success)'},
+      {label:'Memory',value:(d.memory_used_percent||0).toFixed(1)+'%',icon:'memory_alt',color:d.memory_used_percent>85?'#ef4444':'var(--md-sys-color-primary)'},
+      {label:'Load Average',value:(d.load_1||0).toFixed(2),icon:'monitoring',color:'var(--md-sys-color-primary)'},
+      {label:'Uptime',value:d.uptime||'—',icon:'schedule',color:'var(--md-sys-color-success)'}
+    ];
+    document.getElementById('metrics-cards').innerHTML = cards.map(c => `
+      <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:var(--md-sys-shape-corner-medium);padding:20px;text-align:center;">
+        <span class="material-symbols-rounded" style="font-size:28px;color:${c.color};">${c.icon}</span>
+        <div style="font-size:24px;font-weight:700;margin:8px 0 4px;">${c.value}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.5);">${c.label}</div>
+      </div>`).join('');
+  } catch(e) {}
+}
+async function loadIOStat() {
+  try { const r = await csrfFetch('/api/zfs/iostat'); const d = await r.json();
+    document.getElementById('iostat-data').textContent = d.output || d.iostat || JSON.stringify(d, null, 2);
+  } catch(e) { document.getElementById('iostat-data').textContent = 'Failed to load'; }
+}
+async function loadEvents() {
+  try { const r = await csrfFetch('/api/zfs/events'); const d = await r.json();
+    const el = document.getElementById('events-data');
+    if (d.events && d.events.length) {
+      el.innerHTML = d.events.map(e => '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">'+(e.timestamp||'')+' '+( e.class||'')+' '+(e.description||e.message||'')+'</div>').join('');
+    } else { el.textContent = d.output || 'No recent events'; }
+  } catch(e) { el.textContent = 'Failed to load'; }
+}
+</script>
 </body></html>

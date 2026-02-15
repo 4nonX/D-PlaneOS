@@ -49,7 +49,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <nav class="nav-container">
@@ -57,7 +57,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -635,5 +635,70 @@ async function deleteShare(id, name) {
 loadShares();
 </script>
   <script src="/assets/js/realtime-client.js"></script>
+<!-- v2.1.0: SMB VFS Module Configuration -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const vfsSection = document.createElement('div');
+  vfsSection.style.marginTop = '48px';
+  vfsSection.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">Advanced Share Features</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">VFS Modules • macOS • Windows • Recycle</p>
+
+    <div class="card" style="padding:32px;margin-bottom:24px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;">
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:var(--md-sys-shape-corner-large);padding:24px;text-align:center;">
+          <span class="material-symbols-rounded" style="font-size:40px;color:#8b5cf6;">laptop_mac</span>
+          <div style="font-size:18px;font-weight:700;margin:12px 0 8px;">Time Machine</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px;">macOS backup via vfs_fruit</div>
+          <label style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="vfs-timemachine" style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;">
+            <span style="font-size:14px;">Enable</span>
+          </label>
+        </div>
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:var(--md-sys-shape-corner-large);padding:24px;text-align:center;">
+          <span class="material-symbols-rounded" style="font-size:40px;color:#3b82f6;">history</span>
+          <div style="font-size:18px;font-weight:700;margin:12px 0 8px;">Shadow Copies</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px;">Windows Previous Versions via ZFS snapshots</div>
+          <label style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="vfs-shadowcopy" style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;">
+            <span style="font-size:14px;">Enable</span>
+          </label>
+        </div>
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:var(--md-sys-shape-corner-large);padding:24px;text-align:center;">
+          <span class="material-symbols-rounded" style="font-size:40px;color:var(--md-sys-color-success);">delete_sweep</span>
+          <div style="font-size:18px;font-weight:700;margin:12px 0 8px;">Recycle Bin</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px;">Recover deleted files via vfs_recycle</div>
+          <label style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="vfs-recycle" style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;">
+            <span style="font-size:14px;">Enable</span>
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:24px;display:flex;justify-content:flex-end;">
+        <button class="btn btn-primary" onclick="applyVFS()">
+          <span class="material-symbols-rounded" style="font-size:18px;">save</span> Apply VFS Settings
+        </button>
+      </div>
+    </div>
+  `;
+  main.appendChild(vfsSection);
+});
+
+async function applyVFS() {
+  const data = {
+    share_name: '_global',
+    time_machine: document.getElementById('vfs-timemachine').checked,
+    shadow_copy: document.getElementById('vfs-shadowcopy').checked,
+    recycle_bin: document.getElementById('vfs-recycle').checked
+  };
+  try {
+    const r = await csrfFetch('/api/smb/vfs', { method:'POST', body:JSON.stringify(data) });
+    const d = await r.json();
+    d.success ? ui.toast('VFS modules configured — add generated lines to smb.conf', 'success') : ui.toast(d.error, 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+</script>
 </body>
 </html>

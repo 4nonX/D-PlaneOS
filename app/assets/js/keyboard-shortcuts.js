@@ -1,4 +1,4 @@
-// D-PlaneOS v2.0.0 - Keyboard Shortcuts
+// D-PlaneOS v2.1.0 - Keyboard Shortcuts
 
 class KeyboardShortcuts {
   constructor() {

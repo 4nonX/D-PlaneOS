@@ -53,7 +53,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <nav class="nav-container">
@@ -61,7 +61,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -477,7 +477,7 @@ if (window.ConnectionMonitor) {
 <span class="material-symbols-rounded setting-icon">update</span>
 <div class="setting-info">
 <div class="setting-name">System Version</div>
-<div class="setting-desc">D-PlaneOS v2.0.0</div>
+<div class="setting-desc">D-PlaneOS v2.1.0</div>
 </div>
 <button class="icon-btn" onclick="checkUpdates()"><span class="material-symbols-rounded">refresh</span></button>
 </div>
@@ -738,4 +738,184 @@ async function testTelegram() {
 document.addEventListener('DOMContentLoaded', loadTelegramConfig);
 </script>
   <script src="/assets/js/realtime-client.js"></script>
+<!-- v2.1.0: NixOS Configuration Guard -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const nix = document.createElement('div');
+  nix.style.marginTop = '48px';
+  nix.id = 'nixos-section';
+  nix.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">NixOS Configuration</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">Validate • Apply • Diff • Watchdog</p>
+    <div id="nixos-detect" style="margin-bottom:24px;"></div>
+
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid #06b6d4;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#06b6d4;">verified_user</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Config Guard</div></div>
+        <div id="watchdog-status"></div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <button class="btn" onclick="nixValidate()" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">fact_check</span> Dry-Run Validate</button>
+        <button class="btn btn-primary" onclick="nixApply()">
+          <span class="material-symbols-rounded" style="font-size:18px;">rocket_launch</span> Apply with Watchdog (120s)</button>
+        <button class="btn" onclick="nixConfirm()" style="background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.3);color:var(--md-sys-color-success);">
+          <span class="material-symbols-rounded" style="font-size:18px;">check_circle</span> Confirm</button>
+        <button class="btn" onclick="nixGenerations()" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">history</span> Generations</button>
+        <button class="btn" onclick="nixRollback()" style="background:rgba(239,68,68,0.15);color:#ef4444;">
+          <span class="material-symbols-rounded" style="font-size:18px;">undo</span> Rollback</button>
+      </div>
+      <div id="nix-output" style="margin-top:16px;font-family:monospace;font-size:12px;color:rgba(255,255,255,0.6);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);max-height:300px;overflow-y:auto;display:none;"></div>
+    </div>
+
+    <div class="card" style="padding:32px;border-left:4px solid #8b5cf6;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#8b5cf6;">difference</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Generation Diff</div></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:end;margin-bottom:16px;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">From Gen #</label>
+          <input id="diff-from" type="number" placeholder="42" style="width:120px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">To Gen # (empty=current)</label>
+          <input id="diff-to" type="number" placeholder="current" style="width:120px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <button class="btn btn-primary" onclick="nixDiff()"><span class="material-symbols-rounded" style="font-size:18px;">compare</span> Compare</button>
+      </div>
+      <div id="diff-output" style="font-family:monospace;font-size:12px;color:rgba(255,255,255,0.6);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);max-height:400px;overflow-y:auto;display:none;"></div>
+    </div>
+  `;
+  main.appendChild(nix);
+  detectNixOS();
+});
+async function detectNixOS() {
+  try { const r = await csrfFetch('/api/nixos/detect'); const d = await r.json();
+    const el = document.getElementById('nixos-detect');
+    if (!d.success || !d.is_nixos) { document.getElementById('nixos-section').style.display='none'; return; }
+    el.innerHTML = `<div class="badge badge-success" style="font-size:14px;padding:8px 16px;">NixOS ${d.version||''} • ${d.generation_count||0} generations</div>`;
+    checkWatchdog();
+  } catch(e) { document.getElementById('nixos-section').style.display='none'; }
+}
+async function nixValidate() {
+  try { ui.toast('Validating...','info'); const r = await csrfFetch('/api/nixos/validate',{method:'POST',body:JSON.stringify({flake_path:'/etc/nixos'})}); const d = await r.json();
+    const el = document.getElementById('nix-output'); el.style.display='block';
+    el.textContent = d.output||d.error||'No output'; d.success ? ui.toast('Config valid','success') : ui.toast('Validation failed','error');
+  } catch(e) { ui.toast('Error','error'); }
+}
+async function nixApply() {
+  if (!await ui.confirm('Apply NixOS Config','Apply configuration? Auto-rollback if not confirmed within 120 seconds.')) return;
+  try { ui.toast('Applying...','info'); const r = await csrfFetch('/api/nixos/apply',{method:'POST',body:JSON.stringify({flake_path:'/etc/nixos',timeout_seconds:120})}); const d = await r.json();
+    const el = document.getElementById('nix-output'); el.style.display='block'; el.textContent = d.output||'';
+    d.success ? ui.toast('Applied — confirm within 120s!','warning') : ui.toast('Failed','error'); checkWatchdog();
+  } catch(e) { ui.toast('Error','error'); }
+}
+async function nixConfirm() {
+  try { const r = await csrfFetch('/api/nixos/confirm',{method:'POST'}); const d = await r.json();
+    d.success ? ui.toast('Confirmed — watchdog cancelled','success') : ui.toast(d.error,'error'); checkWatchdog();
+  } catch(e) { ui.toast('Error','error'); }
+}
+async function checkWatchdog() {
+  try { const r = await csrfFetch('/api/nixos/watchdog'); const d = await r.json();
+    document.getElementById('watchdog-status').innerHTML = d.watchdog_active ? `<span class="badge badge-warning">Watchdog: ${d.remaining_sec}s remaining</span>` : '';
+  } catch(e) {}
+}
+async function nixDiff() {
+  const from = document.getElementById('diff-from').value;
+  const to = document.getElementById('diff-to').value;
+  if (!from) { ui.toast('Enter "from" generation','warning'); return; }
+  try { const r = await csrfFetch('/api/nixos/diff?from='+from+(to?'&to='+to:'')); const d = await r.json();
+    const el = document.getElementById('diff-output'); el.style.display='block'; el.textContent = d.diff||JSON.stringify(d,null,2);
+  } catch(e) { ui.toast('Error','error'); }
+}
+
+// NixOS Generations
+async function nixGenerations() {
+  try { const r = await csrfFetch('/api/nixos/generations'); const d = await r.json();
+    const el = document.getElementById('diff-output'); el.style.display = 'block';
+    if (d.generations && d.generations.length) {
+      el.innerHTML = d.generations.map(g => '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">Gen #'+g.number+' — '+(g.date||'')+' '+(g.current?' <strong>(current)</strong>':'')+'</div>').join('');
+    } else { el.textContent = d.output || 'No generations found'; }
+  } catch(e) { ui.toast('Error','error'); }
+}
+async function nixRollback() {
+  const gen = await ui.prompt('NixOS Rollback', 'Generation number to rollback to:');
+  if (!gen) return;
+  if (!await ui.confirm('Rollback NixOS', 'Rollback to generation '+gen+'? System will switch config.')) return;
+  try { ui.toast('Rolling back...','info');
+    const r = await csrfFetch('/api/nixos/rollback',{method:'POST',body:JSON.stringify({generation:parseInt(gen)})});
+    const d = await r.json();
+    d.success ? ui.toast('Rolled back to gen '+gen,'success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Error','error'); }
+}
+
+// Inject SMTP + NixOS buttons
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+
+  // SMTP Alert Configuration
+  const smtp = document.createElement('div');
+  smtp.style.marginTop = '48px';
+  smtp.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">Email Alerts (SMTP)</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">Get notified about disk failures, capacity warnings, scrub results</p>
+    <div class="card" style="padding:32px;border-left:4px solid #f59e0b;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">SMTP Host</label>
+          <input id="smtp-host" type="text" placeholder="smtp.gmail.com" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Port</label>
+          <input id="smtp-port" type="number" value="587" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Username</label>
+          <input id="smtp-user" type="text" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Password</label>
+          <input id="smtp-pass" type="password" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">From Address</label>
+          <input id="smtp-from" type="email" placeholder="nas@example.com" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">To Address(es)</label>
+          <input id="smtp-to" type="text" placeholder="admin@example.com" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-end;">
+        <button class="btn" onclick="testSMTP()" style="background:rgba(255,255,255,0.05);">Send Test Email</button>
+        <button class="btn btn-primary" onclick="saveSMTP()">Save SMTP Config</button>
+      </div>
+    </div>
+  `;
+  main.appendChild(smtp);
+  loadSMTPConfig();
+});
+
+async function loadSMTPConfig() {
+  try { const r = await csrfFetch('/api/alerts/smtp'); const d = await r.json();
+    if (d.configured && d.config) {
+      document.getElementById('smtp-host').value = d.config.host||'';
+      document.getElementById('smtp-port').value = d.config.port||587;
+      document.getElementById('smtp-user').value = d.config.username||'';
+      document.getElementById('smtp-from').value = d.config.from||'';
+      document.getElementById('smtp-to').value = d.config.to||'';
+    }
+  } catch(e) {}
+}
+function getSMTPData() {
+  return { host: document.getElementById('smtp-host').value, port: parseInt(document.getElementById('smtp-port').value)||587,
+    username: document.getElementById('smtp-user').value, password: document.getElementById('smtp-pass').value,
+    from: document.getElementById('smtp-from').value, to: document.getElementById('smtp-to').value };
+}
+async function saveSMTP() {
+  const data = getSMTPData();
+  if (!data.host || !data.from || !data.to) { ui.toast('Host, from, and to are required','warning'); return; }
+  try { const r = await csrfFetch('/api/alerts/smtp',{method:'POST',body:JSON.stringify(data)}); const d = await r.json();
+    d.success ? ui.toast('SMTP config saved','success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+async function testSMTP() {
+  const data = getSMTPData();
+  if (!data.host) { ui.toast('Configure SMTP first','warning'); return; }
+  try { ui.toast('Sending test email...','info');
+    const r = await csrfFetch('/api/alerts/smtp/test',{method:'POST',body:JSON.stringify(data)}); const d = await r.json();
+    d.success ? ui.toast(d.message||'Test email sent','success') : ui.toast('Failed: '+(d.error||'Unknown'),'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+</script>
 </body></html>

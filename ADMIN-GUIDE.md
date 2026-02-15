@@ -1,8 +1,8 @@
-# D-PlaneOS v2.0.0 Administrator Guide
+# D-PlaneOS v2.1.0 Administrator Guide
 
 **Complete guide for system administration and user management**
 
-> Updated for v2.0.0-production: RBAC, LDAP/AD, ZFS encryption, injection-hardened, OOM-protected
+> Updated for v2.1.0-production: RBAC, LDAP/AD, ZFS encryption, injection-hardened, OOM-protected
 
 ---
 

@@ -49,7 +49,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <nav class="nav-container">
@@ -57,7 +57,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -533,7 +533,7 @@ if (window.ConnectionMonitor) {
                         <select id="zil-device" class="form-input"></select>
                     </div>
                     <div class="form-group">
-                        <label><input type="checkbox" id="zil-mirror"> Mirror ZIL (recommended)</label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="zil-mirror" style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;"> Mirror ZIL (recommended)</label>
                     </div>
                     <button class="btn btn-primary" onclick="addZIL()">Add ZIL</button>
                 </div>
@@ -848,5 +848,332 @@ if (window.ConnectionMonitor) {
     .schedule-item { padding: 12px; background: #f5f5f5; margin-top: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
     </style>
   <script src="/assets/js/realtime-client.js"></script>
+
+<!-- v2.1.0: Scrub, VDEV, Disk Replace, Capacity Guardian -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+
+  // Inject new sections after existing content
+  const newSections = document.createElement('div');
+  newSections.innerHTML = `
+    <div style="margin-top:48px;">
+      <h2 class="page-title" style="font-size:28px;">Pool Operations</h2>
+      <p class="page-subtitle" style="margin-bottom:32px;">Scrub • Expand • Replace • Capacity</p>
+
+      <!-- Scrub Section -->
+      <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid var(--md-sys-color-success);">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+          <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-success);">verified_user</span>
+          <div style="flex:1;">
+            <div style="font-size:20px;font-weight:800;">ZFS Scrub</div>
+            <div style="font-size:14px;color:rgba(255,255,255,0.5);">Data integrity verification</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <select id="scrub-pool" class="btn" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;appearance:none;">
+              <option value="">Select pool...</option>
+            </select>
+            <button class="btn btn-primary" onclick="startScrub()">
+              <span class="material-symbols-rounded" style="font-size:18px;">play_arrow</span> Start
+            </button>
+            <button class="btn" onclick="stopScrub()" style="background:rgba(255,255,255,0.05);">
+              <span class="material-symbols-rounded" style="font-size:18px;">stop</span> Stop
+            </button>
+          </div>
+        </div>
+        <div id="scrub-status" style="font-family:monospace;font-size:13px;color:rgba(255,255,255,0.6);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);">No scrub running</div>
+      </div>
+
+      <!-- VDEV Add Section -->
+      <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid #f59e0b;">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+          <span class="material-symbols-rounded" style="font-size:32px;color:#f59e0b;">add_circle</span>
+          <div>
+            <div style="font-size:20px;font-weight:800;">Expand Pool</div>
+            <div style="font-size:14px;color:rgba(255,255,255,0.5);">Add VDEV, L2ARC cache, or SLOG device</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Pool</label>
+            <select id="vdev-pool" class="btn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;appearance:none;">
+              <option value="">Select...</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">VDEV Type</label>
+            <select id="vdev-type" class="btn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;appearance:none;">
+              <option value="mirror">Mirror</option>
+              <option value="raidz">RAIDZ</option>
+              <option value="raidz2">RAIDZ2</option>
+              <option value="cache">L2ARC (Cache)</option>
+              <option value="log">SLOG (Log)</option>
+              <option value="special">Special</option>
+              <option value="">Stripe (no redundancy)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Disks (comma-separated)</label>
+            <input id="vdev-disks" type="text" placeholder="sdc,sdd" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;">
+          </div>
+          <button class="btn btn-primary" onclick="addVdev()" style="white-space:nowrap;">
+            <span class="material-symbols-rounded" style="font-size:18px;">add</span> Add VDEV
+          </button>
+        </div>
+      </div>
+
+      <!-- Disk Replace Section -->
+      <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid #ef4444;">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+          <span class="material-symbols-rounded" style="font-size:32px;color:#ef4444;">swap_horiz</span>
+          <div>
+            <div style="font-size:20px;font-weight:800;">Replace Failed Disk</div>
+            <div style="font-size:14px;color:rgba(255,255,255,0.5);">Swap and resilver</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Pool</label>
+            <select id="replace-pool" class="btn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;appearance:none;">
+              <option value="">Select...</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Failed Disk</label>
+            <input id="replace-old" type="text" placeholder="sda" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;">
+          </div>
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">New Disk</label>
+            <input id="replace-new" type="text" placeholder="sde" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;">
+          </div>
+          <button class="btn" onclick="replaceDisk()" style="white-space:nowrap;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.3);color:#ef4444;">
+            <span class="material-symbols-rounded" style="font-size:18px;">swap_horiz</span> Replace
+          </button>
+        </div>
+      </div>
+
+      <!-- Capacity Guardian -->
+      <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid var(--md-sys-color-primary);">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+          <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-primary);">shield</span>
+          <div style="flex:1;">
+            <div style="font-size:20px;font-weight:800;">Capacity Guardian</div>
+            <div style="font-size:14px;color:rgba(255,255,255,0.5);">Emergency reserve protects against ZFS full freeze</div>
+          </div>
+          <button class="btn btn-primary" onclick="setupReserve()" style="white-space:nowrap;">Setup 2% Reserve</button>
+          <button class="btn" onclick="releaseReserve()" style="white-space:nowrap;background:rgba(255,255,255,0.05);">Release</button>
+        </div>
+        <div id="capacity-status" style="font-family:monospace;font-size:13px;color:rgba(255,255,255,0.6);"></div>
+      </div>
+
+      <!-- Extra Actions Row -->
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:24px;">
+        <button class="btn" onclick="runSMART('short')" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">health_and_safety</span> SMART Short</button>
+        <button class="btn" onclick="runSMART('long')" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">health_and_safety</span> SMART Long</button>
+        <button class="btn" onclick="showSMARTResults()" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">assignment</span> SMART Results</button>
+        <button class="btn" onclick="rollbackSnapshot()" style="background:rgba(239,68,68,0.15);color:#ef4444;">
+          <span class="material-symbols-rounded" style="font-size:18px;">undo</span> Rollback Snapshot</button>
+        <button class="btn" onclick="removePoolDevice()" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">eject</span> Remove Device</button>
+        <button class="btn" onclick="openScrubScheduler()" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">calendar_month</span> Schedule Scrub</button>
+        <button class="btn" onclick="revokeDeleg()" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">person_remove</span> Revoke Delegation</button>
+      </div>
+    </div>
+  `;
+  main.appendChild(newSections);
+
+  // Load pools for dropdowns
+  loadPoolSelectors();
+  loadCapacityStatus();
+  refreshScrubStatus();
+});
+
+async function loadPoolSelectors() {
+  try {
+    const r = await csrfFetch('/api/zfs/pools');
+    const d = await r.json();
+    if (!d.success || !d.pools) return;
+    ['scrub-pool','vdev-pool','replace-pool'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      d.pools.forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.name || p;
+        o.textContent = p.name || p;
+        sel.appendChild(o);
+      });
+    });
+  } catch(e) {}
+}
+
+async function startScrub() {
+  const pool = document.getElementById('scrub-pool').value;
+  if (!pool) { ui.toast('Select a pool', 'warning'); return; }
+  try {
+    const r = await csrfFetch('/api/zfs/scrub/start', { method:'POST', body:JSON.stringify({pool}) });
+    const d = await r.json();
+    d.success ? ui.toast('Scrub started', 'success') : ui.toast(d.error, 'error');
+    refreshScrubStatus();
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+
+async function stopScrub() {
+  const pool = document.getElementById('scrub-pool').value;
+  if (!pool) return;
+  try {
+    const r = await csrfFetch('/api/zfs/scrub/stop', { method:'POST', body:JSON.stringify({pool}) });
+    const d = await r.json();
+    d.success ? ui.toast('Scrub stopped', 'success') : ui.toast(d.error, 'error');
+    refreshScrubStatus();
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+
+async function refreshScrubStatus() {
+  const pool = document.getElementById('scrub-pool').value;
+  if (!pool) return;
+  try {
+    const r = await csrfFetch('/api/zfs/scrub/status?pool=' + pool);
+    const d = await r.json();
+    document.getElementById('scrub-status').textContent = d.scrub || 'No scrub running';
+  } catch(e) {}
+}
+
+async function addVdev() {
+  const pool = document.getElementById('vdev-pool').value;
+  const type = document.getElementById('vdev-type').value;
+  const disks = document.getElementById('vdev-disks').value.split(',').map(s=>s.trim()).filter(Boolean);
+  if (!pool || !disks.length) { ui.toast('Pool and disks required', 'warning'); return; }
+  if (!await ui.confirm('Add VDEV', `Add ${type||'stripe'} (${disks.join(', ')}) to ${pool}? This cannot be undone.`)) return;
+  try {
+    const r = await csrfFetch('/api/zfs/pool/add-vdev', { method:'POST', body:JSON.stringify({pool, vdev_type:type, disks}) });
+    const d = await r.json();
+    d.success ? ui.toast('VDEV added', 'success') : ui.toast(d.error, 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+
+async function replaceDisk() {
+  const pool = document.getElementById('replace-pool').value;
+  const old_disk = document.getElementById('replace-old').value.trim();
+  const new_disk = document.getElementById('replace-new').value.trim();
+  if (!pool || !old_disk || !new_disk) { ui.toast('All fields required', 'warning'); return; }
+  if (!await ui.confirm('Replace Disk', `Replace ${old_disk} with ${new_disk} in ${pool}? Resilver will start.`)) return;
+  try {
+    const r = await csrfFetch('/api/zfs/pool/replace', { method:'POST', body:JSON.stringify({pool, old_disk, new_disk}) });
+    const d = await r.json();
+    d.success ? ui.toast('Resilver started', 'success') : ui.toast(d.error, 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+
+async function loadCapacityStatus() {
+  try {
+    const r = await csrfFetch('/api/zfs/capacity');
+    const d = await r.json();
+    if (!d.success) return;
+    const el = document.getElementById('capacity-status');
+    if (!d.pools || !d.pools.length) { el.textContent = 'No pools found'; return; }
+    el.innerHTML = d.pools.map(p => {
+      const color = p.state==='emergency'?'#ef4444':p.state==='critical'?'#f59e0b':p.state==='warning'?'#eab308':'var(--md-sys-color-success)';
+      return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${color};"></span>
+        <strong>${p.pool}</strong>
+        <span>${p.used_percent}% used</span>
+        <span class="badge badge-${p.state==='ok'?'success':p.state==='warning'?'warning':'error'}">${p.state}</span>
+        ${p.has_reserve?'<span class="badge badge-info">Reserve active</span>':''}
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+
+async function setupReserve() {
+  const pool = document.getElementById('vdev-pool').value || document.getElementById('scrub-pool').value;
+  if (!pool) { ui.toast('Select a pool first', 'warning'); return; }
+  try {
+    const r = await csrfFetch('/api/zfs/capacity/reserve?pool='+pool, { method:'POST' });
+    const d = await r.json();
+    d.success ? ui.toast(`Reserve set: ${d.reserve_human}`, 'success') : ui.toast(d.error, 'error');
+    loadCapacityStatus();
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+
+// SMART Tests
+async function runSMART(type) {
+  const disk = await ui.prompt('SMART Test', 'Disk device:', '', 'sda');
+  if (!disk) return;
+  try { const r = await csrfFetch('/api/zfs/smart/test',{method:'POST',body:JSON.stringify({disk,test_type:type||'short'})}); const d = await r.json();
+    d.success ? ui.toast('SMART '+type+' test started on '+disk,'success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+async function showSMARTResults() {
+  const disk = await ui.prompt('SMART Results', 'Disk device:', '', 'sda');
+  if (!disk) return;
+  try { const r = await csrfFetch('/api/zfs/smart/results?disk='+encodeURIComponent(disk)); const d = await r.json();
+    await ui.modal('SMART Results: '+disk, '<pre style="max-height:400px;overflow:auto;font-family:monospace;font-size:12px;">'+(d.output||d.error||JSON.stringify(d,null,2))+'</pre>');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+
+// Snapshot Rollback
+async function rollbackSnapshot() {
+  const snap = await ui.prompt('Rollback Snapshot', 'Full snapshot name:', '', 'tank/data@daily-2025-01-01');
+  if (!snap) return;
+  if (!await ui.confirm('DANGEROUS: Rollback', 'Rollback to '+snap+'? ALL data written after this snapshot will be LOST.')) return;
+  try { const r = await csrfFetch('/api/zfs/snapshots/rollback',{method:'POST',body:JSON.stringify({snapshot:snap})}); const d = await r.json();
+    d.success ? ui.toast('Rolled back to '+snap,'success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+
+// Remove cache/log device
+async function removePoolDevice() {
+  const pool = document.getElementById('vdev-pool').value;
+  const device = await ui.prompt('Remove Device', 'Device to remove (cache/log only):', '', 'sdc');
+  if (!pool || !device) { ui.toast('Pool and device required','warning'); return; }
+  if (!await ui.confirm('Remove Device', 'Remove '+device+' from '+pool+'?')) return;
+  try { const r = await csrfFetch('/api/zfs/pool/remove-device',{method:'POST',body:JSON.stringify({pool,device})}); const d = await r.json();
+    d.success ? ui.toast('Device removed','success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+
+// Capacity release
+async function releaseReserve() {
+  const pool = document.getElementById('vdev-pool').value || document.getElementById('scrub-pool').value;
+  if (!pool) { ui.toast('Select a pool','warning'); return; }
+  try { const r = await csrfFetch('/api/zfs/capacity/release?pool='+pool,{method:'POST'}); const d = await r.json();
+    d.success ? ui.toast('Reserve released','success') : ui.toast(d.error,'error'); loadCapacityStatus();
+  } catch(e) { ui.toast('Failed','error'); }
+}
+
+// Delegation revoke
+async function revokeDeleg() {
+  const dataset = await ui.prompt('Revoke Delegation', 'Dataset:','','tank/data');
+  if (!dataset) return;
+  const user = await ui.prompt('Revoke From', 'Username:');
+  if (!user) return;
+  try { const r = await csrfFetch('/api/zfs/delegation/revoke',{method:'POST',body:JSON.stringify({dataset,user})}); const d = await r.json();
+    d.success ? ui.toast('Delegation revoked','success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+
+// Scrub Scheduler
+async function openScrubScheduler() {
+  try { const r = await csrfFetch('/api/zfs/scrub/schedule'); const d = await r.json();
+    const schedules = d.schedules || [];
+    const pool = document.getElementById('scrub-pool').value;
+    if (!pool) { ui.toast('Select a pool','warning'); return; }
+    const interval = await ui.prompt('Scrub Schedule', 'Interval (daily/weekly/monthly):', 'weekly');
+    if (!interval) return;
+    const hour = await ui.prompt('Scrub Hour', 'Hour (0-23):', '3');
+    if (hour === null) return;
+    schedules.push({pool, interval, hour: parseInt(hour), day: 0});
+    const sr = await csrfFetch('/api/zfs/scrub/schedule',{method:'POST',body:JSON.stringify(schedules)});
+    const sd = await sr.json();
+    sd.success ? ui.toast('Scrub scheduled for '+pool,'success') : ui.toast(sd.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+</script>
 </body>
 </html>

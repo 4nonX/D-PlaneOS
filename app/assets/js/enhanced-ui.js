@@ -1,4 +1,4 @@
-// D-PlaneOS v2.0.0 - Enhanced UI Library
+// D-PlaneOS v2.1.0 - Enhanced UI Library
 (function() {
   'use strict';
   
@@ -109,6 +109,59 @@
             backdrop.remove();
             resolve(btn.dataset.action === 'confirm');
           });
+        });
+      });
+    },
+
+    async prompt(title, message, defaultValue = '', placeholder = '') {
+      return new Promise((resolve) => {
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop';
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:10000;backdrop-filter:blur(4px);';
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:rgba(30,41,59,0.98);border-radius:16px;border:1px solid rgba(255,255,255,0.1);max-width:480px;width:90%;backdrop-filter:blur(10px);';
+        const inputId = 'ui-prompt-' + Date.now();
+        modal.innerHTML = `
+          <div style="padding:24px 24px 0;font-size:18px;font-weight:700;">${title}</div>
+          <div style="padding:12px 24px;color:rgba(255,255,255,0.7);font-size:14px;">${message}</div>
+          <div style="padding:0 24px 16px;">
+            <input id="${inputId}" type="text" value="${defaultValue}" placeholder="${placeholder}"
+              style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:12px 16px;color:#fff;font-size:15px;outline:none;">
+          </div>
+          <div style="padding:0 24px 24px;display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn" data-action="cancel" style="background:rgba(255,255,255,0.08);border:none;padding:10px 20px;border-radius:12px;color:rgba(255,255,255,0.7);cursor:pointer;">Cancel</button>
+            <button class="btn btn-primary" data-action="ok" style="border:none;padding:10px 20px;border-radius:12px;cursor:pointer;">OK</button>
+          </div>
+        `;
+        backdrop.appendChild(modal);
+        document.body.appendChild(backdrop);
+        const input = document.getElementById(inputId);
+        input.focus();
+        input.select();
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { backdrop.remove(); resolve(input.value); } if (e.key === 'Escape') { backdrop.remove(); resolve(null); } });
+        modal.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => { backdrop.remove(); resolve(btn.dataset.action === 'ok' ? input.value : null); });
+        });
+      });
+    },
+
+    async modal(title, content, buttons = [{text:'Close',primary:true}]) {
+      return new Promise((resolve) => {
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop';
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:10000;backdrop-filter:blur(4px);';
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:rgba(30,41,59,0.98);border-radius:16px;border:1px solid rgba(255,255,255,0.1);max-width:640px;width:90%;max-height:80vh;overflow-y:auto;backdrop-filter:blur(10px);';
+        const btnHtml = buttons.map((b,i) => `<button class="btn${b.primary?' btn-primary':''}" data-idx="${i}" style="border:none;padding:10px 20px;border-radius:12px;cursor:pointer;${b.primary?'':'background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);'}">${b.text}</button>`).join('');
+        modal.innerHTML = `
+          <div style="padding:24px 24px 0;font-size:18px;font-weight:700;">${title}</div>
+          <div style="padding:16px 24px;">${content}</div>
+          <div style="padding:0 24px 24px;display:flex;gap:8px;justify-content:flex-end;">${btnHtml}</div>
+        `;
+        backdrop.appendChild(modal);
+        document.body.appendChild(backdrop);
+        modal.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => { backdrop.remove(); resolve(parseInt(btn.dataset.idx)); });
         });
       });
     },

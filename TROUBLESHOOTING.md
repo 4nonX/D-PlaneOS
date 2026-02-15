@@ -1,4 +1,4 @@
-# D-PlaneOS v2.0.0 - Troubleshooting Guide
+# D-PlaneOS v2.1.0 - Troubleshooting Guide
 
 **Critical Issues & Solutions**
 

@@ -438,7 +438,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -733,7 +733,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
                         <p>Uses inotify watches for instant file detection</p>
                     </div>
                     <label class="switch">
-                        <input type="checkbox" id="realtime-toggle" checked>
+                        <input type="checkbox" id="realtime-toggle" checked style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;">
                         <span class="switch-slider"></span>
                     </label>
                 </div>
@@ -744,7 +744,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
                         <p>Scans directories every 30 minutes (no watch limit)</p>
                     </div>
                     <label class="switch">
-                        <input type="checkbox" id="periodic-toggle" checked>
+                        <input type="checkbox" id="periodic-toggle" checked style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;">
                         <span class="switch-slider"></span>
                     </label>
                 </div>
@@ -838,7 +838,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
                     <p>Show real-time toast notifications for warnings</p>
                 </div>
                 <label class="switch">
-                    <input type="checkbox" id="websocket-alerts-toggle" checked>
+                    <input type="checkbox" id="websocket-alerts-toggle" checked style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;">
                     <span class="switch-slider"></span>
                 </label>
             </div>
@@ -1248,7 +1248,7 @@ if (window.ConnectionMonitor) {
         }
 
         function resetToDefaults() {
-            if (confirm('Reset all settings to recommended defaults?')) {
+            if (await ui.confirm('Reset Settings', 'Reset all settings to recommended defaults?')) {
                 document.getElementById('arc-slider').value = 8;
                 document.getElementById('swappiness-slider').value = 10;
                 document.getElementById('inotify-warn-slider').value = 80;

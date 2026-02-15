@@ -33,10 +33,25 @@ type SnapshotSchedule struct {
 	LastRun    string `json:"last_run,omitempty"`
 }
 
-const scheduleFile = "/etc/dplaneos/snapshot-schedules.json"
+// ConfigDir is the base directory for D-PlaneOS config files.
+// Default: /etc/dplaneos (Debian), override with: /var/lib/dplaneos/config (NixOS)
+var ConfigDir = "/etc/dplaneos"
+
+// SetConfigDir allows main.go to override the config directory at startup
+func SetConfigDir(dir string) {
+	ConfigDir = dir
+	os.MkdirAll(ConfigDir, 0755)
+	os.MkdirAll(ConfigDir+"/ssl", 0755)
+}
+
+func configPath(filename string) string {
+	return ConfigDir + "/" + filename
+}
+
+const scheduleFile_deprecated = "" // replaced by configPath("snapshot-schedules.json")
 
 func (h *SnapshotScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
-	data, err := os.ReadFile(scheduleFile)
+	data, err := os.ReadFile(configPath("snapshot-schedules.json"))
 	if err != nil {
 		// No schedules yet — return empty array
 		w.Header().Set("Content-Type", "application/json")
@@ -79,7 +94,7 @@ func (h *SnapshotScheduleHandler) SaveSchedules(w http.ResponseWriter, r *http.R
 	// Save to file
 	os.MkdirAll(filepath.Dir(scheduleFile), 0755)
 	data, _ := json.MarshalIndent(schedules, "", "  ")
-	if err := os.WriteFile(scheduleFile, data, 0644); err != nil {
+	if err := os.WriteFile(configPath("snapshot-schedules.json"), data, 0644); err != nil {
 		http.Error(w, "Failed to save schedules", http.StatusInternalServerError)
 		return
 	}
@@ -93,7 +108,7 @@ func (h *SnapshotScheduleHandler) SaveSchedules(w http.ResponseWriter, r *http.R
 }
 
 func (h *SnapshotScheduleHandler) regenerateCron(schedules []SnapshotSchedule) {
-	cronFile := "/etc/cron.d/dplaneos-snapshots"
+	cronFile := configPath("cron-snapshots")
 	var lines []string
 	lines = append(lines, "# D-PlaneOS Automatic Snapshot Schedules")
 	lines = append(lines, "# Auto-generated — do not edit manually")
@@ -523,12 +538,12 @@ type CertHandler struct{}
 
 func NewCertHandler() *CertHandler { return &CertHandler{} }
 
-const certDir = "/etc/dplaneos/ssl"
+// certDir is computed dynamically via configPath("ssl")
 
 func (h *CertHandler) ListCerts(w http.ResponseWriter, r *http.Request) {
-	os.MkdirAll(certDir, 0700)
+	os.MkdirAll(configPath("ssl"), 0700)
 
-	entries, err := os.ReadDir(certDir)
+	entries, err := os.ReadDir(configPath("ssl"))
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "certs": []interface{}{}})
@@ -539,12 +554,12 @@ func (h *CertHandler) ListCerts(w http.ResponseWriter, r *http.Request) {
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".crt") {
 			name := strings.TrimSuffix(e.Name(), ".crt")
-			certFile := filepath.Join(certDir, e.Name())
+			certFile := filepath.Join(configPath("ssl"), e.Name())
 			// Get cert info
 			out, _ := cmdutil.RunFast("/usr/bin/openssl", "x509", "-in", certFile, "-noout", "-subject", "-enddate", "-issuer")
 			info := map[string]string{"name": name, "file": e.Name(), "details": strings.TrimSpace(string(out))}
 			// Check if key exists
-			keyFile := filepath.Join(certDir, name+".key")
+			keyFile := filepath.Join(configPath("ssl"), name+".key")
 			if _, err := os.Stat(keyFile); err == nil {
 				info["has_key"] = "true"
 			}
@@ -592,9 +607,9 @@ func (h *CertHandler) GenerateSelfSigned(w http.ResponseWriter, r *http.Request)
 		req.CN = "dplaneos.local"
 	}
 
-	os.MkdirAll(certDir, 0700)
-	keyFile := filepath.Join(certDir, req.Name+".key")
-	certFile := filepath.Join(certDir, req.Name+".crt")
+	os.MkdirAll(configPath("ssl"), 0700)
+	keyFile := filepath.Join(configPath("ssl"), req.Name+".key")
+	certFile := filepath.Join(configPath("ssl"), req.Name+".crt")
 
 	// Build SAN extension
 	sanExt := fmt.Sprintf("subjectAltName=DNS:%s", req.CN)
@@ -642,8 +657,8 @@ func (h *CertHandler) ActivateCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	certFile := filepath.Join(certDir, req.Name+".crt")
-	keyFile := filepath.Join(certDir, req.Name+".key")
+	certFile := filepath.Join(configPath("ssl"), req.Name+".crt")
+	keyFile := filepath.Join(configPath("ssl"), req.Name+".key")
 
 	if _, err := os.Stat(certFile); os.IsNotExist(err) {
 		http.Error(w, "Certificate not found", http.StatusNotFound)
@@ -920,7 +935,7 @@ func (h *PowerMgmtHandler) GetDiskStatus(w http.ResponseWriter, r *http.Request)
 
 	// Read saved spindown config
 	spindownConf := map[string]int{}
-	if data, err := os.ReadFile("/etc/dplaneos/power-management.json"); err == nil {
+	if data, err := os.ReadFile(configPath("power-management.json")); err == nil {
 		json.Unmarshal(data, &spindownConf)
 	}
 
@@ -966,13 +981,13 @@ func (h *PowerMgmtHandler) SetSpindown(w http.ResponseWriter, r *http.Request) {
 
 	// Save config for persistence across reboots
 	spindownConf := map[string]int{}
-	if data, err := os.ReadFile("/etc/dplaneos/power-management.json"); err == nil {
+	if data, err := os.ReadFile(configPath("power-management.json")); err == nil {
 		json.Unmarshal(data, &spindownConf)
 	}
 	spindownConf[req.Device] = req.Timeout
-	os.MkdirAll("/etc/dplaneos", 0755)
+	os.MkdirAll(ConfigDir, 0755)
 	data, _ := json.MarshalIndent(spindownConf, "", "  ")
-	os.WriteFile("/etc/dplaneos/power-management.json", data, 0644)
+	os.WriteFile(configPath("power-management.json"), data, 0644)
 
 	audit.LogAction("power_spindown", user, fmt.Sprintf("Set spindown %d on %s", req.Timeout, req.Device), true, duration)
 	w.Header().Set("Content-Type", "application/json")

@@ -424,13 +424,62 @@
         }
         
         async function checkAlerts() {
+            const alertsEl = document.getElementById('alerts');
             const alerts = [];
-            
-            // Check for system issues and create alerts
-            // This would integrate with a real alerting system
-            
-            // For now, just clear alerts
-            document.getElementById('alerts').innerHTML = '';
+
+            // Check ZFS health
+            try {
+                const r = await csrfFetch('/api/zfs/health');
+                const d = await r.json();
+                if (d.success && d.pools) {
+                    d.pools.forEach(p => {
+                        if (p.health !== 'ONLINE') alerts.push({level:'error', msg:`Pool ${p.name}: ${p.health}`});
+                        if (p.errors && p.errors !== 'No known data errors') alerts.push({level:'warning', msg:`Pool ${p.name}: ${p.errors}`});
+                    });
+                }
+            } catch(e) {}
+
+            // Check capacity
+            try {
+                const r = await csrfFetch('/api/zfs/capacity');
+                const d = await r.json();
+                if (d.success && d.pools) {
+                    d.pools.forEach(p => {
+                        if (p.used_percent > 90) alerts.push({level:'error', msg:`Pool ${p.pool}: ${p.used_percent}% full — critical!`});
+                        else if (p.used_percent > 80) alerts.push({level:'warning', msg:`Pool ${p.pool}: ${p.used_percent}% used`});
+                    });
+                }
+            } catch(e) {}
+
+            // Check stale locks
+            try {
+                const r = await csrfFetch('/api/system/stale-locks');
+                const d = await r.json();
+                if (d.success && d.count > 0) alerts.push({level:'warning', msg:`${d.count} stale lock(s) detected`});
+            } catch(e) {}
+
+            // Check disk latency
+            try {
+                const r = await csrfFetch('/api/zfs/disk-latency');
+                const d = await r.json();
+                if (d.success && d.slow_disks && d.slow_disks.length > 0) {
+                    d.slow_disks.forEach(disk => alerts.push({level:'warning', msg:`Slow disk: ${disk.name} (${disk.latency_ms}ms)`}));
+                }
+            } catch(e) {}
+
+            // Render alerts
+            if (alerts.length === 0) {
+                alertsEl.innerHTML = '<div style="padding:16px;text-align:center;color:rgba(255,255,255,0.3);"><span class="material-symbols-rounded" style="font-size:24px;vertical-align:middle;">check_circle</span> All systems healthy</div>';
+            } else {
+                alertsEl.innerHTML = alerts.map(a => {
+                    const color = a.level==='error'?'#ef4444':'#f59e0b';
+                    const icon = a.level==='error'?'error':'warning';
+                    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.05);">
+                        <span class="material-symbols-rounded" style="color:${color};font-size:20px;">${icon}</span>
+                        <span style="font-size:14px;">${a.msg}</span>
+                    </div>`;
+                }).join('');
+            }
         }
         
         function updateStatusIcon(component, isOk) {
@@ -471,4 +520,11 @@
         }
     </script>
 </body>
+<script>
+async function clearStaleLocks() {
+  try { const r = await csrfFetch('/api/system/stale-locks/clear',{method:'POST'}); const d = await r.json();
+    d.success ? ui.toast('Stale locks cleared','success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+</script>
 </html>

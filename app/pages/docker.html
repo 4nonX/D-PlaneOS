@@ -60,7 +60,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <nav class="nav-container">
@@ -68,7 +68,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -766,4 +766,164 @@ setInterval(loadContainers, 5000);
 </script>
   <script src="/assets/js/realtime-client.js"></script>
 <script src="/assets/js/docker-icons.js"></script>
+<!-- v2.1.0: Full Docker Management — Compose, Pull, Update, Stats, Sandbox -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const ds = document.createElement('div');
+  ds.style.marginTop = '48px';
+  ds.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">Docker Compose</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">Stacks • Pull • Update • Stats</p>
+
+    <!-- Compose -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid #06b6d4;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#06b6d4;">layers</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Stack Management</div></div>
+        <button class="btn" onclick="composeStatus()" style="background:rgba(255,255,255,0.05);">Status</button>
+        <button class="btn btn-primary" onclick="composeUp()">Compose Up</button>
+        <button class="btn" onclick="composeDown()" style="background:rgba(239,68,68,0.15);color:#ef4444;">Down</button>
+      </div>
+      <div>
+        <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Compose File Path</label>
+        <input id="compose-path" type="text" placeholder="/opt/stacks/myapp/docker-compose.yml" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;">
+      </div>
+      <div id="compose-output" style="margin-top:12px;font-family:monospace;font-size:12px;color:rgba(255,255,255,0.5);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);max-height:200px;overflow-y:auto;display:none;"></div>
+    </div>
+
+    <!-- Container Actions -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid var(--md-sys-color-primary);">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-primary);">deployed_code</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Container Operations</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin-bottom:16px;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Image</label>
+          <input id="pull-image" type="text" placeholder="nginx:latest" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="pullImage()"><span class="material-symbols-rounded" style="font-size:18px;">download</span> Pull</button>
+          <button class="btn" onclick="preflightCheck()" style="background:rgba(255,255,255,0.05);">Preflight</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Container Name (for remove/update)</label>
+          <input id="container-name" type="text" placeholder="myapp" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="updateContainer()" style="background:rgba(16,185,129,0.15);color:var(--md-sys-color-success);">Update</button>
+          <button class="btn" onclick="removeContainer()" style="background:rgba(239,68,68,0.15);color:#ef4444;">Remove</button>
+          <button class="btn" onclick="containerStats()" style="background:rgba(255,255,255,0.05);">Stats</button>
+        </div>
+      </div>
+      <div id="container-output" style="margin-top:12px;font-family:monospace;font-size:12px;color:rgba(255,255,255,0.5);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);max-height:200px;overflow-y:auto;display:none;"></div>
+    </div>
+
+    <!-- Sandbox -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid #8b5cf6;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#8b5cf6;">science</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Ephemeral Sandbox</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.5);">Test containers in isolated environments</div></div>
+        <button class="btn" onclick="sandboxList()" style="background:rgba(255,255,255,0.05);">List</button>
+        <button class="btn btn-primary" onclick="sandboxCreate()">Create</button>
+        <button class="btn" onclick="sandboxCleanup()" style="background:rgba(239,68,68,0.15);color:#ef4444;">Cleanup All</button>
+      </div>
+      <div id="sandbox-output" style="font-family:monospace;font-size:13px;color:rgba(255,255,255,0.5);"></div>
+    </div>
+  `;
+  main.appendChild(ds);
+});
+
+async function composeUp() {
+  const path = document.getElementById('compose-path').value;
+  if (!path) { ui.toast('Enter compose file path', 'warning'); return; }
+  ui.toast('Starting stack...', 'info');
+  try { const r = await csrfFetch('/api/docker/compose/up',{method:'POST',body:JSON.stringify({path})}); const d = await r.json();
+    showOutput('compose-output', d.output || d.error); d.success ? ui.toast('Stack started', 'success') : ui.toast(d.error, 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+async function composeDown() {
+  const path = document.getElementById('compose-path').value;
+  if (!path) { ui.toast('Enter compose file path', 'warning'); return; }
+  if (!await ui.confirm('Compose Down', 'Stop and remove all containers in this stack?')) return;
+  try { const r = await csrfFetch('/api/docker/compose/down',{method:'POST',body:JSON.stringify({path})}); const d = await r.json();
+    showOutput('compose-output', d.output || d.error); d.success ? ui.toast('Stack stopped', 'success') : ui.toast(d.error, 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+async function composeStatus() {
+  const path = document.getElementById('compose-path').value;
+  if (!path) { ui.toast('Enter compose file path', 'warning'); return; }
+  try { const r = await csrfFetch('/api/docker/compose/status?path='+encodeURIComponent(path)); const d = await r.json();
+    showOutput('compose-output', d.output || JSON.stringify(d, null, 2));
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+async function pullImage() {
+  const image = document.getElementById('pull-image').value;
+  if (!image) { ui.toast('Enter image name', 'warning'); return; }
+  ui.toast('Pulling ' + image + '...', 'info');
+  try { const r = await csrfFetch('/api/docker/pull',{method:'POST',body:JSON.stringify({image})}); const d = await r.json();
+    showOutput('container-output', d.output || d.error); d.success ? ui.toast('Pull complete', 'success') : ui.toast(d.error, 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+async function removeContainer() {
+  const name = document.getElementById('container-name').value;
+  if (!name) { ui.toast('Enter container name', 'warning'); return; }
+  if (!await ui.confirm('Remove Container', 'Remove container ' + name + '?')) return;
+  try { const r = await csrfFetch('/api/docker/remove',{method:'POST',body:JSON.stringify({container:name})}); const d = await r.json();
+    d.success ? ui.toast('Container removed', 'success') : ui.toast(d.error, 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+async function updateContainer() {
+  const name = document.getElementById('container-name').value;
+  if (!name) { ui.toast('Enter container name', 'warning'); return; }
+  if (!await ui.confirm('Update Container', 'Pull latest image and recreate ' + name + '?')) return;
+  ui.toast('Updating...', 'info');
+  try { const r = await csrfFetch('/api/docker/update',{method:'POST',body:JSON.stringify({container:name})}); const d = await r.json();
+    showOutput('container-output', d.output || d.error); d.success ? ui.toast('Updated', 'success') : ui.toast(d.error, 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+async function containerStats() {
+  const name = document.getElementById('container-name').value;
+  if (!name) { ui.toast('Enter container name', 'warning'); return; }
+  try { const r = await csrfFetch('/api/docker/stats?container='+encodeURIComponent(name)); const d = await r.json();
+    showOutput('container-output', d.stats || JSON.stringify(d, null, 2));
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+async function preflightCheck() {
+  const image = document.getElementById('pull-image').value || 'default';
+  try { const r = await csrfFetch('/api/docker/preflight'); const d = await r.json();
+    showOutput('container-output', JSON.stringify(d, null, 2)); d.success ? ui.toast('Preflight OK', 'success') : ui.toast('Issues found', 'warning');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+async function sandboxCreate() {
+  const image = await ui.prompt('Create Sandbox', 'Image to sandbox:', 'alpine:latest');
+  if (!image) return;
+  try { const r = await csrfFetch('/api/sandbox/create',{method:'POST',body:JSON.stringify({image})}); const d = await r.json();
+    d.success ? ui.toast('Sandbox created: ' + (d.container_id||'').substring(0,12), 'success') : ui.toast(d.error, 'error'); sandboxList();
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+async function sandboxList() {
+  try { const r = await csrfFetch('/api/sandbox/list'); const d = await r.json();
+    const el = document.getElementById('sandbox-output');
+    if (!d.sandboxes || !d.sandboxes.length) { el.textContent = 'No active sandboxes'; return; }
+    el.innerHTML = d.sandboxes.map(s => `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">${s.id?.substring(0,12)||s.name} — ${s.image} — ${s.state||'running'}</div>`).join('');
+  } catch(e) {}
+}
+async function sandboxDestroy(id) {
+  if (!await ui.confirm("Destroy Sandbox","Destroy this sandbox?")) return;
+  try { const r = await csrfFetch("/api/sandbox/destroy",{method:"POST",body:JSON.stringify({id})}); const d = await r.json();
+    d.success ? ui.toast("Destroyed","success") : ui.toast(d.error,"error"); sandboxList();
+  } catch(e) { ui.toast("Failed","error"); }
+}
+async function sandboxCleanup() {
+  if (!await ui.confirm('Cleanup', 'Destroy ALL sandboxes?')) return;
+  try { const r = await csrfFetch('/api/sandbox/cleanup',{method:'POST'}); const d = await r.json();
+    d.success ? ui.toast('Cleaned up ' + (d.removed||0) + ' sandboxes', 'success') : ui.toast(d.error, 'error'); sandboxList();
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+function showOutput(id, text) {
+  const el = document.getElementById(id); el.style.display = 'block'; el.textContent = text || 'No output';
+}
+</script>
 </body></html>

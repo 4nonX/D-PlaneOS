@@ -82,7 +82,7 @@ body { font-family: sans-serif; padding: 20px; background: #0a0a0a; color: #fff;
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -627,4 +627,51 @@ function toggleAutoRefresh() {
 </script>
 
 </body>
+<!-- v2.1.0: System Monitoring Live Data -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const s = document.createElement('div');
+  s.style.marginTop = '48px';
+  s.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;" id="sysmon-cards"></div>
+    <div class="card" style="padding:32px;border-left:4px solid var(--md-sys-color-primary);">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-primary);">health_and_safety</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">ZFS Health Overview</div></div>
+      </div>
+      <div id="health-overview" style="font-size:14px;"></div>
+    </div>
+  `;
+  main.appendChild(s);
+  refreshSysMon();
+  setInterval(refreshSysMon, 10000);
+});
+async function refreshSysMon() {
+  try {
+    const [mRes, hRes] = await Promise.all([csrfFetch('/api/system/metrics'), csrfFetch('/api/zfs/health')]);
+    const m = await mRes.json();
+    const h = await hRes.json();
+    if (m.success) {
+      document.getElementById('sysmon-cards').innerHTML = [
+        {l:'CPU',v:(m.cpu_percent||0).toFixed(0)+'%',c:m.cpu_percent>80?'#ef4444':'var(--md-sys-color-success)'},
+        {l:'Memory',v:(m.memory_used_percent||0).toFixed(0)+'%',c:m.memory_used_percent>85?'#ef4444':'var(--md-sys-color-primary)'},
+        {l:'Swap',v:(m.swap_used_percent||0).toFixed(0)+'%',c:m.swap_used_percent>50?'#f59e0b':'var(--md-sys-color-success)'}
+      ].map(c=>`<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:var(--md-sys-shape-corner-medium);padding:24px;text-align:center;">
+        <div style="font-size:36px;font-weight:800;color:${c.c};">${c.v}</div>
+        <div style="font-size:14px;color:rgba(255,255,255,0.5);margin-top:8px;">${c.l}</div></div>`).join('');
+    }
+    if (h.success && h.pools) {
+      document.getElementById('health-overview').innerHTML = h.pools.map(p => {
+        const color = p.health==='ONLINE'?'var(--md-sys-color-success)':p.health==='DEGRADED'?'#f59e0b':'#ef4444';
+        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+          <span style="width:10px;height:10px;border-radius:50%;background:${color};"></span>
+          <strong>${p.name}</strong> <span class="badge" style="background:${color};color:#fff;">${p.health}</span>
+          <span style="color:rgba(255,255,255,0.4);">${p.size||''} — ${p.errors||'No errors'}</span></div>`;
+      }).join('');
+    }
+  } catch(e) {}
+}
+</script>
 </html>

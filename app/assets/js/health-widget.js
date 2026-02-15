@@ -1,7 +1,7 @@
 /**
  * D-PlaneOS Dashboard Health Widget
  * 
- * Displays critical health information for 52TB+ systems:
+ * Displays critical health information for large storage systems:
  * - ZFS scrub status (last scrub, next scrub, progress)
  * - Disk temperatures (SMART data with warnings)
  * - Pool health summary

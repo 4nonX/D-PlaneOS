@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	Version = "2.0.0"
+	Version = "2.1.0"
 )
 
 func main() {
@@ -36,10 +36,15 @@ func main() {
 	telegramBot := flag.String("telegram-bot", "", "Telegram bot token (optional, for alerts)")
 	telegramChat := flag.String("telegram-chat", "", "Telegram chat ID (optional, for alerts)")
 	backupPath := flag.String("backup-path", "", "External path for DB backup (e.g., /mnt/usb/dplaneos-backup.db). If empty, backs up next to main DB.")
+	configDir := flag.String("config-dir", "/etc/dplaneos", "Config directory (for NixOS: /var/lib/dplaneos/config)")
+	smbConfPath := flag.String("smb-conf", "/etc/samba/smb.conf", "Path to write SMB config (for NixOS: /var/lib/dplaneos/smb-shares.conf)")
 	flag.Parse()
 
+	// Set configurable paths for NixOS compatibility
+	handlers.SetConfigDir(*configDir)
+
 	// Open database for buffered audit logging
-	// Critical for 52TB systems with high I/O:
+	// Critical for systems with high I/O:
 	// - WAL mode: concurrent reads during writes
 	// - busy_timeout: wait 30s during WAL checkpoints (prevents "database locked")
 	// - cache_size: 64MB in-memory cache
@@ -73,7 +78,7 @@ func main() {
 	}()
 
 	// Daily VACUUM INTO — creates a clean backup copy of the database
-	// Protects 52TB metadata against WAL corruption from hard power loss
+	// Protects metadata against WAL corruption from hard power loss
 	// Use -backup-path for off-pool backup (USB, second disk, NFS mount)
 	go func() {
 		dbBackupDest := *backupPath
@@ -220,6 +225,131 @@ func main() {
 	r.HandleFunc("/api/docker/containers", dockerHandler.ListContainers).Methods("GET")
 	r.HandleFunc("/api/docker/action", dockerHandler.ContainerAction).Methods("POST")
 	r.HandleFunc("/api/docker/logs", dockerHandler.ContainerLogs).Methods("GET")
+	// v2.1.0: Docker enhanced
+	r.HandleFunc("/api/docker/update", dockerHandler.SafeUpdate).Methods("POST")
+	r.HandleFunc("/api/docker/pull", dockerHandler.PullImage).Methods("POST")
+	r.HandleFunc("/api/docker/remove", dockerHandler.RemoveContainer).Methods("POST")
+	r.HandleFunc("/api/docker/stats", dockerHandler.ContainerStats).Methods("GET")
+	r.HandleFunc("/api/docker/compose/up", dockerHandler.ComposeUp).Methods("POST")
+	r.HandleFunc("/api/docker/compose/down", dockerHandler.ComposeDown).Methods("POST")
+	r.HandleFunc("/api/docker/compose/status", dockerHandler.ComposeStatus).Methods("GET")
+
+	// v2.1.0: ZFS Snapshots CRUD
+	snapshotCRUDHandler := handlers.NewZFSSnapshotHandler()
+	r.HandleFunc("/api/zfs/snapshots", snapshotCRUDHandler.ListSnapshots).Methods("GET")
+	r.HandleFunc("/api/zfs/snapshots", snapshotCRUDHandler.CreateSnapshot).Methods("POST")
+	r.HandleFunc("/api/zfs/snapshots", snapshotCRUDHandler.DestroySnapshot).Methods("DELETE")
+	r.HandleFunc("/api/zfs/snapshots/rollback", snapshotCRUDHandler.RollbackSnapshot).Methods("POST")
+
+	// v2.1.0: ZFS Replication (remote send/recv)
+	replicationRemoteHandler := handlers.NewReplicationHandler()
+	r.HandleFunc("/api/replication/remote", replicationRemoteHandler.ReplicateToRemote).Methods("POST")
+	r.HandleFunc("/api/replication/test", replicationRemoteHandler.TestRemoteConnection).Methods("POST")
+
+	// v2.1.0: ZFS Time Machine (browse snapshots, restore single files)
+	timeMachineHandler := handlers.NewZFSTimeMachineHandler()
+	r.HandleFunc("/api/timemachine/versions", timeMachineHandler.ListSnapshotVersions).Methods("GET")
+	r.HandleFunc("/api/timemachine/browse", timeMachineHandler.BrowseSnapshot).Methods("GET")
+	r.HandleFunc("/api/timemachine/restore", timeMachineHandler.RestoreFile).Methods("POST")
+
+	// v2.1.0: ZFS Sandbox (ephemeral Docker environments via ZFS clone)
+	sandboxHandler := handlers.NewZFSSandboxHandler()
+	r.HandleFunc("/api/sandbox/create", sandboxHandler.CreateSandbox).Methods("POST")
+	r.HandleFunc("/api/sandbox/list", sandboxHandler.ListSandboxes).Methods("GET")
+	r.HandleFunc("/api/sandbox/destroy", sandboxHandler.DestroySandbox).Methods("DELETE")
+
+	// v2.1.0: NixOS Config Guard (only active on NixOS systems)
+	nixosGuardHandler := handlers.NewNixOSGuardHandler()
+	r.HandleFunc("/api/nixos/detect", nixosGuardHandler.DetectNixOS).Methods("GET")
+	r.HandleFunc("/api/nixos/validate", nixosGuardHandler.ValidateConfig).Methods("POST")
+	r.HandleFunc("/api/nixos/generations", nixosGuardHandler.ListGenerations).Methods("GET")
+	r.HandleFunc("/api/nixos/rollback", nixosGuardHandler.RollbackGeneration).Methods("POST")
+
+	// v2.1.0: ZFS Health Predictor (deep monitoring, heatmap data)
+	healthHandler := handlers.NewZFSHealthHandler()
+	r.HandleFunc("/api/zfs/health", healthHandler.GetPoolHealth).Methods("GET")
+	r.HandleFunc("/api/zfs/iostat", healthHandler.GetIOStats).Methods("GET")
+	r.HandleFunc("/api/zfs/events", healthHandler.GetPoolEvents).Methods("GET")
+	r.HandleFunc("/api/zfs/smart", healthHandler.GetSMARTHealth).Methods("GET")
+
+	// v2.1.0: Pool Capacity Guardian (prevents ZFS full freeze)
+	capacityHandler := handlers.NewCapacityGuardianHandler()
+	r.HandleFunc("/api/zfs/capacity", capacityHandler.GetCapacityStatus).Methods("GET")
+	r.HandleFunc("/api/zfs/capacity/reserve", capacityHandler.SetupReserve).Methods("POST")
+	r.HandleFunc("/api/zfs/capacity/release", capacityHandler.ReleaseReserve).Methods("POST")
+
+	// v2.1.0: Power-loss state locks
+	stateLockHandler := handlers.NewStateLockHandler()
+	r.HandleFunc("/api/system/stale-locks", stateLockHandler.CheckStaleLocks).Methods("GET")
+	r.HandleFunc("/api/system/stale-locks/clear", stateLockHandler.ClearStaleLock).Methods("POST")
+
+	// v2.1.0: Sandbox orphan cleanup
+	r.HandleFunc("/api/sandbox/cleanup", sandboxHandler.CleanOrphanVolumes).Methods("POST")
+
+	// v2.1.0: NixOS diff + watchdog
+	r.HandleFunc("/api/nixos/diff", nixosGuardHandler.DiffGenerations).Methods("GET")
+	r.HandleFunc("/api/nixos/apply", nixosGuardHandler.ApplyWithWatchdog).Methods("POST")
+	r.HandleFunc("/api/nixos/confirm", nixosGuardHandler.ConfirmApply).Methods("POST")
+	r.HandleFunc("/api/nixos/watchdog", nixosGuardHandler.WatchdogStatus).Methods("GET")
+
+	// v2.1.0: Docker pre-flight check
+	r.HandleFunc("/api/docker/preflight", dockerHandler.PreFlightCheck).Methods("GET")
+
+	// v2.1.0: Audit log rotation
+	auditRotationHandler := handlers.NewAuditRotationHandler()
+	r.HandleFunc("/api/system/audit/rotate", auditRotationHandler.RotateAuditLogs).Methods("POST")
+	r.HandleFunc("/api/system/audit/stats", auditRotationHandler.GetAuditStats).Methods("GET")
+
+	// v2.1.0: Zombie disk watcher
+	zombieHandler := handlers.NewZombieWatcherHandler()
+	r.HandleFunc("/api/zfs/disk-latency", zombieHandler.CheckDiskLatency).Methods("GET")
+
+	// v2.1.0: LDAP Circuit Breaker
+	r.HandleFunc("/api/ldap/circuit-breaker", handlers.GetCircuitBreakerStatus).Methods("GET")
+	r.HandleFunc("/api/ldap/circuit-breaker/reset", handlers.ResetCircuitBreaker).Methods("POST")
+
+	// v2.1.0: ZFS Scrub management
+	r.HandleFunc("/api/zfs/scrub/start", handlers.StartScrub).Methods("POST")
+	r.HandleFunc("/api/zfs/scrub/stop", handlers.StopScrub).Methods("POST")
+	r.HandleFunc("/api/zfs/scrub/status", handlers.GetScrubStatus).Methods("GET")
+
+	// v2.1.0: VDEV / Pool expansion
+	r.HandleFunc("/api/zfs/pool/add-vdev", handlers.AddVdevToPool).Methods("POST")
+	r.HandleFunc("/api/zfs/pool/remove-device", handlers.RemoveCacheOrLog).Methods("POST")
+	r.HandleFunc("/api/zfs/pool/replace", handlers.ReplaceDisk).Methods("POST")
+
+	// v2.1.0: Dataset quotas
+	r.HandleFunc("/api/zfs/dataset/quota", handlers.SetDatasetQuota).Methods("POST")
+	r.HandleFunc("/api/zfs/dataset/quota", handlers.GetDatasetQuota).Methods("GET")
+
+	// v2.1.0: S.M.A.R.T. tests
+	r.HandleFunc("/api/zfs/smart/test", handlers.RunSMARTTest).Methods("POST")
+	r.HandleFunc("/api/zfs/smart/results", handlers.GetSMARTTestResults).Methods("GET")
+
+	// v2.1.0: ZFS delegation (zfs allow)
+	r.HandleFunc("/api/zfs/delegation", handlers.SetZFSDelegation).Methods("POST")
+	r.HandleFunc("/api/zfs/delegation", handlers.GetZFSDelegation).Methods("GET")
+	r.HandleFunc("/api/zfs/delegation/revoke", handlers.RevokeZFSDelegation).Methods("POST")
+
+	// v2.1.0: Network rollback
+	r.HandleFunc("/api/network/apply", handlers.ApplyNetworkWithRollback).Methods("POST")
+	r.HandleFunc("/api/network/confirm", handlers.ConfirmNetwork).Methods("POST")
+
+	// v2.1.0: SMB VFS modules
+	r.HandleFunc("/api/smb/vfs", handlers.GetSMBVFSConfig).Methods("GET")
+	r.HandleFunc("/api/smb/vfs", handlers.SetSMBVFSConfig).Methods("POST")
+
+	// v2.1.0: VLAN management
+	r.HandleFunc("/api/network/vlan", handlers.ListVLANs).Methods("GET")
+	r.HandleFunc("/api/network/vlan", handlers.CreateVLAN).Methods("POST")
+	r.HandleFunc("/api/network/vlan", handlers.DeleteVLAN).Methods("DELETE")
+
+	// v2.1.0: Link Aggregation / Bonding
+	r.HandleFunc("/api/network/bond", handlers.CreateBond).Methods("POST")
+
+	// v2.1.0: NTP configuration
+	r.HandleFunc("/api/system/ntp", handlers.GetNTPStatus).Methods("GET")
+	r.HandleFunc("/api/system/ntp", handlers.SetNTPServers).Methods("POST")
 
 	// Shares handlers (config management)
 	r.HandleFunc("/api/shares/smb/reload", handlers.ReloadSMBConfig).Methods("POST")
@@ -228,7 +358,7 @@ func main() {
 	r.HandleFunc("/api/shares/nfs/list", handlers.ListNFSExports).Methods("GET")
 
 	// Shares CRUD handlers
-	shareCRUDHandler := handlers.NewShareCRUDHandler(db)
+	shareCRUDHandler := handlers.NewShareCRUDHandler(db, *smbConfPath)
 	r.HandleFunc("/api/shares/list", shareCRUDHandler.HandleShares).Methods("GET")
 	r.HandleFunc("/api/shares", shareCRUDHandler.HandleShares).Methods("GET", "POST")
 
@@ -359,6 +489,18 @@ func main() {
 	r.HandleFunc("/api/power/spindown", powerHandler.SetSpindown).Methods("POST")
 	r.HandleFunc("/api/power/spindown-now", powerHandler.SpindownNow).Methods("POST")
 
+	// SMTP Email Alerting
+	r.HandleFunc("/api/alerts/smtp", handlers.GetSMTPConfig).Methods("GET")
+	r.HandleFunc("/api/alerts/smtp", handlers.SaveSMTPConfig).Methods("POST")
+	r.HandleFunc("/api/alerts/smtp/test", handlers.TestSMTP).Methods("POST")
+
+	// ZFS Scrub Scheduler
+	r.HandleFunc("/api/zfs/scrub/schedule", handlers.GetScrubSchedules).Methods("GET")
+	r.HandleFunc("/api/zfs/scrub/schedule", handlers.SaveScrubSchedules).Methods("POST")
+
+	// Start background monitors
+	handlers.StartScrubMonitor()
+
 	// WebSocket for real-time monitoring
 	wsHandler := handlers.NewWebSocketHandler(wsHub)
 	r.HandleFunc("/ws/monitor", wsHandler.HandleMonitor)
@@ -371,6 +513,10 @@ func main() {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
+
+	// Start background monitors
+	handlers.StartCapacityMonitor()
+	log.Println("Capacity guardian started (checks every 5 min)")
 
 	// Start server in goroutine
 	go func() {

@@ -49,7 +49,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <nav class="nav-container">
@@ -57,7 +57,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -606,4 +606,114 @@ loadNetworkInterfaces();
 
 </script>
   <script src="/assets/js/realtime-client.js"></script>
+<!-- v2.1.0: VLAN, Bond/LACP, NTP -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const adv = document.createElement('div');
+  adv.style.marginTop = '48px';
+  adv.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">Advanced Networking</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">VLAN • Bond/LACP • NTP</p>
+
+    <!-- VLAN -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid #06b6d4;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#06b6d4;">lan</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">VLAN (802.1Q)</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Parent</label>
+          <input id="vlan-parent" type="text" placeholder="eth0" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">VLAN ID</label>
+          <input id="vlan-id" type="number" min="1" max="4094" placeholder="100" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">IP (optional)</label>
+          <input id="vlan-ip" type="text" placeholder="10.0.100.1/24" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <button class="btn btn-primary" onclick="createVLAN()"><span class="material-symbols-rounded" style="font-size:18px;">add</span> Create</button>
+      </div>
+      <div id="vlan-list" style="margin-top:16px;font-family:monospace;font-size:13px;color:rgba(255,255,255,0.6);"></div>
+    </div>
+
+    <!-- Bond/LACP -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid #f59e0b;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#f59e0b;">cable</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Link Aggregation / LACP</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Bond Name</label>
+          <input id="bond-name" type="text" placeholder="bond0" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Slaves</label>
+          <input id="bond-slaves" type="text" placeholder="eth0,eth1" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Mode</label>
+          <select id="bond-mode" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;appearance:none;">
+            <option value="802.3ad">802.3ad (LACP)</option>
+            <option value="active-backup">Active-Backup</option>
+            <option value="balance-rr">Balance Round-Robin</option>
+            <option value="balance-alb">Adaptive Load Balance</option>
+          </select></div>
+        <button class="btn btn-primary" onclick="createBondUI()"><span class="material-symbols-rounded" style="font-size:18px;">add</span> Create</button>
+      </div>
+    </div>
+
+    <!-- NTP -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid var(--md-sys-color-primary);">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-primary);">schedule</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Time Synchronization (NTP)</div></div>
+        <div id="ntp-sync-badge"></div>
+      </div>
+      <div id="ntp-details" style="font-family:monospace;font-size:13px;color:rgba(255,255,255,0.6);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);max-height:200px;overflow-y:auto;"></div>
+    </div>
+  `;
+  main.appendChild(adv);
+  loadVLANs(); loadNTP();
+});
+
+async function createVLAN() {
+  const data = { parent: document.getElementById('vlan-parent').value, vlan_id: parseInt(document.getElementById('vlan-id').value), ip: document.getElementById('vlan-ip').value };
+  if (!data.parent || !data.vlan_id) { ui.toast('Parent and VLAN ID required', 'warning'); return; }
+  try { const r = await csrfFetch('/api/network/vlan', {method:'POST',body:JSON.stringify(data)}); const d = await r.json(); d.success ? (ui.toast('VLAN created','success'), loadVLANs()) : ui.toast(d.error,'error'); } catch(e) { ui.toast('Failed','error'); }
+}
+async function loadVLANs() {
+  try { const r = await csrfFetch('/api/network/vlan'); const d = await r.json(); document.getElementById('vlan-list').textContent = d.vlans || 'No VLANs configured'; } catch(e) {}
+}
+async function createBondUI() {
+  const data = { name: document.getElementById('bond-name').value, slaves: document.getElementById('bond-slaves').value.split(',').map(s=>s.trim()), mode: document.getElementById('bond-mode').value };
+  if (!data.name || !data.slaves.length) { ui.toast('Name and slaves required','warning'); return; }
+  if (!await ui.confirm('Create Bond', `Create ${data.name} (${data.mode}) with ${data.slaves.join(', ')}?`)) return;
+  try { const r = await csrfFetch('/api/network/bond', {method:'POST',body:JSON.stringify(data)}); const d = await r.json(); d.success ? ui.toast('Bond created','success') : ui.toast(d.error,'error'); } catch(e) { ui.toast('Failed','error'); }
+}
+async function loadNTP() {
+  try { const r = await csrfFetch('/api/system/ntp'); const d = await r.json();
+    document.getElementById('ntp-sync-badge').innerHTML = d.synced ? '<span class="badge badge-success">Synchronized</span>' : '<span class="badge badge-warning">Not synced</span>';
+    document.getElementById('ntp-details').textContent = d.details || 'No NTP data'; } catch(e) {}
+}
+
+// Network apply with rollback timer
+async function applyNetworkChanges() {
+  if (!await ui.confirm('Apply Network Config', 'Apply changes? Auto-rollback in 30s if not confirmed. You may lose connectivity!')) return;
+  try { ui.toast('Applying... confirm within 30 seconds!','warning');
+    const r = await csrfFetch('/api/network/apply',{method:'POST',body:JSON.stringify({timeout_seconds:30})});
+    const d = await r.json();
+    if (d.success) {
+      ui.toast('Applied — click Confirm NOW if network works!','warning');
+      // Show confirm button prominently
+      const btn = document.createElement('div');
+      btn.id = 'net-confirm-overlay';
+      btn.style.cssText = 'position:fixed;bottom:32px;right:32px;z-index:9999;';
+      btn.innerHTML = '<button class="btn btn-primary" onclick="confirmNetwork()" style="padding:16px 32px;font-size:18px;box-shadow:0 8px 32px rgba(102,126,234,0.6);animation:pulse 1s infinite;"><span class="material-symbols-rounded">check_circle</span> CONFIRM Network</button>';
+      document.body.appendChild(btn);
+      setTimeout(() => { const o = document.getElementById('net-confirm-overlay'); if(o) o.remove(); }, 30000);
+    } else { ui.toast(d.error,'error'); }
+  } catch(e) { ui.toast('Apply failed','error'); }
+}
+async function confirmNetwork() {
+  try { const r = await csrfFetch('/api/network/confirm',{method:'POST'}); const d = await r.json();
+    d.success ? ui.toast('Network confirmed — rollback cancelled','success') : ui.toast(d.error,'error');
+    const o = document.getElementById('net-confirm-overlay'); if(o) o.remove();
+  } catch(e) { ui.toast('Failed','error'); }
+}
+</script>
 </body></html>

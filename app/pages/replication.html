@@ -49,7 +49,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <nav class="nav-container">
@@ -57,7 +57,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -631,4 +631,48 @@ loadReplicationTasks();
 
 </script>
   <script src="/assets/js/realtime-client.js"></script>
+<!-- v2.1.0: Remote SSH Replication -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const s = document.createElement('div');
+  s.style.marginTop = '48px';
+  s.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">Remote Replication</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">SSH • Resume • Bandwidth Control</p>
+    <div class="card" style="padding:32px;border-left:4px solid var(--md-sys-color-primary);">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Snapshot</label>
+          <input id="repl-snap" type="text" placeholder="tank/data@daily-2025-01-01" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Remote Host</label>
+          <input id="repl-host" type="text" placeholder="backup.local" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Remote Pool</label>
+          <input id="repl-pool" type="text" placeholder="backup/nas" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Rate Limit</label>
+          <input id="repl-rate" type="text" placeholder="50M (empty=unlimited)" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:20px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="repl-resume" style="accent-color:var(--md-sys-color-primary);width:16px;height:16px;"> Resume interrupted</label>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="repl-compressed" checked style="accent-color:var(--md-sys-color-primary);width:16px;height:16px;"> Compressed</label>
+        <div style="flex:1;"></div>
+        <button class="btn" onclick="testRemote()" style="background:rgba(255,255,255,0.05);">Test Connection</button>
+        <button class="btn btn-primary" onclick="startReplication()"><span class="material-symbols-rounded" style="font-size:18px;">send</span> Replicate</button>
+      </div>
+    </div>
+  `;
+  main.appendChild(s);
+});
+async function testRemote() {
+  const host = document.getElementById('repl-host').value;
+  if (!host) { ui.toast('Enter host','warning'); return; }
+  try { const r = await csrfFetch('/api/replication/test',{method:'POST',body:JSON.stringify({remote_host:host,remote_user:'root'})}); const d = await r.json(); d.success ? ui.toast('Connection OK ('+d.duration_ms+'ms)','success') : ui.toast('Failed: '+d.error,'error'); } catch(e) { ui.toast('Error','error'); }
+}
+async function startReplication() {
+  const data = { snapshot:document.getElementById('repl-snap').value, remote_host:document.getElementById('repl-host').value, remote_pool:document.getElementById('repl-pool').value, rate_limit:document.getElementById('repl-rate').value, resume:document.getElementById('repl-resume').checked, compressed:document.getElementById('repl-compressed').checked, remote_user:'root' };
+  if (!data.snapshot||!data.remote_host||!data.remote_pool) { ui.toast('Fill all required fields','warning'); return; }
+  ui.toast('Replication started...','info');
+  try { const r = await csrfFetch('/api/replication/remote',{method:'POST',body:JSON.stringify(data)}); const d = await r.json(); d.success ? ui.toast('Replication complete ('+d.duration_ms+'ms)','success') : ui.toast(d.error||'Failed','error'); } catch(e) { ui.toast('Error','error'); }
+}
+</script>
 </body></html>

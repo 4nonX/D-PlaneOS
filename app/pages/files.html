@@ -79,7 +79,7 @@ body { font-family: sans-serif; margin: 0; padding: 20px; background: #0a0a0a; c
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -590,7 +590,7 @@ function refresh() {
 }
 
 async function createFolder() {
-  const name = prompt('Folder name:');
+  const name = await ui.prompt('Create Folder', 'Folder name:');
   if (!name) return;
   
   const path = currentPath + (currentPath.endsWith('/') ? '' : '/') + name;
@@ -598,31 +598,31 @@ async function createFolder() {
   try {
     const result = await daemonAPI.files_mkdir(path);
     if (result.success) {
-      alert('Folder created');
+      ui.toast('Folder created', 'success');
       refresh();
     } else {
-      alert('Error: ' + (result.error || 'Failed to create folder'));
+      ui.toast('Error: ' + (result.error || 'Failed to create folder'), 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    ui.toast('Error: ' + error.message, 'error');
   }
 }
 
 async function deleteFile(event, path) {
   event.stopPropagation();
   
-  if (!confirm(`Delete ${path}?`)) return;
+  if (!await ui.confirm('Delete File', `Delete ${path}?`)) return;
   
   try {
     const result = await daemonAPI.files_delete(path);
     if (result.success) {
-      alert('Deleted');
+      ui.toast('Deleted', 'success');
       refresh();
     } else {
-      alert('Error: ' + (result.error || 'Failed to delete'));
+      ui.toast('Error: ' + (result.error || 'Failed to delete'), 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    ui.toast('Error: ' + error.message, 'error');
   }
 }
 
@@ -640,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // === RECYCLE BIN ===
 async function moveToTrash(event, path) {
   event.stopPropagation();
-  if (!confirm('Move to trash?\n' + path)) return;
+  if (!await ui.confirm('Move to Trash', 'Move to trash? ' + path)) return;
   try {
     const res = await fetch('/api/trash/move', {
       method: 'POST',
@@ -652,9 +652,9 @@ async function moveToTrash(event, path) {
       if (window.EnhancedUI) EnhancedUI.toast('Moved to trash', 'success');
       refresh();
     } else {
-      alert('Trash error: ' + (data.error || 'failed'));
+      ui.toast('Trash error: ' + (data.error || 'failed'), 'error');
     }
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
 }
 
 function getSessionId() {
@@ -705,17 +705,17 @@ async function restoreTrash(name) {
     var res = await fetch('/api/trash/restore', {method:'POST',headers:{'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},body:JSON.stringify({name:name})});
     var data = await res.json();
     if (data.success) { if (window.EnhancedUI) EnhancedUI.toast('Restored to ' + data.restored_to, 'success'); loadTrash(); refresh(); }
-    else { alert('Restore failed'); }
-  } catch(e) { alert('Error: ' + e.message); }
+    else { ui.toast('Restore failed', 'error'); }
+  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
 }
 
 async function emptyTrash() {
-  if (!confirm('Permanently delete ALL items in trash? This cannot be undone.')) return;
+  if (!await ui.confirm('Empty Trash', 'Permanently delete ALL items? Cannot be undone.')) return;
   try {
     await fetch('/api/trash/empty', {method:'POST',headers:{'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},body:JSON.stringify({})});
     if (window.EnhancedUI) EnhancedUI.toast('Trash emptied', 'success');
     loadTrash();
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
 }
 </script>
 

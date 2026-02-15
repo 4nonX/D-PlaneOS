@@ -144,13 +144,13 @@ select.form-input option { background: #1a1a1a; color: #fff; }
 </style>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <nav class="nav-container">
   <div class="nav-main">
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     <div class="nav-links">
@@ -657,7 +657,7 @@ async function apiFetch(path, opts = {}) {
 function toast(msg, type) {
   if (window.EnhancedUI) EnhancedUI.toast(msg, type, 4000);
   else if (window.ui) ui.toast(msg, type);
-  else alert(msg);
+  else ui.toast(msg, 'error');
 }
 
 // ===== LOAD STATE ON PAGE LOAD =====
@@ -821,7 +821,7 @@ async function addMapping() {
 }
 
 async function deleteMapping(id) {
-  if (!confirm('Remove this group mapping?')) return;
+  if (!await ui.confirm('Remove Mapping', 'Remove this group mapping?')) return;
   try {
     const r = await apiFetch('/mappings?id=' + id, { method: 'DELETE' });
     const d = await r.json();
@@ -927,5 +927,139 @@ document.head.appendChild(style);
 document.addEventListener('DOMContentLoaded', loadAll);
 </script>
 <script src="/assets/js/realtime-client.js"></script>
+<!-- v2.1.0: LDAP Circuit Breaker + Full LDAP Management -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+
+  // Circuit breaker (existing)
+  const cb = document.createElement('div');
+  cb.style.marginTop = '48px';
+  cb.innerHTML = `
+    <div class="card" style="padding:32px;border-left:4px solid #f59e0b;margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#f59e0b;">electric_bolt</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">LDAP Circuit Breaker</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.5);">Protects against slow/dead LDAP servers</div></div>
+        <div id="cb-badge"></div>
+        <button class="btn" onclick="resetCB()" style="background:rgba(255,255,255,0.05);">Reset</button>
+      </div>
+      <div id="cb-details" style="font-size:13px;color:rgba(255,255,255,0.6);"></div>
+    </div>
+
+    <h2 class="page-title" style="font-size:28px;">LDAP Configuration</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">Server • Sync • Users • Mappings</p>
+
+    <!-- LDAP Status + Test -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid var(--md-sys-color-primary);">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-primary);">dns</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Connection Status</div></div>
+        <div id="ldap-status-badge"></div>
+        <button class="btn" onclick="testLDAP()" style="background:rgba(255,255,255,0.05);">Test Connection</button>
+        <button class="btn btn-primary" onclick="syncLDAP()">Sync Now</button>
+      </div>
+      <div id="ldap-status" style="font-size:13px;color:rgba(255,255,255,0.6);"></div>
+    </div>
+
+    <!-- LDAP Config -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid #06b6d4;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#06b6d4;">settings</span>
+        <div><div style="font-size:20px;font-weight:800;">Server Configuration</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" id="ldap-config-form">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Server URL</label>
+          <input id="ldap-url" type="text" placeholder="ldap://dc.example.com:389" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Base DN</label>
+          <input id="ldap-base" type="text" placeholder="dc=example,dc=com" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Bind DN</label>
+          <input id="ldap-bind" type="text" placeholder="cn=admin,dc=example,dc=com" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Bind Password</label>
+          <input id="ldap-pass" type="password" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+      </div>
+      <div style="margin-top:16px;display:flex;justify-content:flex-end;"><button class="btn btn-primary" onclick="saveLDAPConfig()">Save Config</button></div>
+    </div>
+
+    <!-- User Search -->
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid var(--md-sys-color-success);">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-success);">person_search</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Search LDAP Users</div></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:end;">
+        <div style="flex:1;"><input id="ldap-search-query" type="text" placeholder="Search username or CN..." style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <button class="btn btn-primary" onclick="searchLDAPUser()">Search</button>
+      </div>
+      <div id="ldap-search-results" style="margin-top:12px;font-family:monospace;font-size:13px;max-height:300px;overflow-y:auto;"></div>
+    </div>
+
+    <!-- Sync Log -->
+    <div class="card" style="padding:32px;border-left:4px solid #8b5cf6;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#8b5cf6;">sync</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Sync Log</div></div>
+        <button class="btn" onclick="loadSyncLog()" style="background:rgba(255,255,255,0.05);">Refresh</button>
+      </div>
+      <div id="sync-log" style="font-family:monospace;font-size:12px;color:rgba(255,255,255,0.5);max-height:200px;overflow-y:auto;"></div>
+    </div>
+  `;
+  main.appendChild(cb);
+  loadCB(); loadLDAPStatus(); loadLDAPConfig(); loadSyncLog();
+});
+
+async function loadCB() {
+  try { const r = await csrfFetch('/api/ldap/circuit-breaker'); const d = await r.json();
+    const colors = {closed:'var(--md-sys-color-success)',open:'#ef4444','half-open':'#f59e0b'};
+    document.getElementById('cb-badge').innerHTML = '<span class="badge" style="background:'+( colors[d.state]||'#666')+';color:#fff;">'+d.state+'</span>';
+    document.getElementById('cb-details').innerHTML = 'Failures: '+(d.failures||0)+'/'+(d.max_failures||5)+' • Cached: '+(d.cached_users||0)+(d.degraded_mode?' • <strong style="color:#ef4444;">DEGRADED</strong>':'');
+  } catch(e) {}
+}
+async function resetCB() { try { await csrfFetch('/api/ldap/circuit-breaker/reset',{method:'POST'}); ui.toast('Reset','success'); loadCB(); } catch(e){} }
+async function loadLDAPStatus() {
+  try { const r = await csrfFetch('/api/ldap/status'); const d = await r.json();
+    document.getElementById('ldap-status-badge').innerHTML = d.connected ? '<span class="badge badge-success">Connected</span>' : '<span class="badge badge-error">Disconnected</span>';
+    document.getElementById('ldap-status').textContent = d.message || (d.connected ? 'LDAP server reachable' : 'Not connected');
+  } catch(e) { document.getElementById('ldap-status').textContent = 'Could not check status'; }
+}
+async function loadLDAPConfig() {
+  try { const r = await csrfFetch('/api/ldap/config'); const d = await r.json();
+    if (d.success && d.config) { document.getElementById('ldap-url').value = d.config.server_url||''; document.getElementById('ldap-base').value = d.config.base_dn||''; document.getElementById('ldap-bind').value = d.config.bind_dn||''; }
+  } catch(e) {}
+}
+async function saveLDAPConfig() {
+  const data = { server_url: document.getElementById('ldap-url').value, base_dn: document.getElementById('ldap-base').value, bind_dn: document.getElementById('ldap-bind').value, bind_password: document.getElementById('ldap-pass').value };
+  try { const r = await csrfFetch('/api/ldap/config',{method:'POST',body:JSON.stringify(data)}); const d = await r.json();
+    d.success ? ui.toast('Config saved','success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+async function testLDAP() {
+  try { ui.toast('Testing...','info'); const r = await csrfFetch('/api/ldap/test',{method:'POST'}); const d = await r.json();
+    d.success ? ui.toast('Connection OK ('+( d.response_ms||0)+'ms)','success') : ui.toast('Failed: '+(d.error||'Unknown'),'error'); loadLDAPStatus();
+  } catch(e) { ui.toast('Failed','error'); }
+}
+async function syncLDAP() {
+  try { ui.toast('Syncing...','info'); const r = await csrfFetch('/api/ldap/sync',{method:'POST'}); const d = await r.json();
+    d.success ? ui.toast('Synced '+(d.users_synced||0)+' users','success') : ui.toast(d.error,'error'); loadSyncLog();
+  } catch(e) { ui.toast('Failed','error'); }
+}
+async function searchLDAPUser() {
+  const q = document.getElementById('ldap-search-query').value;
+  if (!q) return;
+  try { const r = await csrfFetch('/api/ldap/search-user?q='+encodeURIComponent(q)); const d = await r.json();
+    const el = document.getElementById('ldap-search-results');
+    if (!d.users || !d.users.length) { el.innerHTML = '<div style="padding:16px;color:rgba(255,255,255,0.3);">No results</div>'; return; }
+    el.innerHTML = d.users.map(u => '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'+( u.cn||u.uid||u.username)+' <span style="color:rgba(255,255,255,0.3);">'+(u.dn||'')+'</span></div>').join('');
+  } catch(e) { ui.toast('Search failed','error'); }
+}
+async function loadSyncLog() {
+  try { const r = await csrfFetch('/api/ldap/sync-log'); const d = await r.json();
+    const el = document.getElementById('sync-log');
+    if (!d.logs || !d.logs.length) { el.textContent = 'No sync history'; return; }
+    el.innerHTML = d.logs.map(l => '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">'+l.timestamp+' — '+(l.success?'✓':'✗')+' '+(l.message||l.users_synced+' users')+'</div>').join('');
+  } catch(e) {}
+}
+</script>
 </body>
 </html>

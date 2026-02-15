@@ -23,7 +23,7 @@
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <nav class="nav-container">
@@ -31,7 +31,7 @@
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -557,7 +557,7 @@ function toggleSchedule(i) {
 }
 
 function removeSchedule(i) {
-  if (!confirm("Remove schedule for " + schedules[i].dataset + "?")) return;
+  if (!await ui.confirm("Remove Schedule", "Remove schedule for " + schedules[i].dataset + "?")) return;
   schedules.splice(i, 1);
   saveAllSchedules();
 }
@@ -591,7 +591,7 @@ function saveNewSchedule() {
   var freq = document.getElementById("schedFreq").value;
   var ret = parseInt(document.getElementById("schedRetention").value)||7;
   var prefix = document.getElementById("schedPrefix").value||"auto";
-  if (!ds) { alert("Select a dataset"); return; }
+  if (!ds) { ui.toast("Select a dataset", "warning"); return; }
   schedules.push({dataset:ds,frequency:freq,retention:ret,enabled:true,prefix:prefix});
   closeAddModal();
   saveAllSchedules();
@@ -603,4 +603,63 @@ function getUser() { return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=
 document.addEventListener("DOMContentLoaded", loadSchedules);
 </script>
 <script src="/assets/js/realtime-client.js"></script>
+<!-- v2.1.0: Time Machine Browse & Restore -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const tm = document.createElement('div');
+  tm.style.marginTop = '48px';
+  tm.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">Time Machine</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">Browse snapshots • Restore individual files</p>
+    <div class="card" style="padding:32px;border-left:4px solid #8b5cf6;">
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;margin-bottom:20px;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Snapshot</label>
+          <input id="tm-snapshot" type="text" placeholder="tank/data@daily-2025-01-01" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Path</label>
+          <input id="tm-path" type="text" value="/" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <button class="btn btn-primary" onclick="browseTM()"><span class="material-symbols-rounded" style="font-size:18px;">folder_open</span> Browse</button>
+      </div>
+      <div id="tm-files" style="font-family:monospace;font-size:13px;max-height:400px;overflow-y:auto;"></div>
+    </div>
+  `;
+  main.appendChild(tm);
+});
+async function loadVersions() {
+  const snap = document.getElementById("tm-snapshot").value;
+  if (!snap) return;
+  try { const r = await csrfFetch("/api/timemachine/versions?snapshot="+encodeURIComponent(snap)); const d = await r.json();
+    if (d.versions) { ui.toast("Found "+d.versions.length+" versions","info"); }
+  } catch(e) {}
+}
+async function browseTM() {
+  const snap = document.getElementById('tm-snapshot').value;
+  const path = document.getElementById('tm-path').value;
+  if (!snap) { ui.toast('Enter snapshot name','warning'); return; }
+  try {
+    const r = await csrfFetch('/api/timemachine/browse?snapshot='+encodeURIComponent(snap)+'&path='+encodeURIComponent(path));
+    const d = await r.json();
+    if (!d.success) { ui.toast(d.error||'Failed','error'); return; }
+    const el = document.getElementById('tm-files');
+    if (!d.files||!d.files.length) { el.innerHTML='<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.4);">Empty directory</div>'; return; }
+    el.innerHTML = d.files.map(f => `
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;" ${f.is_dir?`onclick="document.getElementById('tm-path').value='${path==='/'?'':path}/${f.name}';browseTM()"`:''}> 
+        <span class="material-symbols-rounded" style="font-size:20px;color:${f.is_dir?'#f59e0b':'rgba(255,255,255,0.4)'};">${f.is_dir?'folder':'description'}</span>
+        <span style="flex:1;">${f.name}</span>
+        <span style="color:rgba(255,255,255,0.3);font-size:12px;">${f.size_human||''}</span>
+        ${!f.is_dir?`<button class="btn" style="padding:4px 12px;font-size:12px;background:rgba(255,255,255,0.05);" onclick="event.stopPropagation();restoreFile('${snap}','${path==='/'?'':path}/${f.name}')">Restore</button>`:''}
+      </div>
+    `).join('');
+  } catch(e) { ui.toast('Error','error'); }
+}
+async function restoreFile(snap, filePath) {
+  if (!await ui.confirm('Restore File', 'Restore '+filePath+' from snapshot?')) return;
+  try {
+    const r = await csrfFetch('/api/timemachine/restore',{method:'POST',body:JSON.stringify({snapshot:snap,source_path:filePath})});
+    const d = await r.json();
+    d.success ? ui.toast('File restored','success') : ui.toast(d.error||'Failed','error');
+  } catch(e) { ui.toast('Error','error'); }
+}
+</script>
 </body></html>

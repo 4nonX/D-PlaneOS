@@ -80,7 +80,7 @@ body { font-family: sans-serif; padding: 20px; background: #0a0a0a; color: #fff;
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -554,87 +554,87 @@ async function loadDatasets() {
 }
 
 async function unlockDataset(name) {
-  const key = prompt(`Enter passphrase for ${name}:`);
+  const key = await ui.prompt('Unlock Dataset', `Enter passphrase for ${name}:`);
   if (!key) return;
   
   try {
     const result = await daemonAPI.zfs_encryption_unlock(name, key);
     if (result.success) {
-      alert('Dataset unlocked successfully');
+      ui.toast('Dataset unlocked', 'success');
       loadDatasets();
     } else {
-      alert('Failed to unlock: ' + (result.error || 'Unknown error'));
+      ui.toast('Failed to unlock: ' + (result.error || 'Unknown error'), 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    ui.toast('Error: ' + error.message, 'error');
   }
 }
 
 async function lockDataset(name) {
-  if (!confirm(`Lock ${name}? This will make it inaccessible until unlocked.`)) return;
+  if (!await ui.confirm('Lock Dataset', `Lock ${name}? This will make it inaccessible until unlocked.`)) return;
   
   try {
     const result = await daemonAPI.zfs_encryption_lock(name);
     if (result.success) {
-      alert('Dataset locked successfully');
+      ui.toast('Dataset locked', 'success');
       loadDatasets();
     } else {
-      alert('Failed to lock: ' + (result.error || 'Unknown error'));
+      ui.toast('Failed to lock: ' + (result.error || 'Unknown error'), 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    ui.toast('Error: ' + error.message, 'error');
   }
 }
 
 async function changeKey(name) {
-  const oldKey = prompt(`Enter current passphrase for ${name}:`);
+  const oldKey = await ui.prompt('Change Key', `Enter current passphrase for ${name}:`);
   if (!oldKey) return;
   
-  const newKey = prompt('Enter new passphrase:');
+  const newKey = await ui.prompt('New Passphrase', 'Enter new passphrase:');
   if (!newKey) return;
   
-  const confirmKey = prompt('Confirm new passphrase:');
+  const confirmKey = await ui.prompt('Confirm Passphrase', 'Confirm new passphrase:');
   if (newKey !== confirmKey) {
-    alert('Passphrases do not match');
+    ui.toast('Passphrases do not match', 'error');
     return;
   }
   
   try {
     const result = await daemonAPI.zfs_encryption_change_key(name, oldKey, newKey);
     if (result.success) {
-      alert('Key changed successfully');
+      ui.toast('Key changed', 'success');
       loadDatasets();
     } else {
-      alert('Failed to change key: ' + (result.error || 'Unknown error'));
+      ui.toast('Failed to change key: ' + (result.error || 'Unknown error'), 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    ui.toast('Error: ' + error.message, 'error');
   }
 }
 
 async function createEncryptedDataset() {
-  const name = prompt('Dataset name (e.g., tank/encrypted):');
+  const name = await ui.prompt('Create Encrypted Dataset', 'Dataset name:', '', 'tank/encrypted');
   if (!name) return;
   
-  const key = prompt('Enter passphrase:');
+  const key = await ui.prompt('Passphrase', 'Enter passphrase:');
   if (!key) return;
   
-  const confirmKey = prompt('Confirm passphrase:');
+  const confirmKey = await ui.prompt('Confirm', 'Confirm passphrase:');
   if (key !== confirmKey) {
-    alert('Passphrases do not match');
+    ui.toast('Passphrases do not match', 'error');
     return;
   }
   
   try {
     const result = await daemonAPI.zfs_encryption_create(name, 'aes-256-gcm', key);
     if (result.success) {
-      alert('Encrypted dataset created successfully');
+      ui.toast('Encrypted dataset created', 'success');
       loadDatasets();
     } else {
-      alert('Failed to create: ' + (result.error || 'Unknown error'));
+      ui.toast('Failed to create: ' + (result.error || 'Unknown error'), 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    ui.toast('Error: ' + error.message, 'error');
   }
 }
 

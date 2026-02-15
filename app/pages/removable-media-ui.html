@@ -79,7 +79,7 @@ body { font-family: sans-serif; padding: 20px; background: #0a0a0a; color: #fff;
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -551,51 +551,51 @@ async function loadDevices() {
 }
 
 async function mountDevice(device) {
-  const mountPoint = prompt(`Mount point for ${device}:`, `/mnt/${device.split('/').pop()}`);
+  const mountPoint = await ui.prompt('Mount Device', `Mount point for ${device}:`, `/mnt/${device.split('/').pop()}`);
   if (!mountPoint) return;
   
   try {
     const result = await daemonAPI.removable_mount(device, mountPoint);
     if (result.success) {
-      alert('Device mounted successfully');
+      ui.toast('Device mounted', 'success');
       loadDevices();
     } else {
-      alert('Failed to mount: ' + (result.error || 'Unknown error'));
+      ui.toast('Failed to mount: ' + (result.error || 'Unknown error'), 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    ui.toast('Error: ' + error.message, 'error');
   }
 }
 
 async function unmountDevice(device) {
-  if (!confirm(`Unmount ${device}?`)) return;
+  if (!await ui.confirm('Unmount', `Unmount ${device}?`)) return;
   
   try {
     const result = await daemonAPI.removable_unmount(device);
     if (result.success) {
-      alert('Device unmounted successfully');
+      ui.toast('Device unmounted', 'success');
       loadDevices();
     } else {
-      alert('Failed to unmount: ' + (result.error || 'Unknown error'));
+      ui.toast('Failed to unmount: ' + (result.error || 'Unknown error'), 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    ui.toast('Error: ' + error.message, 'error');
   }
 }
 
 async function ejectDevice(device) {
-  if (!confirm(`Eject ${device}? The device will be unmounted and powered down.`)) return;
+  if (!await ui.confirm('Eject Device', `Eject ${device}? The device will be unmounted and powered down.`)) return;
   
   try {
     const result = await daemonAPI.removable_eject(device);
     if (result.success) {
-      alert('Device ejected successfully - safe to remove');
+      ui.toast('Device ejected — safe to remove', 'success');
       loadDevices();
     } else {
-      alert('Failed to eject: ' + (result.error || 'Unknown error'));
+      ui.toast('Failed to eject: ' + (result.error || 'Unknown error'), 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    ui.toast('Error: ' + error.message, 'error');
   }
 }
 

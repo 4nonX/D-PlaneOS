@@ -23,7 +23,7 @@
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v2.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v2.1.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <nav class="nav-container">
@@ -31,7 +31,7 @@
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v2.0.0</span>
+        <span class="version-badge">v2.1.0</span>
       </div>
     </div>
     
@@ -446,5 +446,52 @@ async function loadCurrentUser(){try{const r=await csrfFetch('/api/auth/session'
 document.addEventListener('DOMContentLoaded',()=>{loadLogs();loadCurrentUser();});
 </script>
   <script src="/assets/js/realtime-client.js"></script>
+<!-- v2.1.0: Audit Log Rotation & Stats -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const s = document.createElement('div');
+  s.style.marginTop = '48px';
+  s.innerHTML = `
+    <div class="card" style="padding:32px;border-left:4px solid var(--md-sys-color-primary);">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-primary);">auto_delete</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Log Management</div></div>
+      </div>
+      <div id="audit-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;"></div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <span style="font-size:14px;color:rgba(255,255,255,0.5);">Keep logs for</span>
+        <select id="rotate-days" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:8px 16px;color:#fff;appearance:none;">
+          <option value="30">30 days</option><option value="90" selected>90 days</option><option value="180">180 days</option><option value="365">1 year</option>
+        </select>
+        <button class="btn btn-primary" onclick="rotateAudit()"><span class="material-symbols-rounded" style="font-size:18px;">cleaning_services</span> Rotate Now</button>
+      </div>
+    </div>
+  `;
+  main.appendChild(s);
+  loadAuditStats();
+});
+async function loadAuditStats() {
+  try { const r = await csrfFetch('/api/system/audit/stats'); const d = await r.json();
+    document.getElementById('audit-stats').innerHTML = [
+      {label:'Total Entries',value:d.total_entries,icon:'receipt_long'},
+      {label:'Oldest',value:d.oldest_entry?.split(' ')[0]||'—',icon:'history'},
+      {label:'Newest',value:d.newest_entry?.split(' ')[0]||'—',icon:'update'},
+      {label:'DB Size',value:d.db_size||'—',icon:'storage'}
+    ].map(s=>`<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:var(--md-sys-shape-corner-medium);padding:16px;text-align:center;">
+      <span class="material-symbols-rounded" style="font-size:24px;color:var(--md-sys-color-primary);">${s.icon}</span>
+      <div style="font-size:20px;font-weight:700;margin:8px 0 4px;">${s.value}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.5);">${s.label}</div></div>`).join('');
+  } catch(e) {}
+}
+async function rotateAudit() {
+  const days = parseInt(document.getElementById('rotate-days').value);
+  if (!await ui.confirm('Rotate Logs',`Delete audit logs older than ${days} days?`)) return;
+  try { const r = await csrfFetch('/api/system/audit/rotate',{method:'POST',body:JSON.stringify({keep_days:days})}); const d = await r.json();
+    d.success ? (ui.toast(`Rotated: ${d.before_count} → ${d.after_count} entries`,'success'), loadAuditStats()) : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+</script>
 </body>
 </html>

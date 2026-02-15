@@ -23,7 +23,7 @@ func NewSystemStatusHandler(db *sql.DB) *SystemStatusHandler {
 	return &SystemStatusHandler{
 		db:        db,
 		startTime: time.Now(),
-		version:   "2.0.0",
+		version:   "2.1.0",
 	}
 }
 

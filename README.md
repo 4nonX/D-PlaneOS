@@ -1,27 +1,33 @@
-# D-PlaneOS v2.0.0 — Debian based ZFS NAS Operating System
+# D-PlaneOS v2.1.0 — Enterprise NAS Operating System
 
 Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
 
 ## Quick Start
 
+### Debian/Ubuntu
 ```bash
-tar xzf dplaneos-v2.0.0-production-vendored.tar.gz
+tar xzf dplaneos-v2.1.0-production-vendored.tar.gz
 cd dplaneos
 sudo make install   # Pre-built binary, no compiler needed
 sudo systemctl start dplaned
 ```
 
-Web UI: `https://your-server` (nginx reverse proxy on port 443 → daemon on 9000)
+### NixOS
+```bash
+cd nixos
+sudo bash setup-nixos.sh
+sudo nixos-rebuild switch --flake .#dplaneos
+```
+
+See [nixos/README.md](nixos/README.md) for the full NixOS guide.
+
+Web UI: `http://your-server` (nginx reverse proxy on port 80 → daemon on 9000)
 
 **Default login:** `admin` / `admin` (change immediately after first login)
 
 > **Rebuilding from source?** You need Go 1.22+ and gcc: `make build` compiles fresh.
 
-<<<<<<< HEAD
-### Off-Pool Database Backup (recommended for mission critical data)
-=======
-### Off-Pool Database Backup (recommended for large scale deployment)
->>>>>>> 08f95230b046b2f19ee282a41a2fc1660c09d429
+### Off-Pool Database Backup (recommended for large pools)
 
 Edit `/etc/systemd/system/dplaned.service` and add `-backup-path`:
 ```
@@ -32,14 +38,34 @@ Creates a VACUUM INTO backup on startup + every 24 hours.
 ## Features
 
 - **Storage:** ZFS pools, snapshots, replication, encryption, quotas, file explorer
-- **Compute:** Docker container management, app modules
+- **Compute:** Docker container management, app modules, **Docker Compose** (v2.1.0)
 - **Network:** Interface config, routing, DNS
 - **Identity:** User management, groups, **LDAP/Active Directory** (v2.0.0)
 - **Security:** RBAC (4 roles), audit logging, API tokens, firewall
 - **System:** Settings, logs, UPS management, hardware detection
 - **UI:** Material Design 3, dark theme, responsive, keyboard shortcuts
 
-## LDAP / Active Directory (New in v2.0.0)
+## New in v2.1.0: ZFS-Powered Features
+
+### Safe Container Updates
+`POST /api/docker/update` — ZFS snapshot → pull → restart → health check. On failure: instant rollback. No other NAS OS does this.
+
+### ZFS Time Machine
+Browse any snapshot like a folder. Find a deleted file from yesterday, restore just that one file — no full rollback needed.
+
+### Ephemeral Docker Sandbox
+Test any container on a ZFS clone (zero disk cost). Stop the container, the clone disappears. No residue.
+
+### ZFS Health Predictor
+Deep pool health monitoring: per-disk error tracking, checksum error detection, risk levels (low/medium/high/critical), S.M.A.R.T. integration. Warns you before a disk dies, not after.
+
+### NixOS Config Guard
+On NixOS systems: validate `configuration.nix` before applying, list/rollback generations, dry-activate checks. Cannot brick your system.
+
+### ZFS Replication (Remote)
+Native `zfs send | ssh remote zfs recv` — block-level replication that's 100x faster than rsync and preserves all snapshots on the remote.
+
+## LDAP / Active Directory (v2.0.0)
 
 Navigate to **Identity → Directory Service** to configure. Supports:
 
@@ -52,35 +78,23 @@ Navigate to **Identity → Directory Service** to configure. Supports:
 ## Architecture
 
 - **Frontend:** HTML5 + Material Design 3, flyout navigation, no framework dependencies
-- **Backend:** Go daemon (`dplaned`, 8MB) on port 9000, 85 API routes
-- **Database:** SQLite with WAL mode, `synchronous=FULL`, daily VACUUM INTO backup
+- **Backend:** Go daemon (`dplaned`, 8MB) on port 9000, 171 API routes
+- **Database:** SQLite with WAL mode, `synchronous=FULL`, daily `.backup` (WAL-safe)
 - **Web Server:** nginx reverse proxy (TLS termination)
 - **Storage:** ZFS (native kernel module) + ZED hook for real-time disk failure alerts
-- **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 34 permissions), injection-hardened, OOM-protected (512MB limit)
-
-## Installation
-
-### Debian/Ubuntu (Standard)
-```bash
-sudo bash install.sh
-```
-
-### NixOS
-```bash
-cd nixos
-sudo bash setup-nixos.sh
-sudo nixos-rebuild switch --flake .#dplaneos
+- **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 34 permissions), injection-hardened, OOM-protected (1 GB limit)
+- **NixOS:** Full support via Flake — entire NAS defined in a single `configuration.nix`
 
 ## Documentation
 
-- `CHANGELOG-v2.0.0.md` — What's new
-- `RELEASE-NOTES-v2.0.0.md` — GitHub release notes
-- `ADMIN-GUIDE.md` — Full administration guide (v2.0.0)
+- `RELEASE-NOTES-v2.1.0.md` — What's new in v2.1.0
+- `CHANGELOG.md` — Full version history
+- `ADMIN-GUIDE.md` — Full administration guide
 - `ERROR-REFERENCE.md` — API error codes and diagnostics
 - `TROUBLESHOOTING.md` — Build issues, ZED setup, common fixes
+- `nixos/README.md` — NixOS installation and configuration
 - `LDAP-REFERENCE.md` — LDAP technical reference
 - `INSTALLATION-GUIDE.md` — Detailed installation steps
-- `scripts/build-release.sh` — Automated release builder with smoke tests
 
 ## License
 

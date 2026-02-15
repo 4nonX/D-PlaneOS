@@ -544,7 +544,7 @@
         <div class="wizard-content">
             <!-- Step 1: Welcome -->
             <div class="step-content active" data-step="1">
-                <div class="step-title">Welcome to D-PlaneOS v2.0.0</div>
+                <div class="step-title">Welcome to D-PlaneOS v2.1.0</div>
                 <div class="step-description">
                     This wizard will help you set up your NAS system. We'll guide you through:
                 </div>
@@ -621,19 +621,19 @@
 
                 <div class="form-field">
                     <label for="admin-username">Username</label>
-                    <input type="text" id="admin-username" placeholder="admin" value="admin">
+                    <input type="text" id="admin-username" placeholder="admin" value="admin" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:12px 16px;color:#fff;font-size:15px;">
                     <div class="helper-text">Alphanumeric characters only</div>
                 </div>
 
                 <div class="form-field">
                     <label for="admin-password">Password</label>
-                    <input type="password" id="admin-password" placeholder="Enter a strong password">
+                    <input type="password" id="admin-password" placeholder="Enter a strong password" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:12px 16px;color:#fff;font-size:15px;">
                     <div class="helper-text" id="password-strength"></div>
                 </div>
 
                 <div class="form-field">
                     <label for="admin-password-confirm">Confirm Password</label>
-                    <input type="password" id="admin-password-confirm" placeholder="Re-enter your password">
+                    <input type="password" id="admin-password-confirm" placeholder="Re-enter your password" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:12px 16px;color:#fff;font-size:15px;">
                     <div class="helper-text" id="password-match"></div>
                 </div>
 
@@ -884,7 +884,7 @@
             if (currentStep === 2) {
                 // Validate pool selection
                 if (selectedSuggestion === null) {
-                    alert('Please select a pool configuration');
+                    ui.toast('Please select a pool configuration', 'warning');
                     return;
                 }
 
@@ -898,7 +898,7 @@
                         disks: suggestion.disks
                     });
                 } catch (error) {
-                    alert('Failed to create pool: ' + error.message);
+                    ui.toast('Failed to create pool: ' + error.message, 'error');
                     document.getElementById('btn-next').disabled = false;
                     return;
                 } finally {
@@ -913,12 +913,12 @@
                 const confirm = document.getElementById('admin-password-confirm').value;
 
                 if (!username || !password) {
-                    alert('Please fill in all fields');
+                    ui.toast('Please fill in all fields', 'warning');
                     return;
                 }
 
                 if (password !== confirm) {
-                    alert('Passwords do not match');
+                    ui.toast('Passwords do not match', 'error');
                     return;
                 }
 
@@ -931,7 +931,7 @@
                         role: 'admin'
                     });
                 } catch (error) {
-                    alert('Failed to create admin: ' + error.message);
+                    ui.toast('Failed to create admin: ' + error.message, 'error');
                     document.getElementById('btn-next').disabled = false;
                     return;
                 } finally {

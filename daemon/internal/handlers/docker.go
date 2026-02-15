@@ -80,7 +80,7 @@ func (h *DockerHandler) ContainerAction(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Validate action
-	validActions := map[string]bool{"start": true, "stop": true, "restart": true}
+	validActions := map[string]bool{"start": true, "stop": true, "restart": true, "pause": true, "unpause": true}
 	if !validActions[req.Action] {
 		respondErrorSimple(w, "Invalid action", http.StatusBadRequest)
 		return

@@ -15,7 +15,7 @@
 ### **Recommended:**
 - CPU: Quad-core Intel/AMD (i3/Ryzen 3 or better)
 - RAM: 16 GB+
-- Storage: 52 TB+ (ZFS pools)
+- Storage: ZFS pools (any size)
 - Network: 2.5 Gbps+ Ethernet
 
 ### **Supported Platforms:**

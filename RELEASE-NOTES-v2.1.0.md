@@ -33,20 +33,15 @@ No other NAS OS offers this level of container update safety.
 - **Container Stats** — `GET /api/docker/stats` (CPU, memory, network I/O per container)
 - **Docker Pull/Remove** — `POST /api/docker/pull`, `POST /api/docker/remove`
 - **Container pause/unpause** — Added to existing `POST /api/docker/action`
-- **Pool Capacity Guardian** — `GET /api/zfs/capacity`, `POST /api/zfs/capacity/reserve`, `POST /api/zfs/capacity/release` (2% emergency reserve, auto-release at 95%, background monitoring every 5 min)
-- **Resumable Replication** — `zfs send -s` / `zfs recv -s` resume token support for interrupted multi-TB transfers
-- **Command Timeouts** — All system commands wrapped with deadlines (5s/30s/120s), prevents API hang on zombie disks
-- **ionice Background Tasks** — `executeBackgroundCommand()` runs indexing/thumbnailing at idle I/O priority (class 3)
-- **SSH Keepalive** — Replication SSH connections use `ServerAliveInterval=30` to detect dead connections
 - **NixOS support** — Complete Flake + standalone `configuration.nix` in `nixos/` directory
 - **Configurable daemon paths** — `--config-dir` and `--smb-conf` flags for NixOS compatibility
 
 ### Changed
 
-- Routes: 105 → 171 (+66 new endpoints)
-- Handler files: 24 → 37 (+13 new files)
-- Daemon memory limit: 512 MB → 1 GB (configurable per system)
-- ZFS ARC default: 8 GB → 16 GB (configurable per system)
+- Routes: 105 → 132 (+27 new endpoints)
+- Handler files: 24 → 31 (+7 new files)
+- Daemon memory limit: 512 MB → 1 GB (tuned for 32 GB RAM systems)
+- ZFS ARC default: 8 GB → 16 GB (tuned for 32 GB RAM systems)
 - SQLite backups now use `.backup` command (WAL-safe, no corruption risk)
 - Daemon waits for `zfs-mount.service` before starting (prevents race condition)
 
@@ -92,7 +87,7 @@ This is not an upgrade from v1.14.0-OMEGA. It is a clean-room reimplementation r
 - **Default data seeding** — 4 RBAC roles (admin/operator/user/viewer), 27 permissions, admin user, LDAP config, Telegram config — all bootstrapped automatically
 - **LDAP/Active Directory integration** — full LDAP handler with bind, search, sync, group mapping, JIT provisioning, test connection, sync history
 - **RBAC engine** — roles, permissions, role-permission mapping, user-role assignment with expiry, permission cache with TTL
-- **Buffered audit logging** — batched inserts (100-event buffer, 5-second flush) to prevent I/O stalls on large pools
+- **Buffered audit logging** — batched inserts (100-event buffer, 5-second flush) to prevent I/O stalls on 52 TB pools
 - **Background system monitoring** — goroutine-based metrics collection (CPU, memory, disk I/O, network, ZFS pool health)
 - **WebSocket live updates** — `/ws/monitor` endpoint for real-time system metrics
 - **ZFS encryption management** — create encrypted datasets, lock/unlock, change keys, list encryption status

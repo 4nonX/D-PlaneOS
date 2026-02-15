@@ -32,7 +32,7 @@ type BufferedLogger struct {
 
 // NewBufferedLogger creates a new buffered audit logger
 //
-// CRITICAL for 52TB systems:
+// CRITICAL for large storage systems:
 // - Batches audit logs to reduce SQLite I/O
 // - Flushes every 5 seconds OR when buffer reaches maxBuffer
 // - Prevents I/O stalls during mass file operations

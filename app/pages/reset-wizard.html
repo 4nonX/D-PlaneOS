@@ -128,11 +128,11 @@
 
     <script>
         function resetWizard() {
-            if (confirm('Are you sure you want to reset the setup wizard? The wizard will appear again on next page load.')) {
+            if (await ui.confirm('Reset Wizard', 'Reset the setup wizard? It will appear again on next page load.')) {
                 // Clear localStorage flag
                 localStorage.removeItem('dplaneos_setup_completed');
                 
-                alert('Setup wizard has been reset. Redirecting to wizard...');
+                ui.toast('Setup wizard reset. Redirecting...', 'success');
                 
                 // Redirect to wizard
                 window.location.href = '/pages/setup-wizard.html';

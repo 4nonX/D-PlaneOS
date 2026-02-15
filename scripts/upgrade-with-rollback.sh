@@ -119,7 +119,7 @@ cat > "$BACKUP_PATH/system-state.json" <<EOF
     "hostname": "$(hostname)",
     "os": "$(lsb_release -ds)",
     "kernel": "$(uname -r)",
-    "go_daemon": "dplaned v2.0.0",
+    "go_daemon": "dplaned v2.1.0",
     "apache2_status": "$(systemctl is-active apache2 2>/dev/null || echo 'not installed')",
     "nginx_status": "$(systemctl is-active nginx 2>/dev/null || echo 'not installed')",
     "dplaned_status": "$(systemctl is-active dplaned 2>/dev/null || echo 'not installed')"

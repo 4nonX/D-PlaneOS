@@ -12,11 +12,12 @@ import (
 
 // ShareCRUDHandler handles SMB share CRUD operations
 type ShareCRUDHandler struct {
-	db *sql.DB
+	db          *sql.DB
+	smbConfPath string
 }
 
-func NewShareCRUDHandler(db *sql.DB) *ShareCRUDHandler {
-	return &ShareCRUDHandler{db: db}
+func NewShareCRUDHandler(db *sql.DB, smbConfPath string) *ShareCRUDHandler {
+	return &ShareCRUDHandler{db: db, smbConfPath: smbConfPath}
 }
 
 func (h *ShareCRUDHandler) initTable() {
@@ -296,6 +297,14 @@ func (h *ShareCRUDHandler) regenerateSMBConf() {
 	}
 	defer rows.Close()
 
+	// Load global VFS settings from DB
+	var globalTimeMachine, globalShadowCopy, globalRecycleBin int
+	var globalExtra string
+	h.db.QueryRow(`SELECT COALESCE(value,'0') FROM settings WHERE key='smb_time_machine'`).Scan(&globalTimeMachine)
+	h.db.QueryRow(`SELECT COALESCE(value,'0') FROM settings WHERE key='smb_shadow_copy'`).Scan(&globalShadowCopy)
+	h.db.QueryRow(`SELECT COALESCE(value,'0') FROM settings WHERE key='smb_recycle_bin'`).Scan(&globalRecycleBin)
+	h.db.QueryRow(`SELECT COALESCE(value,'') FROM settings WHERE key='smb_extra_global'`).Scan(&globalExtra)
+
 	var conf strings.Builder
 	conf.WriteString("[global]\n")
 	conf.WriteString("   workgroup = WORKGROUP\n")
@@ -303,7 +312,31 @@ func (h *ShareCRUDHandler) regenerateSMBConf() {
 	conf.WriteString("   security = user\n")
 	conf.WriteString("   map to guest = Bad User\n")
 	conf.WriteString("   log file = /var/log/samba/log.%m\n")
-	conf.WriteString("   max log size = 1000\n\n")
+	conf.WriteString("   max log size = 1000\n")
+
+	// Global VFS modules for macOS Time Machine support
+	if globalTimeMachine == 1 {
+		conf.WriteString("   # macOS Time Machine support\n")
+		conf.WriteString("   fruit:metadata = stream\n")
+		conf.WriteString("   fruit:model = MacSamba\n")
+		conf.WriteString("   fruit:posix_rename = yes\n")
+		conf.WriteString("   fruit:veto_appledouble = no\n")
+		conf.WriteString("   fruit:nfs_aces = no\n")
+		conf.WriteString("   fruit:wipe_intentionally_left_blank_rfork = yes\n")
+		conf.WriteString("   fruit:delete_empty_adfiles = yes\n")
+	}
+
+	// Global extra parameters
+	if globalExtra != "" {
+		conf.WriteString("   # Custom global parameters\n")
+		for _, line := range strings.Split(globalExtra, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				conf.WriteString("   " + trimmed + "\n")
+			}
+		}
+	}
+	conf.WriteString("\n")
 
 	for rows.Next() {
 		var name, path, comment, validUsers, writeList, createMask, dirMask string
@@ -336,10 +369,37 @@ func (h *ShareCRUDHandler) regenerateSMBConf() {
 		}
 		conf.WriteString(fmt.Sprintf("   create mask = %s\n", createMask))
 		conf.WriteString(fmt.Sprintf("   directory mask = %s\n", dirMask))
+
+		// Per-share VFS objects
+		var vfsObjects []string
+		if globalTimeMachine == 1 {
+			vfsObjects = append(vfsObjects, "catia", "fruit", "streams_xattr")
+		}
+		if globalShadowCopy == 1 {
+			vfsObjects = append(vfsObjects, "shadow_copy2")
+			conf.WriteString("   shadow:snapdir = .zfs/snapshot\n")
+			conf.WriteString("   shadow:sort = desc\n")
+			conf.WriteString("   shadow:format = %Y-%m-%d-%H%M%S\n")
+		}
+		if globalRecycleBin == 1 {
+			vfsObjects = append(vfsObjects, "recycle")
+			conf.WriteString("   recycle:repository = .recycle/%U\n")
+			conf.WriteString("   recycle:keeptree = yes\n")
+			conf.WriteString("   recycle:versions = yes\n")
+			conf.WriteString("   recycle:touch = yes\n")
+			conf.WriteString("   recycle:directory_mode = 0770\n")
+		}
+		if len(vfsObjects) > 0 {
+			conf.WriteString(fmt.Sprintf("   vfs objects = %s\n", strings.Join(vfsObjects, " ")))
+		}
+		if globalTimeMachine == 1 {
+			conf.WriteString("   fruit:time machine = yes\n")
+		}
+
 		conf.WriteString("\n")
 	}
 
-	err = os.WriteFile("/etc/samba/smb.conf", []byte(conf.String()), 0644)
+	err = os.WriteFile(h.smbConfPath, []byte(conf.String()), 0644)
 	if err != nil {
 		log.Printf("SMB WRITE ERROR: %v", err)
 		return
@@ -347,5 +407,5 @@ func (h *ShareCRUDHandler) regenerateSMBConf() {
 
 	// Reload samba
 	exec.Command("smbcontrol", "all", "reload-config").Run()
-	log.Printf("SMB config regenerated and reloaded")
+	log.Printf("SMB config regenerated and reloaded (VFS: tm=%d sc=%d rb=%d)", globalTimeMachine, globalShadowCopy, globalRecycleBin)
 }

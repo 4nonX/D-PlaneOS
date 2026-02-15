@@ -19,7 +19,7 @@ class DaemonAPI {
     };
     
     // Retry logic for SQLite busy/FTS5 collisions
-    // Critical for 52TB systems with heavy concurrent access
+    // Critical for large systems with heavy concurrent access
     const maxRetries = 3;
     const retryDelay = 100; // ms
     
