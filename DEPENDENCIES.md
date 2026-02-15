@@ -1,28 +1,28 @@
-# D-PlaneOS v5.1-HARDENED - Dependencies
+# D-PlaneOS v2.1.1-HARDENED - Dependencies
 
-**Vollständige Abhängigkeitsliste**
-
----
-
-## ✅ Alle Abhängigkeiten sind enthalten
-
-Das Package enthält **ALLE** notwendigen PHP-Includes, CSS, JavaScript und Konfigurationsdateien.
+**Full List of Required Dependencies**
 
 ---
 
-## 📦 Interne Abhängigkeiten (IM PACKAGE)
+## ✅ Most dependencies are included.
 
-### PHP Includes (22 Dateien)
+The package includes **ALL** required PHP-Includes, CSS, JavaScript and Configuration Files.
+
+---
+
+## 📦 Internal Dependencies (IN THE PACKAGE)
+
+### PHP Includes (22 Files)
 
 Alle in: `app/includes/`
 
 **Core:**
-- ✅ `config.php` - System-Konfiguration
-- ✅ `auth.php` - Authentifizierung
+- ✅ `config.php` - System-Configuration
+- ✅ `auth.php` - Authentication
 - ✅ `rbac.php` - Role-Based Access Control
-- ✅ `security.php` - Security-Funktionen & Logger-Klasse
+- ✅ `security.php` - Security-Functions & Logger-Class
 - ✅ `security-middleware.php` - Security Middleware
-- ✅ `functions.php` - Helper-Funktionen
+- ✅ `functions.php` - Helper-Functions
 
 **Database:**
 - ✅ `db.php` - Database Abstraction
@@ -91,11 +91,11 @@ Alle in: `app/assets/js/`
 
 ---
 
-## 🌐 Externe Abhängigkeiten (CDN)
+## 🌐 External Dependencies (CDN)
 
 ### Material Symbols Icons
 
-**Verwendet in:** IPMI UI, Cloud Sync UI
+**Used in:** IPMI UI, Cloud Sync UI
 
 **CDN:**
 ```html
@@ -113,12 +113,12 @@ wget https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght
 
 ---
 
-## 🐧 System-Abhängigkeiten (extern zu installieren)
+## 🐧 System-Dependencies (to be installed from external sources)
 
-### Erforderlich (Basis-System)
+### Required (Base-System)
 
 **Linux:**
-- Ubuntu 22.04+ / Debian 12+ (empfohlen)
+- Ubuntu 22.04+ / Debian 12+ / NixOS 25.11 (recommended)
 - RHEL 8+ / Rocky Linux 8+ / AlmaLinux 8+
 - Oder jede moderne Linux-Distribution
 
@@ -195,7 +195,7 @@ export PATH=$PATH:/usr/local/go/bin
 
 ---
 
-## 📋 Installation Command-Übersicht
+## 📋 Installation Command-Overview
 
 ### Debian/Ubuntu Minimal
 
@@ -213,7 +213,7 @@ sudo sh get-docker.sh
 sudo usermod -aG docker www-data
 ```
 
-### Debian/Ubuntu Komplett
+### Debian/Ubuntu Complete
 
 ```bash
 # Alles installieren
@@ -336,7 +336,7 @@ echo "✗ = Missing/Required"
 echo "⚠ = Optional (feature-dependent)"
 ```
 
-**Verwendung:**
+**Use:**
 ```bash
 chmod +x check-dependencies.sh
 ./check-dependencies.sh
@@ -344,31 +344,31 @@ chmod +x check-dependencies.sh
 
 ---
 
-## 🔍 Was ist NICHT im Package
+## 🔍 What is NOT INCLUDED in the Package
 
-### Nicht enthalten (muss installiert werden):
+### Not included (has to be installed):
 
-1. **Linux Kernel & OS** - Basis-System
+1. **Linux Kernel & OS** - Base-System
 2. **PHP Interpreter** - sudo apt install php
-3. **Web Server** - Apache oder Nginx
+3. **Web Server** - Apache or Nginx
 4. **ZFS Kernel Module** - sudo apt install zfsutils-linux
 5. **Docker Engine** - curl https://get.docker.com | sh
 6. **ipmitool** - sudo apt install ipmitool
 7. **rclone** - curl https://rclone.org/install.sh | bash
 8. **Go Compiler** - wget https://go.dev/dl/...
 
-### Warum nicht enthalten?
+### Why are these not included?
 
-- **Linux/PHP/Web Server:** System-Level, über Paketmanager
+- **Linux/PHP/Web Server:** System-Level, via package manager
 - **ZFS/Docker:** Kernel-Module & System-Services
-- **ipmitool/rclone:** Optional, nutzer-spezifisch
-- **Go:** Nur für Daemon-Compilation nötig
+- **ipmitool/rclone:** Optional, user-specific
+- **Go:** Only required for Daemon-Compilation
 
 ---
 
 ## 📊 Dependency-Matrix
 
-| Komponente | Abhängig von | Erforderlich | Im Package |
+| Component | Depends on | Required | Included in the Package |
 |------------|-------------|--------------|------------|
 | **PHP Includes** | PHP | ✓ | ✓ |
 | **CSS/JS Assets** | Web Server | ✓ | ✓ |
@@ -380,17 +380,17 @@ chmod +x check-dependencies.sh
 | **Cloud Sync** | rclone | ✗ | ✗ (optional) |
 | **Go Daemon** | Go | ✗ | ✗ (optional) |
 
-**Legende:**
-- ✓ Im Package = Datei enthalten
-- ✗ Extern = Muss separat installiert werden
-- ✓ Erforderlich = Notwendig für Basis-Funktion
-- ✗ Optional = Nur für spezifische Features
+**Explanation:**
+- ✓ In the Package = Datei enthalten
+- ✗ External = Muss separat installiert werden
+- ✓ Required = Required for Base-Functionality
+- ✗ Optional = Only required for spezific Features
 
 ---
 
-## 🎯 Zusammenfassung
+## 🎯 Summary
 
-### ✅ Komplett im Package:
+### ✅ Included in the Package:
 
 - Alle PHP Includes (22 Dateien)
 - Alle CSS Assets (7 Dateien)
@@ -421,10 +421,10 @@ chmod +x check-dependencies.sh
 
 ---
 
-## ✅ Installation-Reihenfolge
+## ✅ Order of Installation
 
 ```bash
-# 1. System-Dependencies installieren
+# 1. Installing System-Dependencies
 sudo apt install apache2 php php-{...} zfsutils-linux
 
 # 2. Optional: Docker, ipmitool, rclone
@@ -436,9 +436,9 @@ tar -xzf dplaneos-v5.1-hardened-COMPLETE.tar.gz
 cd dplaneos-v5.1-hardened-COMPLETE
 sudo ./install.sh
 
-# 4. Fertig!
+# 4. Done!
 ```
 
 ---
 
-**Das Package ist komplett - alle internen Abhängigkeiten sind enthalten. Nur System-Level-Tools müssen separat installiert werden (wie bei jedem Webserver-Projekt).**
+**The Package is complete - all internal dependencies are included. Only System-Level-Tools hae to be  installied seperately (as with any other Webserver-Project).**
