@@ -1,4 +1,4 @@
-# D-PlaneOS v2.0.0 — Recovery & Administration Guide
+# D-PlaneOS v2.1.0 — Recovery & Administration Guide
 
 ## Quick Reference
 
