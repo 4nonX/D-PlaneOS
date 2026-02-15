@@ -1,10 +1,10 @@
-# D-PlaneOS v2.0.0 — Security Policy
+# D-PlaneOS v2.1.0 — Security Policy
 
 ## Supported Versions
 
 | Version | Supported |
 |---------|-----------|
-| v2.0.0  | ✅ Current release |
+| v2.1.0  | ✅ Current release |
 | v1.14.0-OMEGA | ⚠️ Legacy — critical fixes only |
 | < v1.14.0 | ❌ End of life |
 
@@ -21,7 +21,7 @@ Response times:
 
 ## Architecture Overview
 
-D-PlaneOS v2.0.0 runs as a single Go binary (`dplaned`) under systemd. There is no PHP, no Apache, no Node.js in the runtime stack.
+D-PlaneOS v2.1.0 runs as a single Go binary (`dplaned`) under systemd. There is no PHP, no Apache, no Node.js in the runtime stack.
 
 ```
 Client (Browser)
