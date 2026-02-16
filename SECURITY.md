@@ -12,7 +12,7 @@
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Email: Create a GitHub issue with the `security` label and mark it confidential, or contact via the repository's security advisory feature.
+Create a GitHub issue with the `security` label and mark it confidential, or contact via the repository's security advisory feature.
 
 Response times:
 - **Critical** (RCE, auth bypass, data exposure): 24 hours
