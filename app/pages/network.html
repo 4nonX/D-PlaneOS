@@ -34,26 +34,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
 .icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
 .fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: #fff; }
 .fab:hover { transform: translateY(-4px); box-shadow: 0 12px 48px rgba(102, 126, 234, 0.6); }
-
-/* Consolidated Tab Navigation */
-.consolidation-tabs {
-  display: flex; gap: 4px; padding: 8px; margin-bottom: 24px;
-  background: rgba(255,255,255,0.03); border-radius: var(--radius-xl);
-  border: 1px solid rgba(255,255,255,0.06);
-}
-.consolidation-tab {
-  padding: 10px 20px; border-radius: var(--radius-lg); border: none;
-  background: transparent; color: rgba(255,255,255,0.6);
-  font-size: 14px; font-weight: 500; cursor: pointer;
-  transition: all 0.2s; font-family: inherit;
-}
-.consolidation-tab:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.consolidation-tab.active {
-  background: var(--primary); color: #fff; font-weight: 600;
-}
-.consolidation-content { display: none; }
-.consolidation-content.active { display: block; }
-
 </style>
 <style type="text/css" id="operaUserStyle"></style><link rel="stylesheet" href="/assets/css/ui-components.css">
 <script src="/assets/js/core.js"></script>
@@ -477,7 +457,7 @@ if (window.ConnectionMonitor) {
 <main class="main">
 <div class="page-header">
 <h1 class="page-title">Network</h1>
-<p class="page-subtitle">Interfaces • DNS • Routing • VPN</p>
+<p class="page-subtitle">VLAN & Bonding • Interfaces • DNS • Routing</p>
 </div>
 <div class="consolidation-tabs">
   <button class="consolidation-tab active" data-tab="vlan" onclick="switchConsolidatedTab('vlan')">VLAN & Bonding</button>
@@ -486,8 +466,188 @@ if (window.ConnectionMonitor) {
   <button class="consolidation-tab" data-tab="routing" onclick="switchConsolidatedTab('routing')">Routing</button>
 </div>
 
-
 <div id="tab-vlan" class="consolidation-content active">
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
 <div class="page-header">
 <h1 class="page-title">Network</h1>
 <p class="page-subtitle">Configuration • VPN • Remote access</p>
@@ -499,8 +659,147 @@ if (window.ConnectionMonitor) {
     </div>
   </div>
 </div>
-</div>
+<button class="fab" onclick="testNetwork()"><span class="material-symbols-rounded" style="font-size:28px;">network_check</span></button>
+<script src="/assets/js/m3-ripple.js"></script>
+<script src="/assets/js/ui-components.js"></script>
+<script>
+const ui = new DPlaneUI();
 
+async function configureInterface(name) {
+  const result = await ui.form(`Configure ${name}`, [
+    { name: 'address', label: 'IP Address', type: 'text', placeholder: '192.168.1.100' },
+    { name: 'netmask', label: 'Netmask', type: 'text', placeholder: '255.255.255.0' },
+    { name: 'gateway', label: 'Gateway', type: 'text', placeholder: '192.168.1.1' },
+    { name: 'dns', label: 'DNS Server', type: 'text', value: '1.1.1.1' }
+  ], 'Apply');
+  
+  if (result) {
+    ui.showLoading('Applying network configuration...');
+    
+    try {
+      const response = await csrfFetch('/api/system/network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'configure', interface: name, ...result })
+      });
+      
+      const data = await response.json();
+      ui.hideLoading();
+      
+      if (data.success) {
+        ui.toast('Network configured successfully', 'success');
+        setTimeout(() => location.reload(), 2000);
+      } else {
+        ui.toast(data.error || 'Failed to configure network', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Network error: ' + error.message, 'error');
+    }
+  }
+}
+
+async function configureVPN() {
+  const result = await ui.form('VPN Settings', [
+    { name: 'enabled', label: 'Enable VPN', type: 'checkbox', checked: true },
+    { name: 'key', label: 'Auth Key', type: 'text' }
+  ], 'Save');
+  
+  if (result) {
+    ui.showLoading('Saving VPN settings...');
+    
+    try {
+      const response = await csrfFetch('/api/system/network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'vpn', ...result })
+      });
+      
+      const data = await response.json();
+      ui.hideLoading();
+      
+      if (data.success) {
+        ui.toast('VPN settings saved', 'success');
+      } else {
+        ui.toast(data.error || 'Failed to save settings', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Network error: ' + error.message, 'error');
+    }
+  }
+}
+
+async function testNetwork() {
+  ui.showLoading('Testing network connection...');
+  
+  try {
+    const response = await csrfFetch('/api/system/network');
+    const result = await response.json();
+    ui.hideLoading();
+    
+    if (result.success) {
+      ui.toast(`✓ Network OK (${result.latency}ms)`, 'success');
+    } else {
+      ui.toast('Network test failed', 'error');
+    }
+  } catch (error) {
+    ui.hideLoading();
+    ui.toast('Network error: ' + error.message, 'error');
+  }
+}
+
+async function loadNetworkInterfaces() {
+  try {
+    const response = await csrfFetch('/api/system/network');
+    const data = await response.json();
+    
+    if (data.success && data.interfaces) {
+      renderInterfaces(data.interfaces);
+    } else {
+      document.getElementById('network-interfaces-container').innerHTML = '<div class="interface-card"><p style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px;">No network interfaces found</p></div>';
+    }
+  } catch (error) {
+    document.getElementById('network-interfaces-container').innerHTML = '<div class="interface-card"><p style="color: #ef4444; text-align: center; padding: 40px;">Failed to load network interfaces</p></div>';
+  }
+}
+
+function renderInterfaces(interfaces) {
+  const container = document.getElementById('network-interfaces-container');
+  container.innerHTML = '';
+  
+  interfaces.forEach(iface => {
+    const card = document.createElement('div');
+    card.className = 'interface-card';
+    
+    const icon = iface.type === 'vpn' ? 'vpn_lock' : 'lan';
+    const statusIcon = iface.status === 'up' ? 'link' : 'link_off';
+    const statusText = iface.status === 'up' ? 'Connected' : 'Disconnected';
+    
+    card.innerHTML = `
+      <div class="interface-header">
+        <span class="material-symbols-rounded interface-icon">${icon}</span>
+        <div class="interface-info">
+          <div class="interface-name">${iface.name}${iface.primary ? ' (Primary)' : ''}</div>
+          <div class="interface-details">${iface.ip || 'No IP'} • ${iface.speed || 'Unknown'} • Gateway: ${iface.gateway || 'None'}</div>
+        </div>
+        <div class="badge"><span class="material-symbols-rounded" style="font-size:16px;">${statusIcon}</span> ${statusText}</div>
+        <button class="icon-btn" onclick="configureInterface('${iface.name}')"><span class="material-symbols-rounded">settings</span></button>
+      </div>
+      ${iface.details ? `<div style="display:flex;gap:12px;">${iface.details.map(d => `<span style="padding:6px 12px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:13px;">${d}</span>`).join('')}</div>` : ''}
+    `;
+    
+    container.appendChild(card);
+  });
+}
+
+// Load interfaces on page load
+loadNetworkInterfaces();
+
+</script>
+  <script src="/assets/js/realtime-client.js"></script>
+<!-- v2.1.0: VLAN, Bond/LACP, NTP -->
+</div>
 <div id="tab-interfaces" class="consolidation-content">
 <h1>Network Interfaces</h1>
   
@@ -511,7 +810,6 @@ if (window.ConnectionMonitor) {
     </div>
   </div>
 </div>
-
 <div id="tab-dns" class="consolidation-content">
 <div style="max-width: 1600px; margin: 160px auto 60px; padding: 0 40px;">
   <h1 style="font-size: 32px; font-weight: 700; margin-bottom: 30px;">DNS Configuration</h1>
@@ -534,8 +832,188 @@ if (window.ConnectionMonitor) {
     </button>
   </div>
 </div>
-</div>
 
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+</div>
 <div id="tab-routing" class="consolidation-content">
 <div style="max-width: 1600px; margin: 160px auto 60px; padding: 0 40px;">
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
@@ -563,6 +1041,187 @@ if (window.ConnectionMonitor) {
     </table>
   </div>
 </div>
+
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
 </div>
 
 </main>
@@ -707,6 +1366,7 @@ loadNetworkInterfaces();
   <script src="/assets/js/realtime-client.js"></script>
 <!-- v2.1.0: VLAN, Bond/LACP, NTP -->
 <script>
+function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(function(c){c.classList.remove('active')});document.querySelectorAll('.consolidation-tab').forEach(function(b){b.classList.remove('active')});var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
 document.addEventListener('DOMContentLoaded', () => {
   const main = document.querySelector('.main');
   if (!main) return;
@@ -814,5 +1474,364 @@ async function confirmNetwork() {
     const o = document.getElementById('net-confirm-overlay'); if(o) o.remove();
   } catch(e) { ui.toast('Failed','error'); }
 }
+var __interfaces_init=false;function init_interfaces(){if(__interfaces_init)return;__interfaces_init=true;const ui = new DPlaneUI();
+
+async function loadInterfaces() {
+  try {
+    const response = await csrfFetch('/api/system/network');
+    const data = await response.json();
+    
+    if (data.success && data.interfaces) {
+      displayInterfaces(data.interfaces);
+    } else {
+      ui.toast('Failed to load interfaces: ' + (data.error || 'Unknown error'), 'error');
+    }
+  } catch (error) {
+    ui.toast('Network error: ' + error.message, 'error');
+  }
+}
+
+function displayInterfaces(interfaces) {
+  const container = document.getElementById('interfaceList');
+  
+  if (interfaces.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 60px; color: var(--text-dim);">
+        <span class="material-symbols-rounded" style="font-size: 32px; opacity: 0.3;">lan</span>
+        <p>No network interfaces found</p>
+      </div>
+    `;
+    return;
+  }
+  
+  let html = '';
+  
+  interfaces.forEach(iface => {
+    const statusBadge = iface.status === 'UP' 
+      ? '<span class="badge badge-success">UP</span>' 
+      : '<span class="badge badge-error">DOWN</span>';
+    
+    const speedColor = iface.link === 'yes' ? 'var(--success)' : 'var(--text-dim)';
+    
+    html += `
+      <div class="interface-card">
+        <span class="material-symbols-rounded interface-icon">lan</span>
+        <div class="interface-info">
+          <div class="interface-name">${iface.name}</div>
+          <div class="interface-type">${iface.type || 'Ethernet'}</div>
+          
+          <div class="interface-stats">
+            <div class="stat-item">
+              <span class="stat-label">IP Address</span>
+              <span class="stat-value">${iface.ip || 'N/A'}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Speed</span>
+              <span class="stat-value" style="color: ${speedColor};">${iface.speed || 'Unknown'}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">MAC Address</span>
+              <span class="stat-value" style="font-family: monospace; font-size: 12px;">${iface.mac || 'N/A'}</span>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
+          ${statusBadge}
+          <button class="btn btn-ghost" onclick="configureInterface('${iface.name}')">
+            <span class="material-symbols-rounded" style="font-size: 18px;">settings</span>
+            Configure
+          </button>
+        </div>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+}
+
+async function configureInterface(name) {
+  // Get current config
+  const response = await csrfFetch(`/api/system/network&interface=${name}`);
+  const data = await response.json();
+  
+  if (!data.success) {
+    ui.toast('Failed to load interface config', 'error');
+    return;
+  }
+  
+  const iface = data.interface;
+  
+  const result = await ui.form(`Configure ${name}`, [
+    { 
+      name: 'method', 
+      label: 'Configuration Method', 
+      type: 'select', 
+      value: iface.method || 'dhcp',
+      options: [
+        { value: 'dhcp', label: 'DHCP (Automatic)' },
+        { value: 'static', label: 'Static IP' }
+      ]
+    },
+    { 
+      name: 'ip', 
+      label: 'IP Address', 
+      type: 'text', 
+      value: iface.ip || '',
+      placeholder: '192.168.1.100'
+    },
+    { 
+      name: 'netmask', 
+      label: 'Netmask', 
+      type: 'text', 
+      value: iface.netmask || '255.255.255.0',
+      placeholder: '255.255.255.0'
+    },
+    { 
+      name: 'gateway', 
+      label: 'Gateway', 
+      type: 'text', 
+      value: iface.gateway || '',
+      placeholder: '192.168.1.1'
+    },
+    {
+      name: 'dns',
+      label: 'DNS Servers (comma-separated)',
+      type: 'text',
+      value: iface.dns || '1.1.1.1, 8.8.8.8',
+      placeholder: '1.1.1.1, 8.8.8.8'
+    }
+  ], 'Apply');
+  
+  if (result) {
+    ui.showLoading('Applying network configuration...');
+    
+    try {
+      const applyResponse = await csrfFetch('/api/system/network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'configure',
+          interface: name,
+          ...result
+        })
+      });
+      
+      const applyData = await applyResponse.json();
+      ui.hideLoading();
+      
+      if (applyData.success) {
+        ui.toast('Network configuration applied', 'success');
+        setTimeout(() => loadInterfaces(), 2000);
+      } else {
+        ui.toast(applyData.error || 'Failed to apply configuration', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Network error: ' + error.message, 'error');
+    }
+  }
+}
+
+// Load interfaces on page load
+document.addEventListener('DOMContentLoaded', loadInterfaces);
+
+// Refresh every 30 seconds
+setInterval(loadInterfaces, 30000);}
+var __dns_init=false;function init_dns(){if(__dns_init)return;__dns_init=true;const ui = new DPlaneUI();
+
+async function loadDNS() {
+  try {
+    const response = await csrfFetch('/api/system/network');
+    const data = await response.json();
+    
+    if (data.success) {
+      displayDNS(data.dns);
+    } else {
+      ui.toast('Failed to load DNS config', 'error');
+    }
+  } catch (error) {
+    ui.toast('Network error: ' + error.message, 'error');
+  }
+}
+
+function displayDNS(dns) {
+  const serversDiv = document.getElementById('dnsServers');
+  const domainsDiv = document.getElementById('searchDomains');
+  
+  serversDiv.innerHTML = (dns.nameservers || []).map((ns, i) => `
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--surface-variant); border-radius: var(--radius-md); margin-bottom: 8px;">
+      <span style="flex: 1; font-family: monospace;">${ns}</span>
+      <button class="btn btn-ghost" style="padding: 6px 12px;" onclick="removeDNS(${i})">
+        <span class="material-symbols-rounded" style="font-size: 16px;">delete</span>
+      </button>
+    </div>
+  `).join('') || '<div style="color: var(--text-dim); padding: 12px;">No nameservers configured</div>';
+  
+  domainsDiv.innerHTML = (dns.search || []).map((domain, i) => `
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--surface-variant); border-radius: var(--radius-md); margin-bottom: 8px;">
+      <span style="flex: 1;">${domain}</span>
+      <button class="btn btn-ghost" style="padding: 6px 12px;" onclick="removeSearchDomain(${i})">
+        <span class="material-symbols-rounded" style="font-size: 16px;">delete</span>
+      </button>
+    </div>
+  `).join('') || '<div style="color: var(--text-dim); padding: 12px;">No search domains configured</div>';
+}
+
+async function addDNS() {
+  const result = await ui.form('Add Nameserver', [
+    { name: 'server', label: 'DNS Server', type: 'text', required: true, placeholder: '1.1.1.1 or 8.8.8.8' }
+  ], 'Add');
+  
+  if (result) {
+    await saveDNSChange({ action: 'add_nameserver', server: result.server });
+  }
+}
+
+async function removeDNS(index) {
+  await saveDNSChange({ action: 'remove_nameserver', index });
+}
+
+async function addSearchDomain() {
+  const result = await ui.form('Add Search Domain', [
+    { name: 'domain', label: 'Domain', type: 'text', required: true, placeholder: 'example.com' }
+  ], 'Add');
+  
+  if (result) {
+    await saveDNSChange({ action: 'add_search', domain: result.domain });
+  }
+}
+
+async function removeSearchDomain(index) {
+  await saveDNSChange({ action: 'remove_search', index });
+}
+
+async function saveDNSChange(data) {
+  ui.showLoading('Updating DNS configuration...');
+  
+  try {
+    const response = await csrfFetch('/api/system/network', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    
+    const result = await response.json();
+    ui.hideLoading();
+    
+    if (result.success) {
+      ui.toast('DNS configuration updated', 'success');
+      loadDNS();
+    } else {
+      ui.toast(result.error || 'Failed to update DNS', 'error');
+    }
+  } catch (error) {
+    ui.hideLoading();
+    ui.toast('Network error: ' + error.message, 'error');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadDNS);}
+var __routing_init=false;function init_routing(){if(__routing_init)return;__routing_init=true;const ui = new DPlaneUI();
+
+async function loadRoutes() {
+  try {
+    const response = await csrfFetch('/api/system/network');
+    const data = await response.json();
+    
+    if (data.success && data.routes) {
+      displayRoutes(data.routes);
+    } else {
+      ui.toast('Failed to load routes: ' + (data.error || 'Unknown error'), 'error');
+    }
+  } catch (error) {
+    ui.toast('Network error: ' + error.message, 'error');
+  }
+}
+
+function displayRoutes(routes) {
+  const tbody = document.getElementById('routeTable');
+  
+  if (routes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-dim);">No routes configured</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = routes.map(route => `
+    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+      <td style="padding: 16px; font-family: monospace;">${route.destination}</td>
+      <td style="padding: 16px; font-family: monospace;">${route.gateway}</td>
+      <td style="padding: 16px;">${route.interface}</td>
+      <td style="padding: 16px;">${route.metric || '-'}</td>
+      <td style="padding: 16px;">
+        <button class="btn btn-ghost" style="padding: 6px 12px; font-size: 13px;" onclick='deleteRoute(${JSON.stringify(route)})'>
+          <span class="material-symbols-rounded" style="font-size: 16px;">delete</span>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function addRoute() {
+  const result = await ui.form('Add Route', [
+    { name: 'destination', label: 'Destination', type: 'text', required: true, placeholder: '0.0.0.0/0 or 192.168.1.0/24' },
+    { name: 'gateway', label: 'Gateway', type: 'text', required: true, placeholder: '192.168.1.1' },
+    { name: 'interface', label: 'Interface', type: 'text', required: true, placeholder: 'eth0' },
+    { name: 'metric', label: 'Metric (optional)', type: 'text', placeholder: '100' }
+  ], 'Add');
+  
+  if (result) {
+    ui.showLoading('Adding route...');
+    
+    try {
+      const response = await csrfFetch('/api/system/network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add', ...result })
+      });
+      
+      const data = await response.json();
+      ui.hideLoading();
+      
+      if (data.success) {
+        ui.toast('Route added', 'success');
+        loadRoutes();
+      } else {
+        ui.toast(data.error || 'Failed to add route', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Network error: ' + error.message, 'error');
+    }
+  }
+}
+
+async function deleteRoute(route) {
+  if (await ui.confirm('Delete Route?', `Remove route to ${route.destination} via ${route.gateway}?`)) {
+    ui.showLoading('Deleting route...');
+    
+    try {
+      const response = await csrfFetch('/api/system/network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', destination: route.destination, gateway: route.gateway })
+      });
+      
+      const data = await response.json();
+      ui.hideLoading();
+      
+      if (data.success) {
+        ui.toast('Route deleted', 'success');
+        loadRoutes();
+      } else {
+        ui.toast(data.error || 'Failed to delete route', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Network error: ' + error.message, 'error');
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadRoutes);}
 </script>
 </body></html>

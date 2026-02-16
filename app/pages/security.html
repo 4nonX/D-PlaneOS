@@ -465,14 +465,193 @@ if (window.ConnectionMonitor) {
   <button class="consolidation-tab" data-tab="certificates" onclick="switchConsolidatedTab('certificates')">Certificates</button>
 </div>
 
-
 <div id="tab-overview" class="consolidation-content active">
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
 <div class="page-header">
 <h1 class="page-title">Network</h1>
 <p class="page-subtitle">Configuration • VPN • Remote access</p>
 </div>
 <div id="network-interfaces-container">
-        <main class="main">
             <div class="page-header">
                 <h1 class="page-title">Security Center</h1>
                 <p class="page-subtitle">Authentication • Access Control • Audit Log</p>
@@ -515,14 +694,489 @@ if (window.ConnectionMonitor) {
                 <h2>Security Log</h2>
                 <div id="securityLog"></div>
             </div>
-</div>
+    </div>
 
+    <script src="../assets/js/core.js"></script>
+</div>
 <div id="tab-firewall" class="consolidation-content">
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
 
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
+<div class="page-header">
+  <h1 class="page-title">Firewall</h1>
+  <div class="page-actions" id="fwActions">
+    <button class="btn" id="fwToggleBtn" onclick="toggleFirewall()">Enable</button>
+  </div>
 </div>
 
-<div id="tab-certificates" class="consolidation-content">
+<div class="card" id="fwStatusCard">
+  <div class="card-header">
+    <div class="card-title">Firewall Status</div>
+    <div id="fwStatusBadge" style="padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;"></div>
+  </div>
+  <div id="fwRules" style="font-family:monospace;font-size:13px;white-space:pre-wrap;color:rgba(255,255,255,0.7);max-height:400px;overflow-y:auto;"></div>
+</div>
 
+<div class="card">
+  <div class="card-header"><div class="card-title">Add Rule</div></div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;">
+    <div>
+      <label style="display:block;font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:4px;">Action</label>
+      <select id="fwAction" style="padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;">
+        <option value="allow">Allow</option>
+        <option value="deny">Deny</option>
+      </select>
+    </div>
+    <div>
+      <label style="display:block;font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:4px;">Port</label>
+      <input type="text" id="fwPort" placeholder="80/tcp, 443, 22/tcp" style="padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;width:140px;">
+    </div>
+    <div>
+      <label style="display:block;font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:4px;">From IP (optional)</label>
+      <input type="text" id="fwFrom" placeholder="192.168.1.0/24" style="padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;width:160px;">
+    </div>
+    <button class="btn btn-primary" onclick="addRule()" style="height:38px;"><span class="material-symbols-rounded" style="font-size:16px;">add</span> Add Rule</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><div class="card-title">Common Presets</div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn" onclick="applyPreset('22/tcp')">SSH (22)</button>
+    <button class="btn" onclick="applyPreset('80/tcp')">HTTP (80)</button>
+    <button class="btn" onclick="applyPreset('443/tcp')">HTTPS (443)</button>
+    <button class="btn" onclick="applyPreset('445/tcp')">SMB (445)</button>
+    <button class="btn" onclick="applyPreset('2049/tcp')">NFS (2049)</button>
+    <button class="btn" onclick="applyPreset('9000/tcp')">D-PlaneOS API (9000)</button>
+  </div>
+</div>
+
+<style>
+#fwRules .rule-line{padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+#fwRules .rule-num{color:#60A5FA;font-weight:600;min-width:30px;display:inline-block;}
+#fwRules .rule-allow{color:#4ade80;}
+#fwRules .rule-deny{color:#F87171;}
+</style>
+</div>
+<div id="tab-certificates" class="consolidation-content">
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
+<div class="page-header">
+  <h1 class="page-title">SSL/TLS Certificates</h1>
+  <div class="page-actions">
+    <button class="btn btn-primary" onclick="showGenModal()"><span class="material-symbols-rounded" style="font-size:18px;">add</span> Generate Certificate</button>
+  </div>
+</div>
+
+<div class="card" id="activeCertCard">
+  <div class="card-header"><div class="card-title">Active Certificate</div></div>
+  <div id="activeCertInfo" style="padding:4px 0;font-size:14px;color:rgba(255,255,255,0.6);">Loading...</div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Installed Certificates</div>
+    <div class="card-action" onclick="loadCerts()"><span class="material-symbols-rounded" style="font-size:18px;">refresh</span></div>
+  </div>
+  <div id="certList" style="padding:20px;text-align:center;color:rgba(255,255,255,0.4);">Loading...</div>
+</div>
+
+<div id="genCertModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:rgba(30,41,59,0.98);border-radius:16px;padding:32px;max-width:500px;width:90%;border:1px solid rgba(255,255,255,0.1);">
+    <h3 style="margin:0 0 24px;font-size:18px;">Generate Self-Signed Certificate</h3>
+    <div style="display:grid;gap:16px;">
+      <div>
+        <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Certificate Name</label>
+        <input type="text" id="certName" value="dplaneos" placeholder="my-cert" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Common Name (CN)</label>
+        <input type="text" id="certCN" value="dplaneos.local" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Validity (days)</label>
+        <input type="number" id="certDays" value="365" min="1" max="3650" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Subject Alternative Names (comma-separated)</label>
+        <input type="text" id="certSANs" placeholder="192.168.1.100, nas.local" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:24px;">
+      <button class="btn" onclick="closeGenModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="generateCert()">Generate</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.cert-row{display:flex;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid rgba(255,255,255,0.06);}
+.cert-row:last-child{border-bottom:none;}
+.cert-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(74,222,128,0.1);}
+.cert-icon span{color:#4ade80;font-size:22px;}
+.cert-info{flex:1;}
+.cert-name{font-weight:600;font-size:15px;margin-bottom:4px;}
+.cert-meta{font-size:12px;color:rgba(255,255,255,0.5);line-height:1.6;}
+.cert-active-badge{padding:3px 10px;border-radius:20px;background:rgba(74,222,128,0.15);color:#4ade80;font-size:11px;font-weight:600;}
+.cert-actions{display:flex;gap:8px;}
+</style>
 </div>
 
 </main>
@@ -530,136 +1184,7 @@ if (window.ConnectionMonitor) {
 
     <script src="../assets/js/core.js"></script>
     <script>
-    async function enable2FA() {
-        try {
-            const response = await csrfFetch('/api/auth/check?action=enable_2fa', {
-                method: 'POST',
-                body: JSON.stringify({})
-            });
-            const data = await response.json();
-            if (data.success) {
-                showToast('2FA QR Code displayed. Scan with your authenticator app.', 'success');
-                // Show QR code modal
-            } else {
-                showToast(data.error, 'error');
-            }
-        } catch (error) {
-            showToast('Failed to enable 2FA', 'error');
-        }
-    }
-
-    async function changePassword() {
-        const current = document.getElementById('currentPassword').value;
-        const newPass = document.getElementById('newPassword').value;
-        const confirm = document.getElementById('confirmPassword').value;
-
-        if (newPass !== confirm) {
-            showToast('Passwords do not match', 'error');
-            return;
-        }
-
-        try {
-            const response = await csrfFetch('/api/auth/change-password', {
-                method: 'POST',
-                body: JSON.stringify({
-                    current_password: current,
-                    new_password: newPass
-                })
-            });
-            const data = await response.json();
-            if (data.success) {
-                showToast('Password changed successfully', 'success');
-                document.getElementById('currentPassword').value = '';
-                document.getElementById('newPassword').value = '';
-                document.getElementById('confirmPassword').value = '';
-            } else {
-                showToast(data.error, 'error');
-            }
-        } catch (error) {
-            showToast('Failed to change password', 'error');
-        }
-    }
-
-    async function createAPIToken() {
-        const name = await ui.prompt('Create API Token', 'Enter token name:', '', 'My API Token');
-        if (!name) return;
-
-        try {
-            const response = await csrfFetch('/api/auth/check?action=create_api_token', {
-                method: 'POST',
-                body: JSON.stringify({ name, permissions: [] })
-            });
-            const data = await response.json();
-            if (data.success) {
-                const content = `
-                    <div class="warning-box mb-16">
-                        <p class="text-base mb-8"><strong>Save this token now!</strong></p>
-                        <p class="text-sm text-muted">This token will not be shown again. Copy it to a safe place.</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">API Token</label>
-                        <input type="text" class="form-input" value="${data.token}" readonly onclick="this.select()" id="tokenValue">
-                    </div>
-                `;
-                await ui.modal('API Token Created', content, [
-                    { text: 'Copy to Clipboard', icon: 'content_copy', callback: (modal) => {
-                        const input = modal.querySelector('#tokenValue');
-                        input.select();
-                        document.execCommand('copy');
-                        ui.toast('Token copied to clipboard', 'success');
-                        return false;
-                    }},
-                    { text: 'Close', primary: true }
-                ], { large: true });
-                loadAPITokens();
-            } else {
-                showToast(data.error, 'error');
-            }
-        } catch (error) {
-            showToast('Failed to create token', 'error');
-        }
-    }
-
-    async function loadAPITokens() {
-        try {
-            const response = await csrfFetch('/api/auth/check?action=list_api_tokens');
-            const data = await response.json();
-            if (data.success) {
-                const list = document.getElementById('apiTokensList');
-                list.innerHTML = data.tokens.map(t => `
-                    <div style="padding: 12px; background: #f5f5f5; margin-top: 8px; border-radius: 4px;">
-                        <strong>${t.name}</strong>
-                        <button onclick="revokeToken(${t.id})" class="btn btn-sm">Revoke</button>
-                    </div>
-                `).join('');
-            }
-        } catch (error) {
-            console.error('Failed to load tokens', error);
-        }
-    }
-
-    async function revokeToken(id) {
-        if (!await ui.confirm('Revoke Token', 'Revoke this API token? Any applications using this token will lose access immediately.')) return;
-        try {
-            const response = await csrfFetch('/api/auth/check?action=revoke_api_token', {
-                method: 'POST',
-                body: JSON.stringify({ token_id: id })
-            });
-            const data = await response.json();
-            if (data.success) {
-                showToast('Token revoked', 'success');
-                loadAPITokens();
-            }
-        } catch (error) {
-            showToast('Failed to revoke token', 'error');
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', loadAPITokens);
-    </script>
-  <script src="/assets/js/realtime-client.js">
-function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(c=>c.classList.remove('active'));document.querySelectorAll('.consolidation-tab').forEach(b=>b.classList.remove('active'));var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
-// === Overview (default) ===
+function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(function(c){c.classList.remove('active')});document.querySelectorAll('.consolidation-tab').forEach(function(b){b.classList.remove('active')});var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
 async function enable2FA() {
         try {
             const response = await csrfFetch('/api/auth/check?action=enable_2fa', {
@@ -786,8 +1311,6 @@ async function enable2FA() {
     }
 
     document.addEventListener('DOMContentLoaded', loadAPITokens);
-
-// === Firewall ===
 var __firewall_init=false;function init_firewall(){if(__firewall_init)return;__firewall_init=true;function getSessionId(){return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("session_id")||"";}
 function getUser(){return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("username")||"admin";}
 
@@ -850,8 +1373,6 @@ function applyPreset(port){
 }
 
 document.addEventListener("DOMContentLoaded",loadStatus);}
-
-// === Certificates ===
 var __certificates_init=false;function init_certificates(){if(__certificates_init)return;__certificates_init=true;function getSessionId(){return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("session_id")||"";}
 function getUser(){return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("username")||"admin";}
 function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}
@@ -928,7 +1449,6 @@ async function activateCert(name){
 }
 
 document.addEventListener("DOMContentLoaded",loadCerts);}
-
 </script>
 </body>
 </html>

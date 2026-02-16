@@ -560,7 +560,7 @@ async function editShare(id) {
   ui.showLoading('Loading share...');
   
   try {
-    const response = await csrfFetch(`/api/shares&id=${id}`);
+    const response = await csrfFetch(`/api/shares?id=${id}`);
     const data = await response.json();
     ui.hideLoading();
     

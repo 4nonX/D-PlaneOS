@@ -305,7 +305,6 @@ body { font-family: sans-serif; margin: 0; padding: 20px; background: #0a0a0a; c
   <button class="consolidation-tab" data-tab="enhanced" onclick="switchConsolidatedTab('enhanced')">Enhanced</button>
 </div>
 
-
 <div id="tab-browser" class="consolidation-content active">
 <h1>File Manager</h1>
 
@@ -319,10 +318,278 @@ body { font-family: sans-serif; margin: 0; padding: 20px; background: #0a0a0a; c
 <div class="breadcrumb" id="breadcrumb">/</div>
 <div id="status" class="loading">Loading...</div>
 <div id="files" class="file-list"></div>
+
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
 </div>
-
 <div id="tab-enhanced" class="consolidation-content">
+<script>
+function navigateToSection(s){if(s==='dashboard')window.location.href='index.html';}
+function toggleSubNav(section,button){
+  document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
+  if(button)button.classList.add('active');
+  document.querySelectorAll('.nav-sub').forEach(s=>s.classList.remove('active'));
+  const sub=document.getElementById('sub-'+section);
+  if(sub){sub.classList.add('active');document.body.classList.add('has-subnav');}
+}
+(function(){
+  const currentPage=window.location.pathname.split('/').pop()||'index.html';
+  const pageMap={
+    'index.html':{section:'dashboard',page:null},
+    'pools.html':{section:'storage',page:'pools'},
+    'pools-advanced.html':{section:'storage',page:'pools-advanced'},
+    'shares.html':{section:'storage',page:'shares'},
+    'replication.html':{section:'storage',page:'replication'},
+    'files.html':{section:'storage',page:'files'},
+    'files-enhanced.html':{section:'storage',page:'files'},
+    'quotas.html':{section:'storage',page:'quotas'},
+    'docker.html':{section:'compute',page:'docker'},
+    'modules.html':{section:'compute',page:'modules'},
+    'network.html':{section:'network',page:'network'},
+    'users.html':{section:'identity',page:'users'},
+    'groups.html':{section:'identity',page:'groups'},
+    'directory-service.html':{section:'identity',page:'directory-service'},
+    'security.html':{section:'security',page:'security'},
+    'audit.html':{section:'security',page:'audit'},
+    'settings.html':{section:'system',page:'settings'},
+    'logs.html':{section:'system',page:'logs'},
+    'ups.html':{section:'system',page:'ups'}
+  };
+  const c=pageMap[currentPage];
+  if(c){
+    const btn=document.querySelector(`[data-section="${c.section}"]`);
+    if(btn)btn.classList.add('active');
+    if(c.section!=='dashboard'){
+      const sub=document.getElementById('sub-'+c.section);
+      if(sub){sub.classList.add('active');document.body.classList.add('has-subnav');
+        if(c.page){const pl=sub.querySelector(`[data-page="${c.page}"]`);if(pl)pl.classList.add('active');}
+      }
+    }
+  }
+})();
+function showKeyboardHelp(){if(window.EnhancedUI)EnhancedUI.toast('g+d Dashboard | g+s Storage | ? Help','info',5000);}
+</script>
 
+<div class="main">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">File Upload</h1>
+      <p class="page-meta">Chunked upload with resume support</p>
+    </div>
+    <div style="display: flex; gap: 12px;">
+      <a href="files.html" class="btn btn-ghost">
+        <span class="material-symbols-rounded" style="font-size:18px;">folder_open</span>
+        File Explorer
+      </a>
+      <a href="reporting.html" class="sub-link" data-page="reporting">
+        <span class="material-symbols-rounded">monitoring</span>
+        Reporting
+      </a>
+      <a href="power-management.html" class="sub-link" data-page="power-management">
+        <span class="material-symbols-rounded">power_settings_new</span>
+        Power Management
+      </a>
+    </div>
+  </div>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <span class="material-symbols-rounded">cloud_upload</span>
+    <h3>Drop files here or click to browse</h3>
+    <p>Large files are automatically split into 10 MB chunks</p>
+    <input type="file" id="fileInput" multiple style="display:none;" onchange="handleFileSelect(event)">
+  </div>
+
+  <!-- Upload Queue -->
+  <div class="upload-queue" id="uploadQueue">
+    <div class="queue-header">
+      <h3 id="queueTitle">Uploads</h3>
+      <button class="btn btn-ghost" onclick="clearCompleted()" style="padding:6px 12px; font-size:13px;">
+        <span class="material-symbols-rounded" style="font-size:16px;">delete_sweep</span>
+        Clear completed
+      </button>
+    </div>
+    <div id="uploadList"></div>
+  </div>
+</div>
 </div>
 
 </main>
@@ -509,6 +776,7 @@ if (window.ConnectionMonitor) {
 </script>
 
 <script>
+function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(function(c){c.classList.remove('active')});document.querySelectorAll('.consolidation-tab').forEach(function(b){b.classList.remove('active')});var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
 let currentPath = '/';
 
 async function loadFiles(path = currentPath) {
@@ -734,236 +1002,6 @@ async function emptyTrash() {
     loadTrash();
   } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
 }
-
-function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(c=>c.classList.remove('active'));document.querySelectorAll('.consolidation-tab').forEach(b=>b.classList.remove('active'));var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
-// === Browser (default) ===
-let currentPath = '/';
-
-async function loadFiles(path = currentPath) {
-  const status = document.getElementById('status');
-  const filesDiv = document.getElementById('files');
-  const breadcrumb = document.getElementById('breadcrumb');
-  
-  status.textContent = 'Loading...';
-  filesDiv.innerHTML = '';
-  
-  try {
-    const data = await daemonAPI.files_list(path);
-    
-    if (!data.success) {
-      status.textContent = `Error: ${data.error || 'Failed to load files'}`;
-      return;
-    }
-    
-    currentPath = data.path || path;
-    breadcrumb.textContent = currentPath;
-    
-    const files = data.files || [];
-    status.textContent = `${files.length} items`;
-    
-    if (files.length === 0) {
-      filesDiv.innerHTML = '<div style="text-align:center; padding:40px; opacity:0.5;">Empty directory</div>';
-      return;
-    }
-    
-    files.sort((a, b) => {
-      if (a.is_dir && !b.is_dir) return -1;
-      if (!a.is_dir && b.is_dir) return 1;
-      return a.name.localeCompare(b.name);
-    });
-    
-    files.forEach(file => {
-      const item = document.createElement('div');
-      item.className = 'file-item';
-      
-      const icon = file.is_dir ? '📁' : '📄';
-      const size = file.is_dir ? 'Directory' : formatSize(file.size);
-      const date = new Date(file.mod_time * 1000).toLocaleString();
-      
-      item.innerHTML = `
-        <div class="file-icon">${icon}</div>
-        <div class="file-info">
-          <div class="file-name">${escapeHtml(file.name)}</div>
-          <div class="file-meta">${size} • ${file.mode} • ${date}</div>
-        </div>
-        <div class="file-actions">
-          ${file.is_dir ? '' : '<button onclick="downloadFile(event, \'' + escapeHtml(file.path) + '\')">⬇️</button>'}
-          <button onclick="moveToTrash(event, '${escapeHtml(file.path)}')" title="Move to Trash" style="font-size:14px;">♻</button>
-          <button onclick="deleteFile(event, '${escapeHtml(file.path)}')" title="Delete permanently" style="opacity:0.4;font-size:10px;">✕</button>
-        </div>
-      `;
-      
-      if (file.is_dir) {
-        item.addEventListener('click', (e) => {
-          if (!e.target.closest('button')) {
-            loadFiles(file.path);
-          }
-        });
-      }
-      
-      filesDiv.appendChild(item);
-    });
-    
-  } catch (error) {
-    status.textContent = `Error: ${error.message}`;
-    console.error('Failed to load files:', error);
-  }
-}
-
-function formatSize(bytes) {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function goUp() {
-  if (currentPath === '/') return;
-  const parent = currentPath.split('/').slice(0, -1).join('/') || '/';
-  loadFiles(parent);
-}
-
-function refresh() {
-  loadFiles(currentPath);
-}
-
-async function createFolder() {
-  const name = await ui.prompt('Create Folder', 'Folder name:');
-  if (!name) return;
-  
-  const path = currentPath + (currentPath.endsWith('/') ? '' : '/') + name;
-  
-  try {
-    const result = await daemonAPI.files_mkdir(path);
-    if (result.success) {
-      ui.toast('Folder created', 'success');
-      refresh();
-    } else {
-      ui.toast('Error: ' + (result.error || 'Failed to create folder'), 'error');
-    }
-  } catch (error) {
-    ui.toast('Error: ' + error.message, 'error');
-  }
-}
-
-async function deleteFile(event, path) {
-  event.stopPropagation();
-  
-  if (!await ui.confirm('Delete File', `Delete ${path}?`)) return;
-  
-  try {
-    const result = await daemonAPI.files_delete(path);
-    if (result.success) {
-      ui.toast('Deleted', 'success');
-      refresh();
-    } else {
-      ui.toast('Error: ' + (result.error || 'Failed to delete'), 'error');
-    }
-  } catch (error) {
-    ui.toast('Error: ' + error.message, 'error');
-  }
-}
-
-function downloadFile(event, path) {
-  event.stopPropagation();
-  window.location.href = '/download?path=' + encodeURIComponent(path);
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const params = new URLSearchParams(window.location.search);
-  const startPath = params.get('path') || '/';
-  loadFiles(startPath);
-});
-
-// === RECYCLE BIN ===
-async function moveToTrash(event, path) {
-  event.stopPropagation();
-  if (!await ui.confirm('Move to Trash', 'Move to trash? ' + path)) return;
-  try {
-    const res = await fetch('/api/trash/move', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},
-      body: JSON.stringify({path: path})
-    });
-    const data = await res.json();
-    if (data.success) {
-      if (window.EnhancedUI) EnhancedUI.toast('Moved to trash', 'success');
-      refresh();
-    } else {
-      ui.toast('Trash error: ' + (data.error || 'failed'), 'error');
-    }
-  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
-}
-
-function getSessionId() {
-  return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/, '$1') || localStorage.getItem('session_id') || '';
-}
-function getUser() {
-  return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/, '$1') || localStorage.getItem('username') || 'admin';
-}
-
-var trashPanelOpen = false;
-async function toggleTrashPanel() {
-  var panel = document.getElementById('trashPanel');
-  if (!panel) {
-    // Create panel
-    panel = document.createElement('div');
-    panel.id = 'trashPanel';
-    panel.style.cssText = 'position:fixed;right:0;top:0;bottom:0;width:380px;background:rgba(20,27,40,0.98);border-left:1px solid rgba(255,255,255,0.1);z-index:9998;transform:translateX(100%);transition:transform 0.3s ease;padding:24px;overflow-y:auto;';
-    panel.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h3 style="margin:0;font-size:18px;">Recycle Bin</h3><button onclick="toggleTrashPanel()" style="background:none;border:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:20px;">✕</button></div><div id="trashItems">Loading...</div><div style="margin-top:16px;"><button class="btn" onclick="emptyTrash()" style="width:100%;background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#EF4444;">Empty Trash</button></div>';
-    document.body.appendChild(panel);
-  }
-  trashPanelOpen = !trashPanelOpen;
-  panel.style.transform = trashPanelOpen ? 'translateX(0)' : 'translateX(100%)';
-  if (trashPanelOpen) loadTrash();
-}
-
-async function loadTrash() {
-  try {
-    var res = await fetch('/api/trash/list', {headers:{'X-Session-ID':getSessionId(),'X-User':getUser()}});
-    var data = await res.json();
-    var items = data.items || [];
-    var el = document.getElementById('trashItems');
-    if (!items.length) { el.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">Trash is empty</div>'; return; }
-    el.innerHTML = items.map(function(item) {
-      var d = document.createElement('div'); d.textContent = item.name; var safeName = d.innerHTML;
-      var origPath = item.original_path || 'unknown';
-      d.textContent = origPath; var safeOrig = d.innerHTML;
-      return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);">' +
-        '<div style="font-size:14px;font-weight:500;">' + safeName.substring(safeName.indexOf('_') + 1) + '</div>' +
-        '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin:4px 0;">From: ' + safeOrig + '</div>' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.3);">' + (item.trashed_at || '') + '</div>' +
-        '<button onclick="restoreTrash(\'' + safeName.replace(/'/g,"\\'") + '\')" style="margin-top:6px;padding:4px 10px;border:1px solid rgba(74,222,128,0.3);background:rgba(74,222,128,0.08);border-radius:6px;color:#4ade80;cursor:pointer;font-size:12px;">Restore</button></div>';
-    }).join('');
-  } catch(e) { document.getElementById('trashItems').textContent = 'Error loading trash'; }
-}
-
-async function restoreTrash(name) {
-  try {
-    var res = await fetch('/api/trash/restore', {method:'POST',headers:{'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},body:JSON.stringify({name:name})});
-    var data = await res.json();
-    if (data.success) { if (window.EnhancedUI) EnhancedUI.toast('Restored to ' + data.restored_to, 'success'); loadTrash(); refresh(); }
-    else { ui.toast('Restore failed', 'error'); }
-  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
-}
-
-async function emptyTrash() {
-  if (!await ui.confirm('Empty Trash', 'Permanently delete ALL items? Cannot be undone.')) return;
-  try {
-    await fetch('/api/trash/empty', {method:'POST',headers:{'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},body:JSON.stringify({})});
-    if (window.EnhancedUI) EnhancedUI.toast('Trash emptied', 'success');
-    loadTrash();
-  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
-}
-
-// === Enhanced ===
 var __enhanced_init=false;function init_enhanced(){if(__enhanced_init)return;__enhanced_init=true;const CHUNK_SIZE = 10 * 1024 * 1024;
 const currentPath = '/';
 let queue = [];
@@ -1090,7 +1128,6 @@ function fmt(bytes) {
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }}
-
 </script>
 
 </body>

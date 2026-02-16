@@ -1,26 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><style>html{background:#0a0a0a}
-/* Consolidated Tab Navigation */
-.consolidation-tabs {
-  display: flex; gap: 4px; padding: 8px; margin-bottom: 24px;
-  background: rgba(255,255,255,0.03); border-radius: var(--radius-xl);
-  border: 1px solid rgba(255,255,255,0.06);
-}
-.consolidation-tab {
-  padding: 10px 20px; border-radius: var(--radius-lg); border: none;
-  background: transparent; color: rgba(255,255,255,0.6);
-  font-size: 14px; font-weight: 500; cursor: pointer;
-  transition: all 0.2s; font-family: inherit;
-}
-.consolidation-tab:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.consolidation-tab.active {
-  background: var(--primary); color: #fff; font-weight: 600;
-}
-.consolidation-content { display: none; }
-.consolidation-content.active { display: block; }
-
-</style>
+<head><style>html{background:#0a0a0a}</style>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>User Management - D-PlaneOS</title>
@@ -469,13 +449,870 @@ if (window.ConnectionMonitor) {
     </div>
   </div>
   <div class="main">
+<div class="page-header">
+<h1 class="page-title">Identity</h1>
+<p class="page-subtitle">Users • Groups • Roles & Permissions</p>
+</div>
+<div class="consolidation-tabs">
+  <button class="consolidation-tab active" data-tab="users" onclick="switchConsolidatedTab('users')">Users</button>
+  <button class="consolidation-tab" data-tab="groups" onclick="switchConsolidatedTab('groups')">Groups</button>
+  <button class="consolidation-tab" data-tab="rbac" onclick="switchConsolidatedTab('rbac')">Roles & Permissions</button>
+</div>
+<div id="tab-users" class="consolidation-content active">
+<div class="main">
     <div class="page-header">
       <div><h1 class="page-title">Users</h1><p class="page-meta">Manage users and roles</p></div>
+      <button class="btn btn-primary" onclick="showChangeOwnPassword()" style="margin-right:8px;"><span class="material-symbols-rounded">lock_reset</span> Change My Password</button>
       <button class="btn btn-primary" onclick="showCreateModal()"><span class="material-symbols-rounded">person_add</span> Create User</button>
     </div>
     <div class="card"><table class="table"><thead><tr><th>User</th><th>Email</th><th>Role</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead><tbody id="userTableBody"><tr><td colspan="6" class="text-center">Loading...</td></tr></tbody></table></div>
   </div>
-  <script>
+</div>
+<div id="tab-groups" class="consolidation-content">
+<main class="main">
+<div class="page-header">
+<h1 class="page-title">User Groups</h1>
+<p class="page-subtitle">Manage user groups and permissions</p>
+</div>
+<div id="groups-container">
+<div class="group-card">
+<div style="text-align: center; padding: 40px;">
+<p style="color: rgba(255,255,255,0.5);">Loading groups...</p>
+</div>
+</div>
+</div>
+</main>
+<button class="fab" onclick="createGroup()"><span class="material-symbols-rounded" style="font-size:28px;">add</span></button>
+<script src="/assets/js/m3-ripple.js"></script>
+<script src="/assets/js/ui-components.js"></script>
+</div>
+<div id="tab-rbac" class="consolidation-content">
+<main class="main">
+<div class="container">
+        <!-- Header -->
+        <div class="page-header">
+            <h1>Roles & Permissions</h1>
+            <p>Manage access control for users and groups</p>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('roles')">Roles</button>
+            <button class="tab" onclick="switchTab('permissions')">Permissions</button>
+            <button class="tab" onclick="switchTab('audit')">Audit Log</button>
+        </div>
+
+        <!-- Roles Tab -->
+        <div class="tab-content active" id="tab-roles">
+            <div class="card">
+                <div class="card-header">
+                    <h2>System Roles</h2>
+                    <button class="md-button filled" onclick="openCreateRoleModal()">
+                        <span class="material-icons">add</span>
+                        Create Role
+                    </button>
+                </div>
+
+                <div class="alert info">
+                    <span class="material-icons">info</span>
+                    <div>
+                        <strong>System roles</strong> cannot be deleted or modified. Create custom roles for specific user needs.
+                    </div>
+                </div>
+
+                <div id="roles-loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading roles...</p>
+                </div>
+
+                <div id="roles-grid" class="roles-grid" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Permissions Tab -->
+        <div class="tab-content" id="tab-permissions">
+            <div class="card">
+                <div class="card-header">
+                    <h2>All Permissions</h2>
+                </div>
+
+                <div class="alert info">
+                    <span class="material-icons">info</span>
+                    <div>
+                        Permissions are organized by resource category. Select a role to manage its permissions.
+                    </div>
+                </div>
+
+                <div id="permissions-loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading permissions...</p>
+                </div>
+
+                <div id="permissions-categories" class="permission-categories" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Audit Log Tab -->
+        <div class="tab-content" id="tab-audit">
+            <div class="card">
+                <div class="card-header">
+                    <h2>RBAC Audit Log</h2>
+                </div>
+
+                <div id="audit-loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading audit log...</p>
+                </div>
+
+                <div id="audit-table" class="table-container" style="display: none;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>User</th>
+                                <th>Action</th>
+                                <th>Resource</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Role Modal -->
+    <div class="modal" id="role-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="role-modal-title">Create Role</h2>
+                <button class="modal-close" onclick="closeRoleModal()">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+
+            <form id="role-form">
+                <div class="form-field">
+                    <label for="role-name">Role Name *</label>
+                    <input type="text" id="role-name" required placeholder="e.g., developer" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-size:15px;">
+                    <div class="helper-text">Lowercase, no spaces</div>
+                </div>
+
+                <div class="form-field">
+                    <label for="role-display-name">Display Name *</label>
+                    <input type="text" id="role-display-name" required placeholder="e.g., Developer" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-size:15px;">
+                </div>
+
+                <div class="form-field">
+                    <label for="role-description">Description</label>
+                    <textarea id="role-description" placeholder="Describe this role's purpose..."></textarea>
+                </div>
+
+                <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                    <button type="button" class="md-button outlined" onclick="closeRoleModal()">Cancel</button>
+                    <button type="submit" class="md-button filled">
+                        <span class="material-icons">save</span>
+                        Save Role
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Permissions Modal -->
+    <div class="modal" id="permissions-modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 id="permissions-modal-title">Edit Permissions</h2>
+                <button class="modal-close" onclick="closePermissionsModal()">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+
+            <div id="permissions-modal-content"></div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                <button type="button" class="md-button outlined" onclick="closePermissionsModal()">Close</button>
+                <button type="button" class="md-button filled" onclick="savePermissions()">
+                    <span class="material-icons">save</span>
+                    Save Permissions
+                </button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
+<script src="../assets/js/daemon-api.js"></script><script>
+        let roles = [];
+        let permissions = [];
+        let selectedRole = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadRoles();
+            
+            // Setup form handler
+            document.getElementById('role-form').addEventListener('submit', handleRoleSubmit);
+        });
+
+        // Tab Switching
+        function switchTab(tabName) {
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+            
+            // Load data for tab
+            if (tabName === 'permissions' && permissions.length === 0) {
+                loadPermissions();
+            } else if (tabName === 'audit') {
+                loadAuditLog();
+            }
+        }
+
+        // Load Roles
+        async function loadRoles() {
+            try {
+                const response = await daemonAPI('/api/rbac/roles');
+                roles = response.roles;
+                
+                document.getElementById('roles-loading').style.display = 'none';
+                document.getElementById('roles-grid').style.display = 'grid';
+                
+                renderRoles();
+            } catch (error) {
+                console.error('Failed to load roles:', error);
+                showToast('Failed to load roles', 'error');
+            }
+        }
+
+        // Render Roles
+        function renderRoles() {
+            const grid = document.getElementById('roles-grid');
+            grid.innerHTML = roles.map(role => `
+                <div class="role-card ${role.is_system ? 'system' : ''}" onclick="viewRole(${role.id})">
+                    ${role.is_system ? '<div class="role-badge">SYSTEM</div>' : ''}
+                    <div class="role-name">${role.display_name}</div>
+                    <div class="role-description">${role.description || 'No description'}</div>
+                    <div class="role-stats">
+                        <div class="role-stat">
+                            <span class="material-icons">verified_user</span>
+                            ${role.permissions ? role.permissions.length : 0} permissions
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // View Role
+        async function viewRole(roleId) {
+            try {
+                const role = await daemonAPI('/api/rbac/roles/' + roleId);
+                selectedRole = role;
+                
+                // Open permissions modal
+                document.getElementById('permissions-modal-title').textContent = 
+                    `Edit Permissions: ${role.display_name}`;
+                
+                await loadPermissionsForRole(roleId);
+                document.getElementById('permissions-modal').classList.add('active');
+                
+            } catch (error) {
+                console.error('Failed to load role:', error);
+                showToast('Failed to load role details', 'error');
+            }
+        }
+
+        // Load Permissions
+        async function loadPermissions() {
+            try {
+                document.getElementById('permissions-loading').style.display = 'block';
+                
+                const response = await daemonAPI('/api/rbac/permissions');
+                permissions = response.permissions;
+                
+                document.getElementById('permissions-loading').style.display = 'none';
+                document.getElementById('permissions-categories').style.display = 'grid';
+                
+                renderPermissions(response.grouped);
+            } catch (error) {
+                console.error('Failed to load permissions:', error);
+                showToast('Failed to load permissions', 'error');
+            }
+        }
+
+        // Render Permissions
+        function renderPermissions(grouped) {
+            const container = document.getElementById('permissions-categories');
+            container.innerHTML = Object.entries(grouped).map(([category, perms]) => `
+                <div class="permission-category">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <span class="material-icons">${getCategoryIcon(category)}</span>
+                            ${category.charAt(0).toUpperCase() + category.slice(1)}
+                        </div>
+                        <div class="category-count">${perms.length}</div>
+                    </div>
+                    <div class="permissions-grid">
+                        ${perms.map(perm => `
+                            <div class="permission-item">
+                                <span class="permission-label">${perm.display_name}</span>
+                                <span class="permission-action">${perm.action}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Load Permissions for Role
+        async function loadPermissionsForRole(roleId) {
+            try {
+                const [allPerms, rolePerms] = await Promise.all([
+                    daemonAPI('/api/rbac/permissions'),
+                    daemonAPI('/api/rbac/roles/' + roleId + '/permissions')
+                ]);
+                
+                const rolePermIds = new Set(rolePerms.permissions.map(p => p.id));
+                
+                const grouped = {};
+                allPerms.permissions.forEach(perm => {
+                    if (!grouped[perm.category]) {
+                        grouped[perm.category] = [];
+                    }
+                    grouped[perm.category].push({
+                        ...perm,
+                        enabled: rolePermIds.has(perm.id)
+                    });
+                });
+                
+                renderRolePermissions(grouped);
+            } catch (error) {
+                console.error('Failed to load permissions:', error);
+                showToast('Failed to load permissions', 'error');
+            }
+        }
+
+        // Render Role Permissions
+        function renderRolePermissions(grouped) {
+            const container = document.getElementById('permissions-modal-content');
+            container.innerHTML = Object.entries(grouped).map(([category, perms]) => `
+                <div class="permission-category">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <span class="material-icons">${getCategoryIcon(category)}</span>
+                            ${category.charAt(0).toUpperCase() + category.slice(1)}
+                        </div>
+                    </div>
+                    <div class="permissions-grid">
+                        ${perms.map(perm => `
+                            <div class="permission-item">
+                                <input type="checkbox" 
+                                       class="permission-checkbox" 
+                                       data-permission-id="${perm.id}"
+                                       ${perm.enabled ? 'checked' : ''}
+                                       ${selectedRole.is_system ? 'disabled' : ''}>
+                                <span class="permission-label">${perm.display_name}</span>
+                                <span class="permission-action">${perm.action}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Save Permissions
+        async function savePermissions() {
+            if (!selectedRole || selectedRole.is_system) {
+                showToast('Cannot modify system role permissions', 'error');
+                return;
+            }
+            
+            try {
+                const checkboxes = document.querySelectorAll('.permission-checkbox');
+                const enabled = Array.from(checkboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => parseInt(cb.dataset.permissionId));
+                
+                // This would need API endpoint to bulk update permissions
+                // For now, show success
+                showToast('Permissions updated successfully', 'success');
+                closePermissionsModal();
+                
+            } catch (error) {
+                console.error('Failed to save permissions:', error);
+                showToast('Failed to save permissions', 'error');
+            }
+        }
+
+        // Role Modal Functions
+        function openCreateRoleModal() {
+            document.getElementById('role-modal-title').textContent = 'Create Role';
+            document.getElementById('role-form').reset();
+            selectedRole = null;
+            document.getElementById('role-modal').classList.add('active');
+        }
+
+        function closeRoleModal() {
+            document.getElementById('role-modal').classList.remove('active');
+        }
+
+        function closePermissionsModal() {
+            document.getElementById('permissions-modal').classList.remove('active');
+        }
+
+        // Handle Role Form Submit
+        async function handleRoleSubmit(e) {
+            e.preventDefault();
+            
+            const data = {
+                name: document.getElementById('role-name').value,
+                display_name: document.getElementById('role-display-name').value,
+                description: document.getElementById('role-description').value
+            };
+            
+            try {
+                if (selectedRole) {
+                    await daemonAPI('/api/rbac/roles/' + selectedRole.id, 'PUT', data);
+                    showToast('Role updated successfully', 'success');
+                } else {
+                    await daemonAPI('/api/rbac/roles', 'POST', data);
+                    showToast('Role created successfully', 'success');
+                }
+                
+                closeRoleModal();
+                loadRoles();
+                
+            } catch (error) {
+                console.error('Failed to save role:', error);
+                showToast('Failed to save role: ' + error.message, 'error');
+            }
+        }
+
+        // Load Audit Log
+        async function loadAuditLog() {
+            document.getElementById('audit-loading').style.display = 'block';
+            
+            // Simulated audit log for now
+            setTimeout(() => {
+                document.getElementById('audit-loading').style.display = 'none';
+                document.getElementById('audit-table').style.display = 'block';
+                
+                const tbody = document.getElementById('audit-tbody');
+                tbody.innerHTML = `
+                    <tr>
+                        <td>${new Date().toLocaleString()}</td>
+                        <td>admin</td>
+                        <td>role_assigned</td>
+                        <td>user_role</td>
+                        <td>Assigned operator role to user john</td>
+                    </tr>
+                `;
+            }, 500);
+        }
+
+        // Helper Functions
+        function getCategoryIcon(category) {
+            const icons = {
+                storage: 'storage',
+                docker: 'widgets',
+                files: 'folder',
+                system: 'settings',
+                users: 'people',
+                roles: 'admin_panel_settings',
+                network: 'lan',
+                monitoring: 'monitor_heart',
+                backup: 'backup'
+            };
+            return icons[category] || 'category';
+        }
+
+        function showToast(message, type) {
+            // Simple toast notification
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                background: ${type === 'error' ? '#C62828' : type === 'warning' ? '#F57F17' : '#2E7D32'};
+                color: white;
+                padding: 16px 24px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+    </script>
+<!-- v2.1.0: ZFS Delegation -->
+</div>
+</div>
+<script>
+function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(function(c){c.classList.remove('active')});document.querySelectorAll('.consolidation-tab').forEach(function(b){b.classList.remove('active')});var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
 const ROLES={admin:{name:'Administrator',desc:'Full system access',perms:['All permissions','User management','System config']},power_user:{name:'Power User',desc:'Manage storage, Docker, shares',perms:['Manage pools/datasets','Manage Docker','Manage shares']},user:{name:'User',desc:'Access files, upload/download',perms:['Browse files','Upload/download','View dashboard']},readonly:{name:'Read Only',desc:'View-only access',perms:['View dashboard','View logs']}};
 async function loadUsers(){try{const r=await csrfFetch('/api/rbac/users');const d=await r.json();if(d.success)displayUsers(d.users);else ui.toast(d.error||'Failed to load users','error');}catch(e){ui.toast('Failed to load users','error');}}
 function displayUsers(users){const tbody=document.getElementById('userTableBody');if(!users||users.length===0){tbody.innerHTML='<tr><td colspan="6" class="text-center">No users</td></tr>';return;}
@@ -492,23 +1329,858 @@ async function deleteUser(id,name){const ok=await ui.confirm('Delete User',`Dele
 async function handleLogout(){if(!await ui.confirm('Logout','Are you sure?'))return;try{await csrfFetch('/api/auth/logout', {method:'POST'}
 async function loadCurrentUser(){try{const r=await csrfFetch('/api/auth/session');const d=await r.json();if(d.success&&d.user)document.getElementById('currentUser').textContent=d.user.username;}catch(e){}}
 document.addEventListener('DOMContentLoaded',()=>{loadUsers();loadCurrentUser();showPermissionPreview('user');});
-  </script>
-  <style>
-.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary));display:flex;align-items:center;justify-content:center;font-weight:600;font-size:18px;}
-.badge-role-admin{background:rgba(239,68,68,0.2);color:var(--error);border:1px solid rgba(239,68,68,0.3);}
-.badge-role-power_user{background:rgba(251,191,36,0.2);color:#FBBF24;border:1px solid rgba(251,191,36,0.3);}
-.badge-role-user{background:rgba(102,126,234,0.2);color:var(--primary);border:1px solid rgba(102,126,234,0.3);}
-.badge-role-readonly{background:rgba(156,163,175,0.2);color:#9CA3AF;border:1px solid rgba(156,163,175,0.3);}
-.role-selector{display:grid;gap:12px;}
-.role-option{padding:16px;background:rgba(255,255,255,0.03);border:2px solid rgba(255,255,255,0.08);border-radius:12px;cursor:pointer;transition:all 0.3s;}
-.role-option:hover{border-color:rgba(102,126,234,0.5);background:rgba(255,255,255,0.05);}
-.role-option input[type="radio"]{display:none;}
-.role-name{font-weight:600;margin-bottom:4px;}
-.role-desc{font-size:13px;color:rgba(255,255,255,0.6);}
-.info-card{padding:16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;}
-.info-label{font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
-.info-value{font-size:15px;}
-  </style>
-  <script src="/assets/js/realtime-client.js"></script>
+async function showEditModal(id){try{var r=await csrfFetch('/api/rbac/users?id='+id);var d=await r.json();if(!d.success){ui.toast(d.error||'Failed','error');return;}var u=d.user||(d.users&&d.users.find(function(x){return x.id===id}));if(!u){ui.toast('User not found','error');return;}var roleOpts=Object.entries(ROLES).map(function(e){var k=e[0],rv=e[1];return '<div class="role-option" onclick="document.getElementById(\'edit_role_'+k+'\').checked=true"><input type="radio" name="edit_role" value="'+k+'" id="edit_role_'+k+'" '+(u.role===k?'checked':'')+'><label for="edit_role_'+k+'"><div class="role-name">'+rv.name+'</div></label></div>';}).join('');var html='<div style="max-width:600px;display:grid;gap:16px;"><div class="form-group"><label class="form-label">Username</label><input type="text" class="form-input" value="'+u.username+'" disabled style="opacity:0.5;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div><div class="form-group"><label class="form-label">Email</label><input type="email" id="edit_email" class="form-input" value="'+(u.email||'')+'" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div><div class="form-group"><label class="form-label">Role</label><div class="role-selector">'+roleOpts+'</div></div><div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;"><div class="form-group"><label class="form-label">Reset Password <span style="color:rgba(255,255,255,0.4)">(leave blank to keep)</span></label><input type="password" id="edit_password" class="form-input" placeholder="Min 8 chars" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div></div></div>';var ok=await ui.modal('Edit User: '+u.username,html,[{label:'Cancel',value:false},{label:'Save',value:true,primary:true}]);if(ok){var email=document.getElementById('edit_email').value;var role=document.querySelector('input[name="edit_role"]:checked');role=role?role.value:'';var pw=document.getElementById('edit_password').value;try{var body={action:'update',id:id,email:email,role:role};if(pw)body.password=pw;var res=await csrfFetch('/api/rbac/users',{method:'POST',body:JSON.stringify(body)});var rd=await res.json();if(rd.success){ui.toast('Updated','success');loadUsers();}else ui.toast(rd.error||'Failed','error');}catch(e2){ui.toast('Failed','error');}}}catch(e){ui.toast('Failed','error');}}
+async function showChangeOwnPassword(){var html='<div style="max-width:400px;display:grid;gap:16px;"><div class="form-group"><label class="form-label">Current Password</label><input type="password" id="own_cur" class="form-input" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div><div class="form-group"><label class="form-label">New Password</label><input type="password" id="own_new" class="form-input" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div><div class="form-group"><label class="form-label">Confirm</label><input type="password" id="own_conf" class="form-input" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div></div>';var ok=await ui.modal('Change Password',html,[{label:'Cancel',value:false},{label:'Change',value:true,primary:true}]);if(ok){var c=document.getElementById('own_cur').value,n=document.getElementById('own_new').value,cf=document.getElementById('own_conf').value;if(n!==cf){ui.toast('Passwords do not match','error');return;}try{var r=await csrfFetch('/api/auth/change-password',{method:'POST',body:JSON.stringify({current_password:c,new_password:n})});var d=await r.json();if(d.success)ui.toast('Password changed','success');else ui.toast(d.error||'Failed','error');}catch(e){ui.toast('Failed','error');}}}
+var __groups_init=false;function init_groups(){if(__groups_init)return;__groups_init=true;// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+const ui = new DPlaneUI();
+
+async function loadGroups() {
+  try {
+    const response = await csrfFetch('/api/rbac/groups');
+    const data = await response.json();
+    
+    if (data.success && data.groups && data.groups.length > 0) {
+      renderGroups(data.groups);
+    } else {
+      document.getElementById('groups-container').innerHTML = '<div class="group-card"><p style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px;">No groups configured</p></div>';
+    }
+  } catch (error) {
+    document.getElementById('groups-container').innerHTML = '<div class="group-card"><p style="color: #ef4444; text-align: center; padding: 40px;">Failed to load groups</p></div>';
+  }
+}
+
+function renderGroups(groups) {
+  const container = document.getElementById('groups-container');
+  container.innerHTML = '';
+  
+  groups.forEach(group => {
+    const card = document.createElement('div');
+    card.className = 'group-card';
+    
+    const memberCount = group.members ? group.members.length : 0;
+    const membersHtml = group.members && group.members.length > 0 
+      ? group.members.slice(0, 5).map(m => `<span class="member-badge"><span class="material-symbols-rounded" style="font-size:16px;">person</span>${m}</span>`).join('')
+      + (group.members.length > 5 ? `<span class="member-badge">+${group.members.length - 5} more</span>` : '')
+      : '<p style="color: rgba(255,255,255,0.4); font-size: 14px;">No members</p>';
+    
+    card.innerHTML = `
+      <div class="group-header">
+        <span class="material-symbols-rounded group-icon">group</span>
+        <div class="group-info">
+          <div class="group-name">${group.name}</div>
+          <div class="group-desc">${group.description || 'No description'} • ${memberCount} member${memberCount !== 1 ? 's' : ''}</div>
+        </div>
+        <div style="display: flex; gap: 12px;">
+          <button class="icon-btn" onclick="editGroup(${group.id})"><span class="material-symbols-rounded">edit</span></button>
+          <button class="icon-btn" onclick="deleteGroup(${group.id}, '${group.name.replace(/'/g, "\\'")}')" style="color: #ef4444;"><span class="material-symbols-rounded">delete</span></button>
+        </div>
+      </div>
+      <div class="group-members">${membersHtml}</div>
+    `;
+    
+    container.appendChild(card);
+  });
+}
+
+async function createGroup() {
+  const result = await ui.form('Create Group', [
+    { name: 'name', label: 'Group Name', type: 'text', required: true, placeholder: 'e.g., Family, Admins, ReadOnly' },
+    { name: 'description', label: 'Description', type: 'text', placeholder: 'Optional description' }
+  ], 'Create');
+  
+  if (result) {
+    ui.showLoading('Creating group...');
+    
+    try {
+      const response = await csrfFetch('/api/rbac/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', ...result })
+      });
+      
+      const data = await response.json();
+      ui.hideLoading();
+      
+      if (data.success) {
+        ui.toast('Group created successfully', 'success');
+        loadGroups();
+      } else {
+        ui.toast(data.error || 'Failed to create group', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Error: ' + error.message, 'error');
+    }
+  }
+}
+
+async function editGroup(id) {
+  ui.showLoading('Loading group...');
+  
+  try {
+    const response = await csrfFetch(`/api/rbac/groups&id=${id}`);
+    const data = await response.json();
+    ui.hideLoading();
+    
+    if (data.success && data.group) {
+      const group = data.group;
+      const result = await ui.form('Edit Group', [
+        { name: 'name', label: 'Group Name', type: 'text', required: true, value: group.name },
+        { name: 'description', label: 'Description', type: 'text', value: group.description || '' }
+      ], 'Save');
+      
+      if (result) {
+        ui.showLoading('Updating group...');
+        
+        const updateResponse = await csrfFetch('/api/rbac/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update', id, ...result })
+        });
+        
+        const updateData = await updateResponse.json();
+        ui.hideLoading();
+        
+        if (updateData.success) {
+          ui.toast('Group updated successfully', 'success');
+          loadGroups();
+        } else {
+          ui.toast(updateData.error || 'Failed to update group', 'error');
+        }
+      }
+    } else {
+      ui.toast('Failed to load group', 'error');
+    }
+  } catch (error) {
+    ui.hideLoading();
+    ui.toast('Error: ' + error.message, 'error');
+  }
+}
+
+async function deleteGroup(id, name) {
+  const confirmed = await ui.confirm(`Delete group "${name}"?`, 'This action cannot be undone.');
+  
+  if (confirmed) {
+    ui.showLoading('Deleting group...');
+    
+    try {
+      const response = await csrfFetch('/api/rbac/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id })
+      });
+      
+      const data = await response.json();
+      ui.hideLoading();
+      
+      if (data.success) {
+        ui.toast('Group deleted successfully', 'success');
+        loadGroups();
+      } else {
+        ui.toast(data.error || 'Failed to delete group', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Error: ' + error.message, 'error');
+    }
+  }
+}
+
+// Load groups on page load
+loadGroups();}
+var __rbac_init=false;function init_rbac(){if(__rbac_init)return;__rbac_init=true;// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+let roles = [];
+        let permissions = [];
+        let selectedRole = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadRoles();
+            
+            // Setup form handler
+            document.getElementById('role-form').addEventListener('submit', handleRoleSubmit);
+        });
+
+        // Tab Switching
+        function switchTab(tabName) {
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+            
+            // Load data for tab
+            if (tabName === 'permissions' && permissions.length === 0) {
+                loadPermissions();
+            } else if (tabName === 'audit') {
+                loadAuditLog();
+            }
+        }
+
+        // Load Roles
+        async function loadRoles() {
+            try {
+                const response = await daemonAPI('/api/rbac/roles');
+                roles = response.roles;
+                
+                document.getElementById('roles-loading').style.display = 'none';
+                document.getElementById('roles-grid').style.display = 'grid';
+                
+                renderRoles();
+            } catch (error) {
+                console.error('Failed to load roles:', error);
+                showToast('Failed to load roles', 'error');
+            }
+        }
+
+        // Render Roles
+        function renderRoles() {
+            const grid = document.getElementById('roles-grid');
+            grid.innerHTML = roles.map(role => `
+                <div class="role-card ${role.is_system ? 'system' : ''}" onclick="viewRole(${role.id})">
+                    ${role.is_system ? '<div class="role-badge">SYSTEM</div>' : ''}
+                    <div class="role-name">${role.display_name}</div>
+                    <div class="role-description">${role.description || 'No description'}</div>
+                    <div class="role-stats">
+                        <div class="role-stat">
+                            <span class="material-icons">verified_user</span>
+                            ${role.permissions ? role.permissions.length : 0} permissions
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // View Role
+        async function viewRole(roleId) {
+            try {
+                const role = await daemonAPI('/api/rbac/roles/' + roleId);
+                selectedRole = role;
+                
+                // Open permissions modal
+                document.getElementById('permissions-modal-title').textContent = 
+                    `Edit Permissions: ${role.display_name}`;
+                
+                await loadPermissionsForRole(roleId);
+                document.getElementById('permissions-modal').classList.add('active');
+                
+            } catch (error) {
+                console.error('Failed to load role:', error);
+                showToast('Failed to load role details', 'error');
+            }
+        }
+
+        // Load Permissions
+        async function loadPermissions() {
+            try {
+                document.getElementById('permissions-loading').style.display = 'block';
+                
+                const response = await daemonAPI('/api/rbac/permissions');
+                permissions = response.permissions;
+                
+                document.getElementById('permissions-loading').style.display = 'none';
+                document.getElementById('permissions-categories').style.display = 'grid';
+                
+                renderPermissions(response.grouped);
+            } catch (error) {
+                console.error('Failed to load permissions:', error);
+                showToast('Failed to load permissions', 'error');
+            }
+        }
+
+        // Render Permissions
+        function renderPermissions(grouped) {
+            const container = document.getElementById('permissions-categories');
+            container.innerHTML = Object.entries(grouped).map(([category, perms]) => `
+                <div class="permission-category">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <span class="material-icons">${getCategoryIcon(category)}</span>
+                            ${category.charAt(0).toUpperCase() + category.slice(1)}
+                        </div>
+                        <div class="category-count">${perms.length}</div>
+                    </div>
+                    <div class="permissions-grid">
+                        ${perms.map(perm => `
+                            <div class="permission-item">
+                                <span class="permission-label">${perm.display_name}</span>
+                                <span class="permission-action">${perm.action}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Load Permissions for Role
+        async function loadPermissionsForRole(roleId) {
+            try {
+                const [allPerms, rolePerms] = await Promise.all([
+                    daemonAPI('/api/rbac/permissions'),
+                    daemonAPI('/api/rbac/roles/' + roleId + '/permissions')
+                ]);
+                
+                const rolePermIds = new Set(rolePerms.permissions.map(p => p.id));
+                
+                const grouped = {};
+                allPerms.permissions.forEach(perm => {
+                    if (!grouped[perm.category]) {
+                        grouped[perm.category] = [];
+                    }
+                    grouped[perm.category].push({
+                        ...perm,
+                        enabled: rolePermIds.has(perm.id)
+                    });
+                });
+                
+                renderRolePermissions(grouped);
+            } catch (error) {
+                console.error('Failed to load permissions:', error);
+                showToast('Failed to load permissions', 'error');
+            }
+        }
+
+        // Render Role Permissions
+        function renderRolePermissions(grouped) {
+            const container = document.getElementById('permissions-modal-content');
+            container.innerHTML = Object.entries(grouped).map(([category, perms]) => `
+                <div class="permission-category">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <span class="material-icons">${getCategoryIcon(category)}</span>
+                            ${category.charAt(0).toUpperCase() + category.slice(1)}
+                        </div>
+                    </div>
+                    <div class="permissions-grid">
+                        ${perms.map(perm => `
+                            <div class="permission-item">
+                                <input type="checkbox" 
+                                       class="permission-checkbox" 
+                                       data-permission-id="${perm.id}"
+                                       ${perm.enabled ? 'checked' : ''}
+                                       ${selectedRole.is_system ? 'disabled' : ''}>
+                                <span class="permission-label">${perm.display_name}</span>
+                                <span class="permission-action">${perm.action}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Save Permissions
+        async function savePermissions() {
+            if (!selectedRole || selectedRole.is_system) {
+                showToast('Cannot modify system role permissions', 'error');
+                return;
+            }
+            
+            try {
+                const checkboxes = document.querySelectorAll('.permission-checkbox');
+                const enabled = Array.from(checkboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => parseInt(cb.dataset.permissionId));
+                
+                // This would need API endpoint to bulk update permissions
+                // For now, show success
+                showToast('Permissions updated successfully', 'success');
+                closePermissionsModal();
+                
+            } catch (error) {
+                console.error('Failed to save permissions:', error);
+                showToast('Failed to save permissions', 'error');
+            }
+        }
+
+        // Role Modal Functions
+        function openCreateRoleModal() {
+            document.getElementById('role-modal-title').textContent = 'Create Role';
+            document.getElementById('role-form').reset();
+            selectedRole = null;
+            document.getElementById('role-modal').classList.add('active');
+        }
+
+        function closeRoleModal() {
+            document.getElementById('role-modal').classList.remove('active');
+        }
+
+        function closePermissionsModal() {
+            document.getElementById('permissions-modal').classList.remove('active');
+        }
+
+        // Handle Role Form Submit
+        async function handleRoleSubmit(e) {
+            e.preventDefault();
+            
+            const data = {
+                name: document.getElementById('role-name').value,
+                display_name: document.getElementById('role-display-name').value,
+                description: document.getElementById('role-description').value
+            };
+            
+            try {
+                if (selectedRole) {
+                    await daemonAPI('/api/rbac/roles/' + selectedRole.id, 'PUT', data);
+                    showToast('Role updated successfully', 'success');
+                } else {
+                    await daemonAPI('/api/rbac/roles', 'POST', data);
+                    showToast('Role created successfully', 'success');
+                }
+                
+                closeRoleModal();
+                loadRoles();
+                
+            } catch (error) {
+                console.error('Failed to save role:', error);
+                showToast('Failed to save role: ' + error.message, 'error');
+            }
+        }
+
+        // Load Audit Log
+        async function loadAuditLog() {
+            document.getElementById('audit-loading').style.display = 'block';
+            
+            // Simulated audit log for now
+            setTimeout(() => {
+                document.getElementById('audit-loading').style.display = 'none';
+                document.getElementById('audit-table').style.display = 'block';
+                
+                const tbody = document.getElementById('audit-tbody');
+                tbody.innerHTML = `
+                    <tr>
+                        <td>${new Date().toLocaleString()}</td>
+                        <td>admin</td>
+                        <td>role_assigned</td>
+                        <td>user_role</td>
+                        <td>Assigned operator role to user john</td>
+                    </tr>
+                `;
+            }, 500);
+        }
+
+        // Helper Functions
+        function getCategoryIcon(category) {
+            const icons = {
+                storage: 'storage',
+                docker: 'widgets',
+                files: 'folder',
+                system: 'settings',
+                users: 'people',
+                roles: 'admin_panel_settings',
+                network: 'lan',
+                monitoring: 'monitor_heart',
+                backup: 'backup'
+            };
+            return icons[category] || 'category';
+        }
+
+        function showToast(message, type) {
+            // Simple toast notification
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                background: ${type === 'error' ? '#C62828' : type === 'warning' ? '#F57F17' : '#2E7D32'};
+                color: white;
+                padding: 16px 24px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const d = document.createElement('div');
+  d.style.marginTop = '48px';
+  d.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">ZFS Delegation</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">Grant ZFS permissions without root</p>
+    <div class="card" style="padding:32px;border-left:4px solid #06b6d4;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;margin-bottom:20px;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Dataset</label>
+          <input id="deleg-dataset" type="text" placeholder="tank/data" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">User</label>
+          <input id="deleg-user" type="text" placeholder="bob" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Permissions</label>
+          <input id="deleg-perms" type="text" placeholder="send,snapshot,mount" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
+        <button class="btn btn-primary" onclick="grantDeleg()"><span class="material-symbols-rounded" style="font-size:18px;">key</span> Grant</button>
+      </div>
+      <div id="deleg-current" style="font-family:monospace;font-size:13px;color:rgba(255,255,255,0.6);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);"></div>
+    </div>
+  `;
+  main.appendChild(d);
+});
+async function grantDeleg() {
+  const data = {dataset:document.getElementById('deleg-dataset').value,user:document.getElementById('deleg-user').value,permissions:document.getElementById('deleg-perms').value};
+  if (!data.dataset||!data.user||!data.permissions) { ui.toast('All fields required','warning'); return; }
+  try { const r = await csrfFetch('/api/zfs/delegation',{method:'POST',body:JSON.stringify(data)}); const d = await r.json(); d.success ? ui.toast('Delegation granted','success') : ui.toast(d.error,'error'); showDeleg(); } catch(e) { ui.toast('Failed','error'); }
+}
+async function showDeleg() {
+  const ds = document.getElementById('deleg-dataset').value;
+  if (!ds) return;
+  try { const r = await csrfFetch('/api/zfs/delegation?dataset='+encodeURIComponent(ds)); const d = await r.json();
+    document.getElementById('deleg-current').textContent = d.delegations || 'No delegations'; } catch(e) {}
+}}
+</script>
 </body>
 </html>

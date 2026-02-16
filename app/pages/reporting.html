@@ -1,26 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><style>html{background:#0a0a0a}
-/* Consolidated Tab Navigation */
-.consolidation-tabs {
-  display: flex; gap: 4px; padding: 8px; margin-bottom: 24px;
-  background: rgba(255,255,255,0.03); border-radius: var(--radius-xl);
-  border: 1px solid rgba(255,255,255,0.06);
-}
-.consolidation-tab {
-  padding: 10px 20px; border-radius: var(--radius-lg); border: none;
-  background: transparent; color: rgba(255,255,255,0.6);
-  font-size: 14px; font-weight: 500; cursor: pointer;
-  transition: all 0.2s; font-family: inherit;
-}
-.consolidation-tab:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.consolidation-tab.active {
-  background: var(--primary); color: #fff; font-weight: 600;
-}
-.consolidation-content { display: none; }
-.consolidation-content.active { display: block; }
-
-</style>
+<head><style>html{background:#0a0a0a}</style>
 <meta charset="UTF-8">
 <title>Reporting - D-PlaneOS</title>
   <link rel="stylesheet" href="/assets/css/design-tokens.css">
@@ -450,6 +430,199 @@ if (window.ConnectionMonitor) {
 
 <main class="main">
 <div class="page-header">
+<h1 class="page-title">System Health</h1>
+<p class="page-subtitle">Metrics • Monitoring • Hardware • Logs</p>
+</div>
+<div class="consolidation-tabs">
+  <button class="consolidation-tab active" data-tab="metrics" onclick="switchConsolidatedTab('metrics')">Metrics</button>
+  <button class="consolidation-tab" data-tab="monitoring" onclick="switchConsolidatedTab('monitoring')">Live Health</button>
+  <button class="consolidation-tab" data-tab="hardware" onclick="switchConsolidatedTab('hardware')">Hardware</button>
+  <button class="consolidation-tab" data-tab="logs" onclick="switchConsolidatedTab('logs')">Logs</button>
+</div>
+
+<div id="tab-metrics" class="consolidation-content active">
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
+<div class="page-header">
   <h1 class="page-title">Reporting</h1>
   <div class="page-actions">
     <select id="reportPeriod" onchange="loadHistory()" style="padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;">
@@ -647,7 +820,882 @@ document.addEventListener("DOMContentLoaded",function(){
 </script>
 <script src="/assets/js/realtime-client.js"></script>
 <!-- v2.1.0: Real-time Metrics, IOStat, ZFS Events -->
+</div>
+<div id="tab-monitoring" class="consolidation-content">
+<h1>System Monitoring <span id="wsStatus" style="font-size: 14px; margin-left: 10px; color: #666;">⚫ Connecting...</span></h1>
+
+<div class="toolbar">
+  <button class="btn" onclick="refreshAll()">🔄 Refresh All</button>
+  <button class="btn" onclick="toggleAutoRefresh()">⏱️ Auto-Refresh: <span id="autoStatus">OFF</span></button>
+</div>
+
+<div class="monitor-grid" id="monitors"></div>
+
 <script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
+<script>
+let autoRefreshInterval = null;
+let lastInotifyUpdate = null;
+
+// WebSocket Live Updates
+window.addEventListener('DOMContentLoaded', () => {
+  // Listen for inotify status events
+  monitorWS.on('inotify_status', (event) => {
+    const { data, level } = event;
+    lastInotifyUpdate = new Date();
+    updateInotifyDisplay(data);
+    
+    // Show toast notification for warnings/critical
+    if (level === 'warning' || level === 'critical') {
+      showToast(data, level);
+    }
+  });
+  
+  // Listen for connection status
+  monitorWS.on('connected', () => {
+    document.getElementById('wsStatus').textContent = '🟢 Live';
+    document.getElementById('wsStatus').style.color = '#4caf50';
+  });
+  
+  monitorWS.on('disconnected', () => {
+    document.getElementById('wsStatus').textContent = '🔴 Reconnecting...';
+    document.getElementById('wsStatus').style.color = '#f44336';
+  });
+  
+  // Initial load via API
+  loadInotifyStats();
+});
+
+function updateInotifyDisplay(data) {
+  const monitors = document.getElementById('monitors');
+  
+  const cardClass = data.critical ? 'critical' : (data.warning ? 'warning' : '');
+  const barClass = data.critical ? 'critical' : (data.warning ? 'warning' : '');
+  const statusClass = data.critical ? 'status-critical' : (data.warning ? 'status-warning' : 'status-ok');
+  const statusText = data.critical ? '🔴 CRITICAL' : (data.warning ? '⚠️ WARNING' : '✅ OK');
+  
+  const updateTime = lastInotifyUpdate ? lastInotifyUpdate.toLocaleTimeString() : 'Never';
+  
+  const html = `
+    <div class="monitor-card ${cardClass}">
+      <div class="monitor-title">Inotify File Watches</div>
+      <div class="monitor-value">${data.percent.toFixed(1)}%</div>
+      <div class="monitor-bar">
+        <div class="monitor-bar-fill ${barClass}" style="width: ${data.percent}%"></div>
+      </div>
+      <div class="monitor-details">
+        <div><strong>Used:</strong> ${data.used.toLocaleString()} watches</div>
+        <div><strong>Limit:</strong> ${data.limit.toLocaleString()} watches</div>
+        <div><strong>Available:</strong> ${(data.limit - data.used).toLocaleString()} watches</div>
+        <div><strong>Last Update:</strong> ${updateTime}</div>
+      </div>
+      <span class="monitor-status ${statusClass}">${statusText}</span>
+      
+      ${data.warning ? `
+        <div style="margin-top: 15px; padding: 10px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; font-size: 13px;">
+          <strong>⚠️ Inotify watches at ${data.percent.toFixed(1)}%</strong><br>
+          Real-time file monitoring may fail soon. Consider increasing the limit in /etc/sysctl.conf or reducing watched directories.
+        </div>
+      ` : ''}
+      
+      ${data.critical ? `
+        <div style="margin-top: 15px; padding: 10px; background: rgba(244, 67, 54, 0.1); border-radius: 4px; font-size: 13px;">
+          <strong>🔴 CRITICAL: Inotify exhaustion imminent!</strong><br>
+          File indexing may fail silently. Immediately increase fs.inotify.max_user_watches or disable file watching.
+        </div>
+      ` : ''}
+    </div>
+  `;
+  
+  monitors.innerHTML = html;
+}
+
+async function loadInotifyStats() {
+  try {
+    const data = await daemonAPI.monitoring_inotify();
+    updateInotifyDisplay(data);
+  } catch (error) {
+    const monitors = document.getElementById('monitors');
+    monitors.innerHTML = `
+      <div class="monitor-card critical">
+        <div class="monitor-title">Error Loading Stats</div>
+        <div class="monitor-details">${error.message}</div>
+      </div>
+    `;
+    console.error('Failed to load inotify stats:', error);
+  }
+}
+
+function showToast(data, level) {
+  // Simple toast notification (can be enhanced with a toast library)
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    background: ${level === 'critical' ? '#f44336' : '#f59e0b'};
+    color: white;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    z-index: 10000;
+    font-weight: bold;
+  `;
+  toast.textContent = `${level === 'critical' ? '🔴' : '⚠️'} Inotify at ${data.percent.toFixed(1)}%`;
+  
+  document.body.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.remove();
+  }, 5000);
+}
+
+function refreshAll() {
+  loadInotifyStats();
+}
+
+function toggleAutoRefresh() {
+  const statusSpan = document.getElementById('autoStatus');
+  
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+    statusSpan.textContent = 'OFF (Using WebSocket)';
+  } else {
+    autoRefreshInterval = setInterval(refreshAll, 30000); // 30 seconds
+    statusSpan.textContent = 'ON (30s Polling)';
+    refreshAll(); // Immediate refresh
+  }
+}
+</script>
+
+</body>
+<!-- v2.1.0: System Monitoring Live Data -->
+</div>
+<div id="tab-hardware" class="consolidation-content">
+<div class="app-shell">
+        <div class="content">
+            <div class="page-header">
+                <h1>Hardware Overview</h1>
+                <p>Complete system hardware detection and monitoring</p>
+            </div>
+            
+            <!-- Summary Cards -->
+            <div class="hardware-grid">
+                <!-- Storage Summary -->
+                <div class="hw-card">
+                    <div class="hw-card-header">
+                        <span class="hw-icon material-symbols-rounded">storage</span>
+                        <h3>Storage Devices</h3>
+                    </div>
+                    <div class="hw-stats">
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Total Drives:</span>
+                            <span class="hw-stat-value" id="storage-count">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">SMART Status:</span>
+                            <span class="hw-stat-value status-good" id="smart-status">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Hottest Drive:</span>
+                            <span class="hw-stat-value" id="max-temp">-</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="showDetails('storage')" style="margin-top: 1rem; width: 100%;">
+                        <span class="material-symbols-rounded">info</span>
+                        View Details
+                    </button>
+                </div>
+                
+                <!-- Network Summary -->
+                <div class="hw-card">
+                    <div class="hw-card-header">
+                        <span class="hw-icon material-symbols-rounded">lan</span>
+                        <h3>Network Interfaces</h3>
+                    </div>
+                    <div class="hw-stats">
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Total NICs:</span>
+                            <span class="hw-stat-value" id="network-count">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Active Links:</span>
+                            <span class="hw-stat-value status-good" id="network-up">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Max Speed:</span>
+                            <span class="hw-stat-value" id="max-speed">-</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="showDetails('network')" style="margin-top: 1rem; width: 100%;">
+                        <span class="material-symbols-rounded">info</span>
+                        View Details
+                    </button>
+                </div>
+                
+                <!-- Thermal Summary -->
+                <div class="hw-card">
+                    <div class="hw-card-header">
+                        <span class="hw-icon material-symbols-rounded">thermostat</span>
+                        <h3>Thermal Status</h3>
+                    </div>
+                    <div class="hw-stats">
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">CPU Temp:</span>
+                            <span class="hw-stat-value" id="cpu-temp">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Fan Speed:</span>
+                            <span class="hw-stat-value" id="fan-speed">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Status:</span>
+                            <span class="hw-stat-value status-good" id="thermal-status">Normal</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="showDetails('thermal')" style="margin-top: 1rem; width: 100%;">
+                        <span class="material-symbols-rounded">info</span>
+                        View Details
+                    </button>
+                </div>
+                
+                <!-- Power Summary -->
+                <div class="hw-card">
+                    <div class="hw-card-header">
+                        <span class="hw-icon material-symbols-rounded">power</span>
+                        <h3>Power Status</h3>
+                    </div>
+                    <div class="hw-stats">
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">AC Power:</span>
+                            <span class="hw-stat-value status-good" id="ac-power">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">UPS Status:</span>
+                            <span class="hw-stat-value" id="ups-status">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Battery:</span>
+                            <span class="hw-stat-value" id="battery-level">-</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="showDetails('power')" style="margin-top: 1rem; width: 100%;">
+                        <span class="material-symbols-rounded">info</span>
+                        View Details
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Detailed Sections (hidden by default) -->
+            <div id="storage-details" style="display: none; margin-top: 2rem;">
+                <h2>Storage Devices</h2>
+                <ul id="storage-list" class="device-list"></ul>
+            </div>
+            
+            <div id="network-details" style="display: none; margin-top: 2rem;">
+                <h2>Network Interfaces</h2>
+                <ul id="network-list" class="device-list"></ul>
+            </div>
+            
+            <div id="thermal-details" style="display: none; margin-top: 2rem;">
+                <h2>Thermal Sensors</h2>
+                <ul id="thermal-list" class="device-list"></ul>
+            </div>
+            
+            <div id="power-details" style="display: none; margin-top: 2rem;">
+                <h2>Power Information</h2>
+                <div id="power-info"></div>
+            </div>
+            
+            <!-- System Information -->
+            <section style="margin-top: 3rem;">
+                <h2>System Information</h2>
+                <div class="hw-card">
+                    <div class="hw-stats">
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Motherboard:</span>
+                            <span class="hw-stat-value" id="board-name">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">BIOS Version:</span>
+                            <span class="hw-stat-value" id="bios-version">-</span>
+                        </div>
+                        <div class="hw-stat">
+                            <span class="hw-stat-label">Serial Number:</span>
+                            <span class="hw-stat-value" id="serial-number">-</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+</div>
+<div id="tab-logs" class="consolidation-content">
+<script>
+// Navigation behavior
+function navigateToSection(section) {
+  if (section === 'dashboard') {
+    window.location.href = 'index.html';
+  }
+}
+
+function toggleSubNav(section, button) {
+  // Remove active from all nav links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // Add active to clicked button
+  if (button) {
+    button.classList.add('active');
+  }
+  
+  // Hide all sub-navs
+  document.querySelectorAll('.nav-sub').forEach(sub => {
+    sub.classList.remove('active');
+  });
+  
+  // Show selected sub-nav
+  const subNav = document.getElementById(`sub-${section}`);
+  if (subNav) {
+    subNav.classList.add('active');
+    document.body.classList.add('has-subnav');
+  }
+}
+
+// Auto-detect current section and page on load
+(function() {
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  
+  // Page to section mapping
+  const pageMap = {
+    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
+    'audit.html': { section: 'security', page: 'audit' },
+    'certificates.html': { section: 'security', page: 'certificates' },
+    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
+    'directory-service.html': { section: 'identity', page: 'directory-service' },
+    'docker.html': { section: 'compute', page: 'docker' },
+    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
+    'files.html': { section: 'storage', page: 'files' },
+    'firewall.html': { section: 'security', page: 'firewall' },
+    'groups.html': { section: 'identity', page: 'groups' },
+    'hardware.html': { section: 'system', page: 'hardware' },
+    'index.html': { section: 'dashboard', page: null },
+    'ipmi.html': { section: 'system', page: 'ipmi' },
+    'logs.html': { section: 'system', page: 'logs' },
+    'modules.html': { section: 'compute', page: 'modules' },
+    'network-dns.html': { section: 'network', page: 'network-dns' },
+    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
+    'network-routing.html': { section: 'network', page: 'network-routing' },
+    'network.html': { section: 'network', page: 'network' },
+    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
+    'pools.html': { section: 'storage', page: 'pools' },
+    'power-management.html': { section: 'system', page: 'power-management' },
+    'quotas.html': { section: 'storage', page: 'quotas' },
+    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
+    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
+    'replication.html': { section: 'storage', page: 'replication' },
+    'reporting.html': { section: 'system', page: 'reporting' },
+    'security.html': { section: 'security', page: 'security' },
+    'settings.html': { section: 'system', page: 'settings' },
+    'shares.html': { section: 'storage', page: 'shares' },
+    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
+    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
+    'system-settings.html': { section: 'system', page: 'system-settings' },
+    'ups.html': { section: 'system', page: 'ups' },
+    'users.html': { section: 'identity', page: 'users' },
+    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
+  };
+  
+  const current = pageMap[currentPage];
+  if (current) {
+    // Activate section button
+    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
+    if (sectionBtn) {
+      sectionBtn.classList.add('active');
+    }
+    
+    // Show and activate sub-nav if not dashboard
+    if (current.section !== 'dashboard') {
+      const subNav = document.getElementById(`sub-${current.section}`);
+      if (subNav) {
+        subNav.classList.add('active');
+        document.body.classList.add('has-subnav');
+        
+        // Activate current page in sub-nav
+        if (current.page) {
+          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
+          if (pageLink) {
+            pageLink.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+})();
+
+// Keyboard shortcuts
+function showKeyboardHelp() {
+  if (window.EnhancedUI) {
+    const shortcuts = `Keyboard Shortcuts:
+
+g + d → Dashboard
+g + s → Storage
+g + c → Compute
+g + n → Network
+g + u → Identity
+g + e → Security
+g + y → System
+
+r → Refresh page
+Esc → Close modals
+? → Show this help`;
+    EnhancedUI.toast(shortcuts, 'info', 8000);
+  }
+}
+
+// Enhanced keyboard shortcuts for sections
+(function() {
+  let keySequence = '';
+  let keyTimeout;
+  
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    
+    keySequence += e.key;
+    clearTimeout(keyTimeout);
+    
+    const shortcuts = {
+      'gd': 'index.html',
+      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
+      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
+      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
+      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
+      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
+      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
+    };
+    
+    if (shortcuts[keySequence]) {
+      e.preventDefault();
+      const action = shortcuts[keySequence];
+      if (typeof action === 'function') {
+        action();
+      } else {
+        window.location.href = action;
+      }
+      keySequence = '';
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp();
+    }
+    
+    keyTimeout = setTimeout(() => keySequence = '', 1000);
+  });
+})();
+
+// Connection status monitoring (integrates with existing connection-monitor.js)
+if (window.ConnectionMonitor) {
+  window.ConnectionMonitor.on('statusChange', (online) => {
+    const status = document.getElementById('navConnectionStatus');
+    if (status) {
+      if (online) {
+        status.classList.remove('offline');
+        status.classList.add('online');
+        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+      } else {
+        status.classList.remove('online');
+        status.classList.add('offline');
+        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+      }
+    }
+  });
+}
+</script>
+
+<div class="page-header">
+<h1 class="page-title">System Logs</h1>
+<p class="page-subtitle">Real-time system activity and diagnostics</p>
+</div>
+<div class="log-container" id="logContainer">
+<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.5);">Loading logs...</div>
+<div class="log-line log-info"><span class="log-time">[2026-02-02 07:35:28]</span> <span class="log-info">INFO</span> - File uploaded: backup-2026-02-02.tar.gz (256 MB)</div>
+<div class="log-line log-info"><span class="log-time">[2026-02-02 07:38:59]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:39:09]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:39:19]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:39:29]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:39:39]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:39:49]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:39:59]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:40:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:41:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:42:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:43:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:44:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:45:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:46:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:47:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:48:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:49:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:50:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:51:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:52:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:53:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:54:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:55:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:56:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:57:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:58:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 07:59:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:00:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:01:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:02:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:03:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:04:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:05:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:06:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:07:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:08:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:09:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:10:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:11:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:12:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:13:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:14:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:15:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:16:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:17:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:18:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:19:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:20:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:21:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:22:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:23:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:24:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:25:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:26:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:27:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:28:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:29:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:30:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:31:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:32:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:33:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:34:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:35:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:36:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:37:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:38:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:39:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:40:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:41:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:42:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:43:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:44:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:45:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:46:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:47:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:48:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:49:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:50:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:51:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:52:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:53:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:54:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:55:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:56:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:57:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:58:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 08:59:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:00:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:01:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:02:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:03:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:04:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:05:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:06:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:07:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:08:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:09:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:10:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:11:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:12:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:13:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:14:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:15:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:16:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:17:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:18:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:19:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:20:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:21:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:22:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:23:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:24:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:25:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:26:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:27:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:28:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:29:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:30:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:31:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:32:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:33:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:34:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:35:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:36:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:37:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:38:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:39:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:40:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:41:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:42:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:43:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:44:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:45:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:46:57]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:47:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:48:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:49:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:50:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:51:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:52:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:53:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:54:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:55:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:56:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:57:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:58:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 09:59:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:00:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:01:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:02:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:03:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:04:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:05:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:06:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:07:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:08:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:09:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:10:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:11:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:12:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:13:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:14:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:15:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:16:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:17:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:18:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:19:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:20:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:21:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:22:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:23:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:24:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:25:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:26:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:27:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:28:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:29:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:30:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:31:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:32:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:33:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:34:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:35:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:36:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:37:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:38:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:39:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:40:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:41:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:42:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:43:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:44:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:45:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:46:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:47:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:48:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:49:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:50:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:51:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:52:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:53:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:54:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:55:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:56:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:57:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:58:57]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 10:59:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:00:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:01:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:02:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:03:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:04:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:05:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:06:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:07:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:08:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:09:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:10:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:11:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:12:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:13:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:14:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:15:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:16:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:17:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:18:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:19:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:20:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:21:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:22:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:23:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:24:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:25:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:26:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:27:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:28:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:29:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:30:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:31:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:32:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:33:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:34:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:35:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:36:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:37:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:38:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:39:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:40:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:41:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:42:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:43:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:44:57]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:45:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:46:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:47:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:48:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:49:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:50:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:51:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:52:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:53:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:54:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:55:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:56:57]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:57:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:58:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 11:59:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:00:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:01:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:02:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:03:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:04:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:05:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:06:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:07:02]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:07:09]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:07:19]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:07:29]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:07:39]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:07:49]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:07:59]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:08:09]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:08:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:09:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:10:56]</span> <span class="log-info">INFO</span> - System check completed</div><div class="log-line log-info"><span class="log-time">[2026-02-02 12:11:50]</span> <span class="log-info">INFO</span> - System check completed</div></div>
+<button class="fab" onclick="clearLogs()"><span class="material-symbols-rounded" style="font-size:28px;">delete_sweep</span></button>
+<script src="/assets/js/m3-ripple.js"></script>
+<script src="/assets/js/core.js"></script>
+<script src="/assets/js/nav-flyout.js"></script>
+<script src="/assets/js/hybrid-router.js"></script>
+  <script src="/assets/js/enhanced-ui.js"></script>
+  <script src="/assets/js/connection-monitor.js"></script>
+  <script src="/assets/js/keyboard-shortcuts.js"></script>
+  <script src="/assets/js/form-validator.js"></script>
+<script src="/assets/js/ui-components.js"></script>
+</div>
+
+</main>
+<script>
+function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(function(c){c.classList.remove('active')});document.querySelectorAll('.consolidation-tab').forEach(function(b){b.classList.remove('active')});var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
 document.addEventListener('DOMContentLoaded', () => {
   const main = document.querySelector('.main');
   if (!main) return;
@@ -713,5 +1761,391 @@ async function loadEvents() {
     } else { el.textContent = d.output || 'No recent events'; }
   } catch(e) { el.textContent = 'Failed to load'; }
 }
+var __monitoring_init=false;function init_monitoring(){if(__monitoring_init)return;__monitoring_init=true;document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const s = document.createElement('div');
+  s.style.marginTop = '48px';
+  s.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;" id="sysmon-cards"></div>
+    <div class="card" style="padding:32px;border-left:4px solid var(--md-sys-color-primary);">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:var(--md-sys-color-primary);">health_and_safety</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">ZFS Health Overview</div></div>
+      </div>
+      <div id="health-overview" style="font-size:14px;"></div>
+    </div>
+  `;
+  main.appendChild(s);
+  refreshSysMon();
+  setInterval(refreshSysMon, 10000);
+});
+async function refreshSysMon() {
+  try {
+    const [mRes, hRes] = await Promise.all([csrfFetch('/api/system/metrics'), csrfFetch('/api/zfs/health')]);
+    const m = await mRes.json();
+    const h = await hRes.json();
+    if (m.success) {
+      document.getElementById('sysmon-cards').innerHTML = [
+        {l:'CPU',v:(m.cpu_percent||0).toFixed(0)+'%',c:m.cpu_percent>80?'#ef4444':'var(--md-sys-color-success)'},
+        {l:'Memory',v:(m.memory_used_percent||0).toFixed(0)+'%',c:m.memory_used_percent>85?'#ef4444':'var(--md-sys-color-primary)'},
+        {l:'Swap',v:(m.swap_used_percent||0).toFixed(0)+'%',c:m.swap_used_percent>50?'#f59e0b':'var(--md-sys-color-success)'}
+      ].map(c=>`<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:var(--md-sys-shape-corner-medium);padding:24px;text-align:center;">
+        <div style="font-size:36px;font-weight:800;color:${c.c};">${c.v}</div>
+        <div style="font-size:14px;color:rgba(255,255,255,0.5);margin-top:8px;">${c.l}</div></div>`).join('');
+    }
+    if (h.success && h.pools) {
+      document.getElementById('health-overview').innerHTML = h.pools.map(p => {
+        const color = p.health==='ONLINE'?'var(--md-sys-color-success)':p.health==='DEGRADED'?'#f59e0b':'#ef4444';
+        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+          <span style="width:10px;height:10px;border-radius:50%;background:${color};"></span>
+          <strong>${p.name}</strong> <span class="badge" style="background:${color};color:#fff;">${p.health}</span>
+          <span style="color:rgba(255,255,255,0.4);">${p.size||''} — ${p.errors||'No errors'}</span></div>`;
+      }).join('');
+    }
+  } catch(e) {}
+}}
+var __hardware_init=false;function init_hardware(){if(__hardware_init)return;__hardware_init=true;let hardwareData = {};
+        
+        // Load hardware overview on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadHardwareOverview();
+            
+            // Auto-refresh every 10 seconds
+            setInterval(loadHardwareOverview, 10000);
+        });
+        
+        // Load complete hardware overview
+        async function loadHardwareOverview() {
+            try {
+                const response = await daemonAPI.system_network();
+                const data = await response.json();
+                
+                if (data.success) {
+                    hardwareData = data.hardware;
+                    updateSummaries();
+                    updateSystemInfo();
+                }
+            } catch (error) {
+                console.error('Failed to load hardware:', error);
+            }
+        }
+        
+        // Update summary cards
+        function updateSummaries() {
+            // Storage
+            if (hardwareData.storage) {
+                document.getElementById('storage-count').textContent = hardwareData.storage.length;
+                
+                const smartFailed = hardwareData.storage.filter(d => d.smart && d.smart.health === 'failed').length;
+                document.getElementById('smart-status').textContent = smartFailed === 0 ? 'All Passed' : `${smartFailed} Failed`;
+                document.getElementById('smart-status').className = smartFailed === 0 ? 'hw-stat-value status-good' : 'hw-stat-value status-error';
+                
+                const temps = hardwareData.storage.map(d => d.temperature).filter(t => t !== null);
+                const maxTemp = temps.length > 0 ? Math.max(...temps) : 0;
+                document.getElementById('max-temp').textContent = maxTemp > 0 ? `${maxTemp}°C` : 'N/A';
+            }
+            
+            // Network
+            if (hardwareData.network) {
+                document.getElementById('network-count').textContent = hardwareData.network.length;
+                
+                const upLinks = hardwareData.network.filter(n => n.state === 'up').length;
+                document.getElementById('network-up').textContent = `${upLinks} / ${hardwareData.network.length}`;
+                
+                const speeds = hardwareData.network.map(n => n.speed).filter(s => s !== null);
+                const maxSpeed = speeds.length > 0 ? Math.max(...speeds) : 0;
+                document.getElementById('max-speed').textContent = maxSpeed > 0 ? `${maxSpeed} Mbps` : 'N/A';
+            }
+            
+            // Thermal
+            if (hardwareData.thermal && hardwareData.thermal.cpu && hardwareData.thermal.cpu.length > 0) {
+                const cpuTemp = hardwareData.thermal.cpu[0].temp;
+                document.getElementById('cpu-temp').textContent = `${cpuTemp}°C`;
+                
+                if (hardwareData.thermal.fans && hardwareData.thermal.fans.length > 0) {
+                    const fanSpeed = hardwareData.thermal.fans[0].rpm;
+                    document.getElementById('fan-speed').textContent = `${fanSpeed} RPM`;
+                } else {
+                    document.getElementById('fan-speed').textContent = 'N/A';
+                }
+                
+                const status = cpuTemp > 80 ? 'Hot' : cpuTemp > 60 ? 'Warm' : 'Normal';
+                const statusClass = cpuTemp > 80 ? 'status-error' : cpuTemp > 60 ? 'status-warn' : 'status-good';
+                document.getElementById('thermal-status').textContent = status;
+                document.getElementById('thermal-status').className = `hw-stat-value ${statusClass}`;
+            }
+            
+            // Power
+            if (hardwareData.power) {
+                document.getElementById('ac-power').textContent = hardwareData.power.ac_power ? 'Connected' : 'Disconnected';
+                document.getElementById('ac-power').className = hardwareData.power.ac_power ? 'hw-stat-value status-good' : 'hw-stat-value status-error';
+                
+                if (hardwareData.power.ups) {
+                    document.getElementById('ups-status').textContent = hardwareData.power.ups.status || 'N/A';
+                    
+                    if (hardwareData.power.ups.bcharge) {
+                        document.getElementById('battery-level').textContent = hardwareData.power.ups.bcharge;
+                    } else {
+                        document.getElementById('battery-level').textContent = 'N/A';
+                    }
+                } else {
+                    document.getElementById('ups-status').textContent = 'Not Connected';
+                    document.getElementById('battery-level').textContent = 'N/A';
+                }
+            }
+        }
+        
+        // Update system information
+        function updateSystemInfo() {
+            if (hardwareData.system && hardwareData.system.dmi) {
+                document.getElementById('board-name').textContent = 
+                    `${hardwareData.system.dmi.board_vendor || ''} ${hardwareData.system.dmi.board_name || 'Unknown'}`.trim();
+                document.getElementById('serial-number').textContent = 
+                    hardwareData.system.dmi.product_serial || 'N/A';
+            }
+            
+            if (hardwareData.system && hardwareData.system.bios) {
+                document.getElementById('bios-version').textContent = 
+                    `${hardwareData.system.bios.version || 'Unknown'} (${hardwareData.system.bios.date || ''})`;
+            }
+        }
+        
+        // Show detailed view
+        function showDetails(section) {
+            // Hide all details
+            document.querySelectorAll('[id$="-details"]').forEach(el => el.style.display = 'none');
+            
+            // Show selected
+            const detailsEl = document.getElementById(`${section}-details`);
+            if (detailsEl) {
+                detailsEl.style.display = 'block';
+                
+                // Populate details
+                if (section === 'storage') {
+                    populateStorageDetails();
+                } else if (section === 'network') {
+                    populateNetworkDetails();
+                } else if (section === 'thermal') {
+                    populateThermalDetails();
+                } else if (section === 'power') {
+                    populatePowerDetails();
+                }
+                
+                // Scroll to details
+                detailsEl.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+        
+        // Populate storage details
+        function populateStorageDetails() {
+            const list = document.getElementById('storage-list');
+            list.innerHTML = '';
+            
+            if (!hardwareData.storage || hardwareData.storage.length === 0) {
+                list.innerHTML = '<li class="device-item">No storage devices detected</li>';
+                return;
+            }
+            
+            hardwareData.storage.forEach(device => {
+                const temp = device.temperature ? `${device.temperature}°C` : 'N/A';
+                const tempClass = device.temperature > 55 ? 'temp-hot' : device.temperature > 45 ? 'temp-warm' : 'temp-normal';
+                const smart = device.smart ? device.smart.health.toUpperCase() : 'N/A';
+                
+                const li = document.createElement('li');
+                li.className = 'device-item';
+                li.innerHTML = `
+                    <div>
+                        <div class="device-name">${device.model || device.name}</div>
+                        <div class="device-detail">${device.device} | ${device.size} | ${device.transport.toUpperCase()}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="temp-indicator ${tempClass}">${temp}</span>
+                        <div class="device-detail" style="margin-top: 0.25rem;">SMART: ${smart}</div>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+        
+        // Populate network details
+        function populateNetworkDetails() {
+            const list = document.getElementById('network-list');
+            list.innerHTML = '';
+            
+            if (!hardwareData.network || hardwareData.network.length === 0) {
+                list.innerHTML = '<li class="device-item">No network devices detected</li>';
+                return;
+            }
+            
+            hardwareData.network.forEach(device => {
+                const speed = device.speed ? `${device.speed} Mbps` : 'Unknown';
+                const driver = device.driver ? device.driver.name : 'Unknown';
+                const state = device.state === 'up' ? 'UP' : 'DOWN';
+                const stateClass = device.state === 'up' ? 'status-good' : 'status-error';
+                
+                const li = document.createElement('li');
+                li.className = 'device-item';
+                li.innerHTML = `
+                    <div>
+                        <div class="device-name">${device.interface}</div>
+                        <div class="device-detail">${device.mac} | ${driver}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="${stateClass}" style="font-weight: 600;">${state}</span>
+                        <div class="device-detail" style="margin-top: 0.25rem;">${speed}</div>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+        
+        // Populate thermal details
+        function populateThermalDetails() {
+            const list = document.getElementById('thermal-list');
+            list.innerHTML = '';
+            
+            // CPU temps
+            if (hardwareData.thermal && hardwareData.thermal.cpu) {
+                hardwareData.thermal.cpu.forEach(sensor => {
+                    const tempClass = sensor.temp > 80 ? 'temp-hot' : sensor.temp > 60 ? 'temp-warm' : 'temp-normal';
+                    
+                    const li = document.createElement('li');
+                    li.className = 'device-item';
+                    li.innerHTML = `
+                        <div>
+                            <div class="device-name">${sensor.sensor}</div>
+                            <div class="device-detail">CPU Temperature</div>
+                        </div>
+                        <span class="temp-indicator ${tempClass}">${sensor.temp}°C</span>
+                    `;
+                    list.appendChild(li);
+                });
+            }
+            
+            // Fans
+            if (hardwareData.thermal && hardwareData.thermal.fans) {
+                hardwareData.thermal.fans.forEach(fan => {
+                    const li = document.createElement('li');
+                    li.className = 'device-item';
+                    li.innerHTML = `
+                        <div>
+                            <div class="device-name">${fan.name}</div>
+                            <div class="device-detail">Fan Speed</div>
+                        </div>
+                        <span style="font-weight: 600;">${fan.rpm} RPM</span>
+                    `;
+                    list.appendChild(li);
+                });
+            }
+            
+            if (list.children.length === 0) {
+                list.innerHTML = '<li class="device-item">No thermal sensors detected</li>';
+            }
+        }
+        
+        // Populate power details
+        function populatePowerDetails() {
+            const container = document.getElementById('power-info');
+            container.innerHTML = '';
+            
+            if (hardwareData.power && hardwareData.power.ups) {
+                container.innerHTML = `
+                    <div class="hw-card">
+                        <h3>UPS Information</h3>
+                        <div class="hw-stats">
+                            ${Object.entries(hardwareData.power.ups).map(([key, value]) => `
+                                <div class="hw-stat">
+                                    <span class="hw-stat-label">${key.replace(/_/g, ' ').toUpperCase()}:</span>
+                                    <span class="hw-stat-value">${value}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = '<p>No UPS detected</p>';
+            }
+        }}
+var __logs_init=false;function init_logs(){if(__logs_init)return;__logs_init=true;const ui = new DPlaneUI();
+
+// Load logs from API
+async function loadLogs(filter = '') {
+  try {
+    const url = `/api/system/logs${filter ? '&filter=' + encodeURIComponent(filter) : ''}`;
+    const response = await csrfFetch(url);
+    const data = await response.json();
+    
+    if (data.success && data.logs) {
+      renderLogs(data.logs);
+    }
+  } catch (error) {
+    console.error('Failed to load logs:', error);
+    ui.toast('Failed to load logs', 'error');
+  }
+}
+
+// Render logs in the container
+function renderLogs(logs) {
+  const container = document.getElementById('logContainer');
+  if (!container) return;
+  
+  container.innerHTML = logs.map(log => `
+    <div class="log-entry ${log.level}">
+      <div class="log-time">${log.time}</div>
+      <div class="log-level">[${log.level.toUpperCase()}]</div>
+      <div class="log-message">${log.message}</div>
+    </div>
+  `).join('');
+}
+
+// Clear logs
+async function clearLogs() {
+  if (await ui.confirm('Clear Logs?', 'Clear all system logs? This action cannot be undone.')) {
+    ui.showLoading('Clearing logs...');
+    
+    try {
+      const response = await csrfFetch('/api/system/logs', {
+        method: 'POST'
+      });
+      
+      const data = await response.json();
+      ui.hideLoading();
+      
+      if (data.success) {
+        ui.toast('Logs cleared', 'success');
+        document.getElementById('logContainer').innerHTML = '';
+      } else {
+        ui.toast(data.error || 'Failed to clear logs', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Failed to clear logs: ' + error.message, 'error');
+    }
+  }
+}
+
+// Filter logs
+function filterLogs(level) {
+  loadLogs(level);
+}
+
+// Load logs on page load
+window.addEventListener('DOMContentLoaded', () => {
+  loadLogs();
+  // Auto-refresh every 10 seconds
+  setInterval(loadLogs, 10000);
+});
+
+    }, 500);
+  }
+}
+setInterval(() => {
+  const container = document.getElementById('logContainer');
+  const time = new Date().toISOString().slice(0,19).replace('T', ' ');
+  const log = `<div class="log-line log-info"><span class="log-time">[${time}]</span> <span class="log-info">INFO</span> - System check completed</div>`;
+  container.innerHTML += log;
+  container.scrollTop = container.scrollHeight;
+}, 10000);}
 </script>
 </body></html>
