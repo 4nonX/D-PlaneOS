@@ -296,6 +296,17 @@ body { font-family: sans-serif; margin: 0; padding: 20px; background: #0a0a0a; c
 </nav>
 
 <main class="main">
+<div class="page-header">
+<h1 class="page-title">File Manager</h1>
+<p class="page-subtitle">Browse • Enhanced View</p>
+</div>
+<div class="consolidation-tabs">
+  <button class="consolidation-tab active" data-tab="browser" onclick="switchConsolidatedTab('browser')">Browser</button>
+  <button class="consolidation-tab" data-tab="enhanced" onclick="switchConsolidatedTab('enhanced')">Enhanced</button>
+</div>
+
+
+<div id="tab-browser" class="consolidation-content active">
 <h1>File Manager</h1>
 
 <div class="toolbar">
@@ -308,6 +319,12 @@ body { font-family: sans-serif; margin: 0; padding: 20px; background: #0a0a0a; c
 <div class="breadcrumb" id="breadcrumb">/</div>
 <div id="status" class="loading">Loading...</div>
 <div id="files" class="file-list"></div>
+</div>
+
+<div id="tab-enhanced" class="consolidation-content">
+
+</div>
+
 </main>
 
 <script>
@@ -717,6 +734,363 @@ async function emptyTrash() {
     loadTrash();
   } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
 }
+
+function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(c=>c.classList.remove('active'));document.querySelectorAll('.consolidation-tab').forEach(b=>b.classList.remove('active'));var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
+// === Browser (default) ===
+let currentPath = '/';
+
+async function loadFiles(path = currentPath) {
+  const status = document.getElementById('status');
+  const filesDiv = document.getElementById('files');
+  const breadcrumb = document.getElementById('breadcrumb');
+  
+  status.textContent = 'Loading...';
+  filesDiv.innerHTML = '';
+  
+  try {
+    const data = await daemonAPI.files_list(path);
+    
+    if (!data.success) {
+      status.textContent = `Error: ${data.error || 'Failed to load files'}`;
+      return;
+    }
+    
+    currentPath = data.path || path;
+    breadcrumb.textContent = currentPath;
+    
+    const files = data.files || [];
+    status.textContent = `${files.length} items`;
+    
+    if (files.length === 0) {
+      filesDiv.innerHTML = '<div style="text-align:center; padding:40px; opacity:0.5;">Empty directory</div>';
+      return;
+    }
+    
+    files.sort((a, b) => {
+      if (a.is_dir && !b.is_dir) return -1;
+      if (!a.is_dir && b.is_dir) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    
+    files.forEach(file => {
+      const item = document.createElement('div');
+      item.className = 'file-item';
+      
+      const icon = file.is_dir ? '📁' : '📄';
+      const size = file.is_dir ? 'Directory' : formatSize(file.size);
+      const date = new Date(file.mod_time * 1000).toLocaleString();
+      
+      item.innerHTML = `
+        <div class="file-icon">${icon}</div>
+        <div class="file-info">
+          <div class="file-name">${escapeHtml(file.name)}</div>
+          <div class="file-meta">${size} • ${file.mode} • ${date}</div>
+        </div>
+        <div class="file-actions">
+          ${file.is_dir ? '' : '<button onclick="downloadFile(event, \'' + escapeHtml(file.path) + '\')">⬇️</button>'}
+          <button onclick="moveToTrash(event, '${escapeHtml(file.path)}')" title="Move to Trash" style="font-size:14px;">♻</button>
+          <button onclick="deleteFile(event, '${escapeHtml(file.path)}')" title="Delete permanently" style="opacity:0.4;font-size:10px;">✕</button>
+        </div>
+      `;
+      
+      if (file.is_dir) {
+        item.addEventListener('click', (e) => {
+          if (!e.target.closest('button')) {
+            loadFiles(file.path);
+          }
+        });
+      }
+      
+      filesDiv.appendChild(item);
+    });
+    
+  } catch (error) {
+    status.textContent = `Error: ${error.message}`;
+    console.error('Failed to load files:', error);
+  }
+}
+
+function formatSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function goUp() {
+  if (currentPath === '/') return;
+  const parent = currentPath.split('/').slice(0, -1).join('/') || '/';
+  loadFiles(parent);
+}
+
+function refresh() {
+  loadFiles(currentPath);
+}
+
+async function createFolder() {
+  const name = await ui.prompt('Create Folder', 'Folder name:');
+  if (!name) return;
+  
+  const path = currentPath + (currentPath.endsWith('/') ? '' : '/') + name;
+  
+  try {
+    const result = await daemonAPI.files_mkdir(path);
+    if (result.success) {
+      ui.toast('Folder created', 'success');
+      refresh();
+    } else {
+      ui.toast('Error: ' + (result.error || 'Failed to create folder'), 'error');
+    }
+  } catch (error) {
+    ui.toast('Error: ' + error.message, 'error');
+  }
+}
+
+async function deleteFile(event, path) {
+  event.stopPropagation();
+  
+  if (!await ui.confirm('Delete File', `Delete ${path}?`)) return;
+  
+  try {
+    const result = await daemonAPI.files_delete(path);
+    if (result.success) {
+      ui.toast('Deleted', 'success');
+      refresh();
+    } else {
+      ui.toast('Error: ' + (result.error || 'Failed to delete'), 'error');
+    }
+  } catch (error) {
+    ui.toast('Error: ' + error.message, 'error');
+  }
+}
+
+function downloadFile(event, path) {
+  event.stopPropagation();
+  window.location.href = '/download?path=' + encodeURIComponent(path);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(window.location.search);
+  const startPath = params.get('path') || '/';
+  loadFiles(startPath);
+});
+
+// === RECYCLE BIN ===
+async function moveToTrash(event, path) {
+  event.stopPropagation();
+  if (!await ui.confirm('Move to Trash', 'Move to trash? ' + path)) return;
+  try {
+    const res = await fetch('/api/trash/move', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},
+      body: JSON.stringify({path: path})
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (window.EnhancedUI) EnhancedUI.toast('Moved to trash', 'success');
+      refresh();
+    } else {
+      ui.toast('Trash error: ' + (data.error || 'failed'), 'error');
+    }
+  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
+}
+
+function getSessionId() {
+  return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/, '$1') || localStorage.getItem('session_id') || '';
+}
+function getUser() {
+  return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/, '$1') || localStorage.getItem('username') || 'admin';
+}
+
+var trashPanelOpen = false;
+async function toggleTrashPanel() {
+  var panel = document.getElementById('trashPanel');
+  if (!panel) {
+    // Create panel
+    panel = document.createElement('div');
+    panel.id = 'trashPanel';
+    panel.style.cssText = 'position:fixed;right:0;top:0;bottom:0;width:380px;background:rgba(20,27,40,0.98);border-left:1px solid rgba(255,255,255,0.1);z-index:9998;transform:translateX(100%);transition:transform 0.3s ease;padding:24px;overflow-y:auto;';
+    panel.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h3 style="margin:0;font-size:18px;">Recycle Bin</h3><button onclick="toggleTrashPanel()" style="background:none;border:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:20px;">✕</button></div><div id="trashItems">Loading...</div><div style="margin-top:16px;"><button class="btn" onclick="emptyTrash()" style="width:100%;background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#EF4444;">Empty Trash</button></div>';
+    document.body.appendChild(panel);
+  }
+  trashPanelOpen = !trashPanelOpen;
+  panel.style.transform = trashPanelOpen ? 'translateX(0)' : 'translateX(100%)';
+  if (trashPanelOpen) loadTrash();
+}
+
+async function loadTrash() {
+  try {
+    var res = await fetch('/api/trash/list', {headers:{'X-Session-ID':getSessionId(),'X-User':getUser()}});
+    var data = await res.json();
+    var items = data.items || [];
+    var el = document.getElementById('trashItems');
+    if (!items.length) { el.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">Trash is empty</div>'; return; }
+    el.innerHTML = items.map(function(item) {
+      var d = document.createElement('div'); d.textContent = item.name; var safeName = d.innerHTML;
+      var origPath = item.original_path || 'unknown';
+      d.textContent = origPath; var safeOrig = d.innerHTML;
+      return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+        '<div style="font-size:14px;font-weight:500;">' + safeName.substring(safeName.indexOf('_') + 1) + '</div>' +
+        '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin:4px 0;">From: ' + safeOrig + '</div>' +
+        '<div style="font-size:11px;color:rgba(255,255,255,0.3);">' + (item.trashed_at || '') + '</div>' +
+        '<button onclick="restoreTrash(\'' + safeName.replace(/'/g,"\\'") + '\')" style="margin-top:6px;padding:4px 10px;border:1px solid rgba(74,222,128,0.3);background:rgba(74,222,128,0.08);border-radius:6px;color:#4ade80;cursor:pointer;font-size:12px;">Restore</button></div>';
+    }).join('');
+  } catch(e) { document.getElementById('trashItems').textContent = 'Error loading trash'; }
+}
+
+async function restoreTrash(name) {
+  try {
+    var res = await fetch('/api/trash/restore', {method:'POST',headers:{'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},body:JSON.stringify({name:name})});
+    var data = await res.json();
+    if (data.success) { if (window.EnhancedUI) EnhancedUI.toast('Restored to ' + data.restored_to, 'success'); loadTrash(); refresh(); }
+    else { ui.toast('Restore failed', 'error'); }
+  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
+}
+
+async function emptyTrash() {
+  if (!await ui.confirm('Empty Trash', 'Permanently delete ALL items? Cannot be undone.')) return;
+  try {
+    await fetch('/api/trash/empty', {method:'POST',headers:{'Content-Type':'application/json','X-Session-ID':getSessionId(),'X-User':getUser()},body:JSON.stringify({})});
+    if (window.EnhancedUI) EnhancedUI.toast('Trash emptied', 'success');
+    loadTrash();
+  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
+}
+
+// === Enhanced ===
+var __enhanced_init=false;function init_enhanced(){if(__enhanced_init)return;__enhanced_init=true;const CHUNK_SIZE = 10 * 1024 * 1024;
+const currentPath = '/';
+let queue = [];
+let uploading = false;
+
+// Drag & drop
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  enqueue(Array.from(e.dataTransfer.files));
+});
+
+function handleFileSelect(e) {
+  enqueue(Array.from(e.target.files));
+  e.target.value = '';
+}
+
+function enqueue(files) {
+  document.getElementById('uploadQueue').classList.add('active');
+  files.forEach(file => {
+    const item = {
+      id: Date.now() + Math.random(),
+      file, status: 'queued', progress: 0,
+      uploaded: 0, chunks: Math.ceil(file.size / CHUNK_SIZE),
+      speed: 0, start: null
+    };
+    queue.push(item);
+    renderItem(item);
+  });
+  if (!uploading) processNext();
+}
+
+function renderItem(item) {
+  const el = document.createElement('div');
+  el.id = 'u-' + item.id;
+  el.className = 'upload-item queued';
+  el.innerHTML = `
+    <div class="upload-item-header">
+      <div class="upload-item-name" title="${esc(item.file.name)}">${esc(item.file.name)}</div>
+      <div class="upload-item-size">${fmt(item.file.size)}</div>
+      <div class="upload-item-status queued">Queued</div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+    <div class="progress-text"><span class="pct">0%</span><span class="speed"></span></div>
+  `;
+  document.getElementById('uploadList').appendChild(el);
+}
+
+function updateItem(item) {
+  const el = document.getElementById('u-' + item.id);
+  if (!el) return;
+  el.className = 'upload-item ' + item.status;
+  el.querySelector('.upload-item-status').className = 'upload-item-status ' + item.status;
+  el.querySelector('.upload-item-status').textContent =
+    item.status === 'uploading' ? 'Uploading' :
+    item.status === 'success' ? 'Done' :
+    item.status === 'error' ? 'Failed' : 'Queued';
+  el.querySelector('.progress-fill').style.width = item.progress + '%';
+  el.querySelector('.pct').textContent = item.progress.toFixed(1) + '%';
+  if (item.speed > 0)
+    el.querySelector('.speed').textContent = fmt(item.speed) + '/s';
+}
+
+async function processNext() {
+  if (queue.length === 0) { uploading = false; return; }
+  uploading = true;
+  const item = queue.shift();
+  item.status = 'uploading';
+  item.start = Date.now();
+  updateItem(item);
+
+  try {
+    if (item.file.size > CHUNK_SIZE) {
+      for (let i = 0; i < item.chunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, item.file.size);
+        const chunk = item.file.slice(start, end);
+        const fd = new FormData();
+        fd.append('chunk', chunk);
+        fd.append('filename', item.file.name);
+        fd.append('path', currentPath);
+        fd.append('chunkIndex', i);
+        fd.append('totalChunks', item.chunks);
+        fd.append('fileSize', item.file.size);
+        const r = await fetch('/api/files/upload', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Chunk upload failed');
+        item.uploaded = end;
+        item.progress = (end / item.file.size) * 100;
+        item.speed = item.uploaded / ((Date.now() - item.start) / 1000);
+        updateItem(item);
+      }
+    } else {
+      const fd = new FormData();
+      fd.append('file', item.file);
+      fd.append('path', currentPath);
+      const r = await fetch('/api/files/upload', { method: 'POST', body: fd });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error || 'Upload failed');
+      item.progress = 100;
+    }
+    item.status = 'success';
+    item.progress = 100;
+  } catch (e) {
+    item.status = 'error';
+    console.error('Upload error:', e);
+  }
+  updateItem(item);
+  processNext();
+}
+
+function clearCompleted() {
+  document.querySelectorAll('.upload-item.success').forEach(el => el.remove());
+}
+
+function fmt(bytes) {
+  if (bytes === 0) return '0 B';
+  const u = ['B','KB','MB','GB','TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + u[i];
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }}
+
 </script>
 
 </body>

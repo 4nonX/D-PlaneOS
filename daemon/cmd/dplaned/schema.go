@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"log"
 )
 
@@ -33,6 +34,7 @@ func initSchema(db *sql.DB) error {
 			user_agent TEXT NOT NULL DEFAULT '',
 			created_at INTEGER NOT NULL,
 			expires_at INTEGER,
+			last_activity INTEGER NOT NULL DEFAULT (strftime('%s','now')),
 			FOREIGN KEY (username) REFERENCES users(username)
 		)`,
 
@@ -158,6 +160,9 @@ func initSchema(db *sql.DB) error {
 		// ── Indexes for performance ──
 		`CREATE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`,
+
+		// Migration: Add last_activity if missing (idempotent)
+		`ALTER TABLE sessions ADD COLUMN last_activity INTEGER NOT NULL DEFAULT 0`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user)`,
 		`CREATE INDEX IF NOT EXISTS idx_user_roles_user ON user_roles(user_id)`,
@@ -167,6 +172,10 @@ func initSchema(db *sql.DB) error {
 
 	for _, stmt := range tables {
 		if _, err := db.Exec(stmt); err != nil {
+			// ALTER TABLE fails if column already exists — that's OK for migrations
+			if strings.Contains(stmt, "ALTER TABLE") && strings.Contains(err.Error(), "duplicate column") {
+				continue
+			}
 			return fmt.Errorf("schema init failed: %w\nStatement: %s", err, stmt[:80])
 		}
 	}

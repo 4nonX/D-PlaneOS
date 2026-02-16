@@ -1,6 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><style>html{background:#0a0a0a}</style>
+<head><style>html{background:#0a0a0a}
+/* Consolidated Tab Navigation */
+.consolidation-tabs {
+  display: flex; gap: 4px; padding: 8px; margin-bottom: 24px;
+  background: rgba(255,255,255,0.03); border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.consolidation-tab {
+  padding: 10px 20px; border-radius: var(--radius-lg); border: none;
+  background: transparent; color: rgba(255,255,255,0.6);
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: all 0.2s; font-family: inherit;
+}
+.consolidation-tab:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.consolidation-tab.active {
+  background: var(--primary); color: #fff; font-weight: 600;
+}
+.consolidation-content { display: none; }
+.consolidation-content.active { display: block; }
+
+</style>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>User Management - D-PlaneOS</title>

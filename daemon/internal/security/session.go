@@ -49,7 +49,11 @@ func ValidateSession(sessionID, username string) (bool, error) {
 		return false, fmt.Errorf("database not initialized")
 	}
 
-	// Check if session exists and is not expired
+	// Session idle timeout: 30 minutes of inactivity = expired
+	idleTimeout := int64(30 * 60) // 30 minutes in seconds
+	now := time.Now().Unix()
+
+	// Check if session exists, not expired, and not idle
 	var count int
 	query := `
 		SELECT COUNT(*) 
@@ -57,15 +61,22 @@ func ValidateSession(sessionID, username string) (bool, error) {
 		WHERE session_id = ? 
 		AND username = ?
 		AND (expires_at IS NULL OR expires_at > ?)
+		AND (last_activity = 0 OR (? - last_activity) < ?)
 	`
 
-	err := db.QueryRow(query, sessionID, username, time.Now().Unix()).Scan(&count)
+	err := db.QueryRow(query, sessionID, username, now, now, idleTimeout).Scan(&count)
 	if err != nil {
 		// FAIL-CLOSED: Reject on ANY error (no fallback!)
 		return false, fmt.Errorf("session validation failed: %w", err)
 	}
 
-	return count > 0, nil
+	if count > 0 {
+		// Update last_activity timestamp (touch session)
+		db.Exec("UPDATE sessions SET last_activity = ? WHERE session_id = ?", now, sessionID)
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // GetUserFromSession retrieves the username associated with a session

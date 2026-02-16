@@ -5,12 +5,137 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
+	"unicode"
 
 	"golang.org/x/crypto/bcrypt"
 )
+
+// ═══════════════════════════════════════════════════════════════
+//  LOGIN RATE LIMITING — Exponential Backoff per IP
+// ═══════════════════════════════════════════════════════════════
+
+type loginAttempt struct {
+	failures    int
+	lastAttempt time.Time
+	lockedUntil time.Time
+}
+
+var (
+	loginAttemptsMu sync.Mutex
+	loginAttempts   = make(map[string]*loginAttempt)
+)
+
+// getLoginDelay returns the lockout duration based on failure count:
+// 1 fail = 0s, 2 = 2s, 3 = 4s, 4 = 8s, 5 = 16s, 6+ = 30s (cap)
+func getLoginDelay(failures int) time.Duration {
+	if failures <= 1 {
+		return 0
+	}
+	delay := time.Duration(1<<uint(failures-1)) * time.Second
+	if delay > 30*time.Second {
+		delay = 30 * time.Second
+	}
+	return delay
+}
+
+// checkLoginThrottle returns true if the IP is currently throttled
+func checkLoginThrottle(ip string) (bool, time.Duration) {
+	loginAttemptsMu.Lock()
+	defer loginAttemptsMu.Unlock()
+
+	attempt, exists := loginAttempts[ip]
+	if !exists {
+		return false, 0
+	}
+
+	// Clean up old entries (no failures for 15 min = reset)
+	if time.Since(attempt.lastAttempt) > 15*time.Minute {
+		delete(loginAttempts, ip)
+		return false, 0
+	}
+
+	if time.Now().Before(attempt.lockedUntil) {
+		remaining := time.Until(attempt.lockedUntil)
+		return true, remaining
+	}
+
+	return false, 0
+}
+
+// recordLoginFailure increments failure count and sets lockout
+func recordLoginFailure(ip string) {
+	loginAttemptsMu.Lock()
+	defer loginAttemptsMu.Unlock()
+
+	attempt, exists := loginAttempts[ip]
+	if !exists {
+		attempt = &loginAttempt{}
+		loginAttempts[ip] = attempt
+	}
+
+	attempt.failures++
+	attempt.lastAttempt = time.Now()
+	attempt.lockedUntil = time.Now().Add(getLoginDelay(attempt.failures))
+}
+
+// recordLoginSuccess resets the failure counter
+func recordLoginSuccess(ip string) {
+	loginAttemptsMu.Lock()
+	defer loginAttemptsMu.Unlock()
+	delete(loginAttempts, ip)
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PASSWORD COMPLEXITY
+// ═══════════════════════════════════════════════════════════════
+
+// validatePasswordStrength checks for minimum complexity requirements:
+// - At least 8 characters
+// - At least 1 uppercase letter
+// - At least 1 lowercase letter
+// - At least 1 digit
+// - At least 1 special character
+func validatePasswordStrength(password string) (bool, string) {
+	if len(password) < 8 {
+		return false, "Password must be at least 8 characters"
+	}
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	for _, ch := range password {
+		switch {
+		case unicode.IsUpper(ch):
+			hasUpper = true
+		case unicode.IsLower(ch):
+			hasLower = true
+		case unicode.IsDigit(ch):
+			hasDigit = true
+		case unicode.IsPunct(ch) || unicode.IsSymbol(ch):
+			hasSpecial = true
+		}
+	}
+	var missing []string
+	if !hasUpper {
+		missing = append(missing, "uppercase letter")
+	}
+	if !hasLower {
+		missing = append(missing, "lowercase letter")
+	}
+	if !hasDigit {
+		missing = append(missing, "digit")
+	}
+	if !hasSpecial {
+		missing = append(missing, "special character")
+	}
+	if len(missing) > 0 {
+		return false, fmt.Sprintf("Password must contain at least one %s", strings.Join(missing, ", "))
+	}
+	return true, ""
+}
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
@@ -32,6 +157,21 @@ type loginRequest struct {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// === LOGIN RATE LIMITING ===
+	clientIP := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		clientIP = strings.Split(forwarded, ",")[0]
+	}
+	if throttled, remaining := checkLoginThrottle(clientIP); throttled {
+		h.auditLog("", "login_throttled", fmt.Sprintf("IP %s throttled for %.0fs", clientIP, remaining.Seconds()), clientIP)
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(remaining.Seconds())+1))
+		respondJSON(w, http.StatusTooManyRequests, map[string]interface{}{
+			"success": false,
+			"error":   fmt.Sprintf("Too many failed attempts. Try again in %d seconds.", int(remaining.Seconds())+1),
+		})
 		return
 	}
 
@@ -63,6 +203,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err == sql.ErrNoRows {
 		// Constant-time: still do a bcrypt compare to prevent timing attacks
 		bcrypt.CompareHashAndPassword([]byte("$2a$10$dummyhashfortimingoracle000000000000000000000000000000"), []byte(req.Password))
+		recordLoginFailure(clientIP)
 		log.Printf("AUTH FAIL: unknown user %q from %s", req.Username, r.RemoteAddr)
 		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
 			"success": false, "error": "Invalid credentials",
@@ -77,6 +218,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if active != 1 {
+		recordLoginFailure(clientIP)
 		log.Printf("AUTH FAIL: disabled user %q from %s", req.Username, r.RemoteAddr)
 		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
 			"success": false, "error": "Account disabled",
@@ -86,6 +228,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Verify password (bcrypt)
 	if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(req.Password)); err != nil {
+		recordLoginFailure(clientIP)
 		log.Printf("AUTH FAIL: wrong password for %q from %s", req.Username, r.RemoteAddr)
 		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
 			"success": false, "error": "Invalid credentials",
@@ -121,6 +264,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Audit log
+	recordLoginSuccess(clientIP)
 	h.auditLog(req.Username, "login", "Session created", r.RemoteAddr)
 
 	log.Printf("AUTH OK: %q from %s", req.Username, r.RemoteAddr)
@@ -267,9 +411,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate new password length
-	if len(req.NewPassword) < 8 {
+	// Validate password strength (complexity requirements)
+	if ok, msg := validatePasswordStrength(req.NewPassword); !ok {
 		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"success": false, "error": "Password must be at least 8 characters",
+			"success": false, "error": msg,
 		})
 		return
 	}

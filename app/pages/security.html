@@ -456,6 +456,18 @@ if (window.ConnectionMonitor) {
 
 <main class="main">
 <div class="page-header">
+<h1 class="page-title">Security</h1>
+<p class="page-subtitle">Overview • Firewall • Certificates</p>
+</div>
+<div class="consolidation-tabs">
+  <button class="consolidation-tab active" data-tab="overview" onclick="switchConsolidatedTab('overview')">Overview</button>
+  <button class="consolidation-tab" data-tab="firewall" onclick="switchConsolidatedTab('firewall')">Firewall</button>
+  <button class="consolidation-tab" data-tab="certificates" onclick="switchConsolidatedTab('certificates')">Certificates</button>
+</div>
+
+
+<div id="tab-overview" class="consolidation-content active">
+<div class="page-header">
 <h1 class="page-title">Network</h1>
 <p class="page-subtitle">Configuration • VPN • Remote access</p>
 </div>
@@ -503,7 +515,17 @@ if (window.ConnectionMonitor) {
                 <h2>Security Log</h2>
                 <div id="securityLog"></div>
             </div>
-        </main>
+</div>
+
+<div id="tab-firewall" class="consolidation-content">
+
+</div>
+
+<div id="tab-certificates" class="consolidation-content">
+
+</div>
+
+</main>
     </div>
 
     <script src="../assets/js/core.js"></script>
@@ -635,6 +657,278 @@ if (window.ConnectionMonitor) {
 
     document.addEventListener('DOMContentLoaded', loadAPITokens);
     </script>
-  <script src="/assets/js/realtime-client.js"></script>
+  <script src="/assets/js/realtime-client.js">
+function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(c=>c.classList.remove('active'));document.querySelectorAll('.consolidation-tab').forEach(b=>b.classList.remove('active'));var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
+// === Overview (default) ===
+async function enable2FA() {
+        try {
+            const response = await csrfFetch('/api/auth/check?action=enable_2fa', {
+                method: 'POST',
+                body: JSON.stringify({})
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast('2FA QR Code displayed. Scan with your authenticator app.', 'success');
+                // Show QR code modal
+            } else {
+                showToast(data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to enable 2FA', 'error');
+        }
+    }
+
+    async function changePassword() {
+        const current = document.getElementById('currentPassword').value;
+        const newPass = document.getElementById('newPassword').value;
+        const confirm = document.getElementById('confirmPassword').value;
+
+        if (newPass !== confirm) {
+            showToast('Passwords do not match', 'error');
+            return;
+        }
+
+        try {
+            const response = await csrfFetch('/api/auth/change-password', {
+                method: 'POST',
+                body: JSON.stringify({
+                    current_password: current,
+                    new_password: newPass
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast('Password changed successfully', 'success');
+                document.getElementById('currentPassword').value = '';
+                document.getElementById('newPassword').value = '';
+                document.getElementById('confirmPassword').value = '';
+            } else {
+                showToast(data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to change password', 'error');
+        }
+    }
+
+    async function createAPIToken() {
+        const name = await ui.prompt('Create API Token', 'Enter token name:', '', 'My API Token');
+        if (!name) return;
+
+        try {
+            const response = await csrfFetch('/api/auth/check?action=create_api_token', {
+                method: 'POST',
+                body: JSON.stringify({ name, permissions: [] })
+            });
+            const data = await response.json();
+            if (data.success) {
+                const content = `
+                    <div class="warning-box mb-16">
+                        <p class="text-base mb-8"><strong>Save this token now!</strong></p>
+                        <p class="text-sm text-muted">This token will not be shown again. Copy it to a safe place.</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">API Token</label>
+                        <input type="text" class="form-input" value="${data.token}" readonly onclick="this.select()" id="tokenValue">
+                    </div>
+                `;
+                await ui.modal('API Token Created', content, [
+                    { text: 'Copy to Clipboard', icon: 'content_copy', callback: (modal) => {
+                        const input = modal.querySelector('#tokenValue');
+                        input.select();
+                        document.execCommand('copy');
+                        ui.toast('Token copied to clipboard', 'success');
+                        return false;
+                    }},
+                    { text: 'Close', primary: true }
+                ], { large: true });
+                loadAPITokens();
+            } else {
+                showToast(data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to create token', 'error');
+        }
+    }
+
+    async function loadAPITokens() {
+        try {
+            const response = await csrfFetch('/api/auth/check?action=list_api_tokens');
+            const data = await response.json();
+            if (data.success) {
+                const list = document.getElementById('apiTokensList');
+                list.innerHTML = data.tokens.map(t => `
+                    <div style="padding: 12px; background: #f5f5f5; margin-top: 8px; border-radius: 4px;">
+                        <strong>${t.name}</strong>
+                        <button onclick="revokeToken(${t.id})" class="btn btn-sm">Revoke</button>
+                    </div>
+                `).join('');
+            }
+        } catch (error) {
+            console.error('Failed to load tokens', error);
+        }
+    }
+
+    async function revokeToken(id) {
+        if (!await ui.confirm('Revoke Token', 'Revoke this API token? Any applications using this token will lose access immediately.')) return;
+        try {
+            const response = await csrfFetch('/api/auth/check?action=revoke_api_token', {
+                method: 'POST',
+                body: JSON.stringify({ token_id: id })
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast('Token revoked', 'success');
+                loadAPITokens();
+            }
+        } catch (error) {
+            showToast('Failed to revoke token', 'error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadAPITokens);
+
+// === Firewall ===
+var __firewall_init=false;function init_firewall(){if(__firewall_init)return;__firewall_init=true;function getSessionId(){return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("session_id")||"";}
+function getUser(){return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("username")||"admin";}
+
+var fwActive=false;
+
+async function loadStatus(){
+  try{
+    var res=await fetch("/api/firewall/status",{headers:{"X-Session-ID":getSessionId(),"X-User":getUser()}});
+    var data=await res.json();
+    fwActive=data.status==="active";
+    var badge=document.getElementById("fwStatusBadge");
+    badge.textContent=fwActive?"Active":"Inactive";
+    badge.style.background=fwActive?"rgba(74,222,128,0.15)":"rgba(255,255,255,0.1)";
+    badge.style.color=fwActive?"#4ade80":"rgba(255,255,255,0.5)";
+    document.getElementById("fwToggleBtn").textContent=fwActive?"Disable":"Enable";
+    
+    // Parse and render rules with highlighting
+    var rules=data.rules||"";
+    var html=rules.split("\n").map(function(line){
+      line=line.replace(/ALLOW/g,"<span class='rule-allow'>ALLOW</span>");
+      line=line.replace(/DENY/g,"<span class='rule-deny'>DENY</span>");
+      line=line.replace(/\[\s*(\d+)\]/,"<span class='rule-num'>[$1]</span>");
+      return"<div class='rule-line'>"+line+"</div>";
+    }).join("");
+    document.getElementById("fwRules").innerHTML=html;
+  }catch(e){document.getElementById("fwRules").textContent="Failed to load firewall status";}
+}
+
+async function toggleFirewall(){
+  var action=fwActive?"disable":"enable";
+  if(fwActive&&!await ui.confirm("Disable Firewall","Disable the firewall? This will allow all traffic."))return;
+  try{
+    await fetch("/api/firewall/rule",{method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify({action:action})});
+    if(window.EnhancedUI)EnhancedUI.toast("Firewall "+action+"d","success");
+    setTimeout(loadStatus,500);
+  }catch(e){if(window.EnhancedUI)EnhancedUI.toast("Error: "+e.message,"error");}
+}
+
+async function addRule(){
+  var action=document.getElementById("fwAction").value;
+  var port=document.getElementById("fwPort").value.trim();
+  var from=document.getElementById("fwFrom").value.trim();
+  if(!port){if(window.EnhancedUI)EnhancedUI.toast("Port is required","error");return;}
+  try{
+    var res=await fetch("/api/firewall/rule",{method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify({action:action,port:port,from:from})});
+    var data=await res.json();
+    if(data.success){
+      if(window.EnhancedUI)EnhancedUI.toast("Rule added: "+action+" "+port,"success");
+      document.getElementById("fwPort").value="";
+      document.getElementById("fwFrom").value="";
+      loadStatus();
+    }
+  }catch(e){if(window.EnhancedUI)EnhancedUI.toast("Error: "+e.message,"error");}
+}
+
+function applyPreset(port){
+  document.getElementById("fwPort").value=port;
+  document.getElementById("fwAction").value="allow";
+  addRule();
+}
+
+document.addEventListener("DOMContentLoaded",loadStatus);}
+
+// === Certificates ===
+var __certificates_init=false;function init_certificates(){if(__certificates_init)return;__certificates_init=true;function getSessionId(){return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("session_id")||"";}
+function getUser(){return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("username")||"admin";}
+function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}
+
+var activeCert="";
+
+async function loadCerts(){
+  try{
+    var res=await fetch("/api/certs/list",{headers:{"X-Session-ID":getSessionId(),"X-User":getUser()}});
+    var data=await res.json();
+    activeCert=data.active_cert||"";
+    document.getElementById("activeCertInfo").textContent=activeCert||"No certificate configured";
+    
+    var certs=data.certs||[];
+    if(!certs.length){
+      document.getElementById("certList").innerHTML="<div style='padding:40px;text-align:center;color:rgba(255,255,255,0.4);'><span class='material-symbols-rounded' style='font-size:48px;display:block;margin-bottom:12px;'>verified_user</span>No certificates installed<br><span style='font-size:13px;'>Click <strong>Generate Certificate</strong> to create one</span></div>";
+      return;
+    }
+    
+    var html="";
+    certs.forEach(function(c){
+      var isActive=activeCert.indexOf(c.name)!==-1;
+      // Parse details
+      var details=(c.details||"").split("\n");
+      var subject="",expires="",issuer="";
+      details.forEach(function(d){
+        if(d.startsWith("subject="))subject=d.replace("subject=","").trim();
+        if(d.startsWith("notAfter="))expires=d.replace("notAfter=","").trim();
+        if(d.startsWith("issuer="))issuer=d.replace("issuer=","").trim();
+      });
+      
+      html+="<div class='cert-row'>"+
+        "<div class='cert-icon'><span class='material-symbols-rounded'>verified_user</span></div>"+
+        "<div class='cert-info'><div class='cert-name'>"+esc(c.name)+(isActive?" <span class='cert-active-badge'>Active</span>":"")+"</div>"+
+        "<div class='cert-meta'>Subject: "+esc(subject)+"<br>Expires: "+esc(expires)+"<br>Key: "+(c.has_key==="true"?"✓ Present":"✗ Missing")+"</div></div>"+
+        "<div class='cert-actions'>"+
+        (isActive?"":"<button class='btn' onclick=\"activateCert('"+esc(c.name)+"')\">Activate</button>")+
+        "</div></div>";
+    });
+    document.getElementById("certList").innerHTML=html;
+  }catch(e){document.getElementById("certList").textContent="Failed to load certificates";}
+}
+
+function showGenModal(){document.getElementById("genCertModal").style.display="flex";}
+function closeGenModal(){document.getElementById("genCertModal").style.display="none";}
+
+async function generateCert(){
+  var name=document.getElementById("certName").value.trim();
+  var cn=document.getElementById("certCN").value.trim();
+  var days=parseInt(document.getElementById("certDays").value)||365;
+  var sans=document.getElementById("certSANs").value.trim();
+  if(!name){if(window.EnhancedUI)EnhancedUI.toast("Name is required","error");return;}
+  try{
+    var res=await fetch("/api/certs/generate",{method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify({name:name,cn:cn,days:days,sans:sans})});
+    var data=await res.json();
+    if(data.success){
+      closeGenModal();
+      if(window.EnhancedUI)EnhancedUI.toast("Certificate generated: "+name,"success");
+      loadCerts();
+    }else{if(window.EnhancedUI)EnhancedUI.toast("Generation failed","error");}
+  }catch(e){if(window.EnhancedUI)EnhancedUI.toast("Error: "+e.message,"error");}
+}
+
+async function activateCert(name){
+  if(!await ui.confirm('Activate Certificate',"Activate '"+name+"'? This will reload nginx."))return;
+  try{
+    var res=await fetch("/api/certs/activate",{method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify({name:name})});
+    var data=await res.json();
+    if(data.success){
+      if(window.EnhancedUI)EnhancedUI.toast("Certificate activated — nginx reloaded","success");
+      loadCerts();
+    }else{if(window.EnhancedUI)EnhancedUI.toast("Activation failed","error");}
+  }catch(e){if(window.EnhancedUI)EnhancedUI.toast("Error: "+e.message,"error");}
+}
+
+document.addEventListener("DOMContentLoaded",loadCerts);}
+
+</script>
 </body>
 </html>

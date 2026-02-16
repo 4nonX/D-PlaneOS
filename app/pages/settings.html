@@ -460,6 +460,18 @@ if (window.ConnectionMonitor) {
 
 <main class="main">
 <div class="page-header">
+<h1 class="page-title">System Settings</h1>
+<p class="page-subtitle">General • Configuration • Power</p>
+</div>
+<div class="consolidation-tabs">
+  <button class="consolidation-tab active" data-tab="general" onclick="switchConsolidatedTab('general')">General</button>
+  <button class="consolidation-tab" data-tab="config" onclick="switchConsolidatedTab('config')">Configuration</button>
+  <button class="consolidation-tab" data-tab="power" onclick="switchConsolidatedTab('power')">Power</button>
+</div>
+
+
+<div id="tab-general" class="consolidation-content active">
+<div class="page-header">
 <h1 class="page-title">Settings</h1>
 <p class="page-subtitle">System configuration • Users • Updates</p>
 </div>
@@ -536,6 +548,222 @@ Test Connection
 </div>
 </div>
 </div>
+</div>
+
+<div id="tab-config" class="consolidation-content">
+<div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>System Settings</h1>
+            <p>Configure resource limits and monitoring thresholds</p>
+        </div>
+
+        <!-- Live Status Overview -->
+        <div class="settings-card">
+            <div class="card-header">
+                <span class="material-icons">dashboard</span>
+                <h2>Live System Status</h2>
+            </div>
+            
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-label">Inotify Watches</div>
+                    <div class="status-value" id="inotify-used">-</div>
+                    <div class="status-subtitle">of <span id="inotify-limit">-</span> available</div>
+                    <div class="status-bar">
+                        <div class="status-bar-fill" id="inotify-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="status-item">
+                    <div class="status-label">Memory Usage</div>
+                    <div class="status-value" id="memory-used">-</div>
+                    <div class="status-subtitle">of <span id="memory-total">-</span> total</div>
+                    <div class="status-bar">
+                        <div class="status-bar-fill" id="memory-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="status-item">
+                    <div class="status-label">ZFS ARC</div>
+                    <div class="status-value" id="arc-used">-</div>
+                    <div class="status-subtitle">of <span id="arc-limit">-</span> limit</div>
+                    <div class="status-bar">
+                        <div class="status-bar-fill" id="arc-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="status-item">
+                    <div class="status-label">I/O Wait</div>
+                    <div class="status-value" id="iowait-value">-</div>
+                    <div class="status-subtitle">Current load</div>
+                    <div class="status-bar">
+                        <div class="status-bar-fill" id="iowait-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alerts Container -->
+            <div id="alerts-container"></div>
+        </div>
+
+        <!-- Inotify Settings -->
+        <div class="settings-card">
+            <div class="card-header">
+                <span class="material-icons">visibility</span>
+                <h2>File Monitoring (Inotify)</h2>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">
+                    <h3>Real-Time Indexing</h3>
+                    <span class="setting-value" id="indexing-mode-value">Hybrid</span>
+                </div>
+                <div class="setting-description">
+                    Controls how file changes are detected. Real-time uses inotify watches (limited). Periodic scans directories on interval (unlimited).
+                </div>
+                
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <h3>Enable Real-Time Monitoring</h3>
+                        <p>Uses inotify watches for instant file detection</p>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="realtime-toggle" checked style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;">
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <h3>Periodic Background Scan</h3>
+                        <p>Scans directories every 30 minutes (no watch limit)</p>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="periodic-toggle" checked style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;">
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory Settings -->
+        <div class="settings-card">
+            <div class="card-header">
+                <span class="material-icons">memory</span>
+                <h2>Memory Management</h2>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">
+                    <h3>ZFS ARC Limit</h3>
+                    <span class="setting-value" id="arc-limit-value">8 GB</span>
+                </div>
+                <div class="setting-description">
+                    Maximum memory for ZFS cache. <strong>Warning:</strong> With Non-ECC RAM, keep ≤40% of total RAM to reduce bit-flip risk.
+                </div>
+                <div class="slider-container">
+                    <input type="range" id="arc-slider" min="1" max="32" value="8" step="1">
+                </div>
+                <div class="setting-description" id="arc-recommendation" style="color: var(--md-sys-color-tertiary);"></div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">
+                    <h3>Swap Aggressiveness</h3>
+                    <span class="setting-value" id="swappiness-value">10</span>
+                </div>
+                <div class="setting-description">
+                    How aggressively the kernel swaps to disk. Lower = keep apps in RAM. Higher = swap more freely.
+                </div>
+                <div class="slider-container">
+                    <input type="range" id="swappiness-slider" min="0" max="100" value="10" step="5">
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitoring Settings -->
+        <div class="settings-card">
+            <div class="card-header">
+                <span class="material-icons">notifications</span>
+                <h2>Alert Thresholds</h2>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">
+                    <h3>Inotify Warning Threshold</h3>
+                    <span class="setting-value" id="inotify-warn-value">80%</span>
+                </div>
+                <div class="setting-description">
+                    Alert when inotify watch usage exceeds this percentage
+                </div>
+                <div class="slider-container">
+                    <input type="range" id="inotify-warn-slider" min="50" max="95" value="80" step="5">
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">
+                    <h3>Memory Warning Threshold</h3>
+                    <span class="setting-value" id="memory-warn-value">85%</span>
+                </div>
+                <div class="setting-description">
+                    Alert when memory usage exceeds this percentage
+                </div>
+                <div class="slider-container">
+                    <input type="range" id="memory-warn-slider" min="70" max="95" value="85" step="5">
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">
+                    <h3>I/O Wait Warning Threshold</h3>
+                    <span class="setting-value" id="iowait-warn-value">20%</span>
+                </div>
+                <div class="setting-description">
+                    Alert when CPU I/O wait exceeds this percentage
+                </div>
+                <div class="slider-container">
+                    <input type="range" id="iowait-warn-slider" min="10" max="50" value="20" step="5">
+                </div>
+            </div>
+
+            <div class="toggle-row">
+                <div class="toggle-info">
+                    <h3>WebSocket Alerts</h3>
+                    <p>Show real-time toast notifications for warnings</p>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="websocket-alerts-toggle" checked style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;">
+                    <span class="switch-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="settings-card">
+            <div class="button-group">
+                <button class="md-button filled" onclick="saveSettings()">
+                    <span class="material-icons">save</span>
+                    Save Settings
+                </button>
+                <button class="md-button outlined" onclick="resetToDefaults()">
+                    <span class="material-icons">restore</span>
+                    Reset to Defaults
+                </button>
+                <button class="md-button outlined" onclick="runPreFlight()">
+                    <span class="material-icons">check_circle</span>
+                    Run Pre-Flight Check
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="tab-power" class="consolidation-content">
+
+</div>
+
 </main>
 <button class="fab" onclick="checkUpdates()"><span class="material-symbols-rounded" style="font-size:28px;">update</span></button>
 <script src="/assets/js/m3-ripple.js"></script>
@@ -917,5 +1145,545 @@ async function testSMTP() {
     d.success ? ui.toast(d.message||'Test email sent','success') : ui.toast('Failed: '+(d.error||'Unknown'),'error');
   } catch(e) { ui.toast('Failed','error'); }
 }
+
+function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(c=>c.classList.remove('active'));document.querySelectorAll('.consolidation-tab').forEach(b=>b.classList.remove('active'));var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
+// === General (default) ===
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const nix = document.createElement('div');
+  nix.style.marginTop = '48px';
+  nix.id = 'nixos-section';
+  nix.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">NixOS Configuration</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">Validate • Apply • Diff • Watchdog</p>
+    <div id="nixos-detect" style="margin-bottom:24px;"></div>
+
+    <div class="card" style="padding:32px;margin-bottom:24px;border-left:4px solid #06b6d4;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#06b6d4;">verified_user</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Config Guard</div></div>
+        <div id="watchdog-status"></div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <button class="btn" onclick="nixValidate()" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">fact_check</span> Dry-Run Validate</button>
+        <button class="btn btn-primary" onclick="nixApply()">
+          <span class="material-symbols-rounded" style="font-size:18px;">rocket_launch</span> Apply with Watchdog (120s)</button>
+        <button class="btn" onclick="nixConfirm()" style="background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.3);color:var(--md-sys-color-success);">
+          <span class="material-symbols-rounded" style="font-size:18px;">check_circle</span> Confirm</button>
+        <button class="btn" onclick="nixGenerations()" style="background:rgba(255,255,255,0.05);">
+          <span class="material-symbols-rounded" style="font-size:18px;">history</span> Generations</button>
+        <button class="btn" onclick="nixRollback()" style="background:rgba(239,68,68,0.15);color:#ef4444;">
+          <span class="material-symbols-rounded" style="font-size:18px;">undo</span> Rollback</button>
+      </div>
+      <div id="nix-output" style="margin-top:16px;font-family:monospace;font-size:12px;color:rgba(255,255,255,0.6);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);max-height:300px;overflow-y:auto;display:none;"></div>
+    </div>
+
+    <div class="card" style="padding:32px;border-left:4px solid #8b5cf6;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#8b5cf6;">difference</span>
+        <div style="flex:1;"><div style="font-size:20px;font-weight:800;">Generation Diff</div></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:end;margin-bottom:16px;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">From Gen #</label>
+          <input id="diff-from" type="number" placeholder="42" style="width:120px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">To Gen # (empty=current)</label>
+          <input id="diff-to" type="number" placeholder="current" style="width:120px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <button class="btn btn-primary" onclick="nixDiff()"><span class="material-symbols-rounded" style="font-size:18px;">compare</span> Compare</button>
+      </div>
+      <div id="diff-output" style="font-family:monospace;font-size:12px;color:rgba(255,255,255,0.6);padding:12px;background:rgba(0,0,0,0.3);border-radius:var(--md-sys-shape-corner-small);max-height:400px;overflow-y:auto;display:none;"></div>
+    </div>
+  `;
+  main.appendChild(nix);
+  detectNixOS();
+});
+async function detectNixOS() {
+  try { const r = await csrfFetch('/api/nixos/detect'); const d = await r.json();
+    const el = document.getElementById('nixos-detect');
+    if (!d.success || !d.is_nixos) { document.getElementById('nixos-section').style.display='none'; return; }
+    el.innerHTML = `<div class="badge badge-success" style="font-size:14px;padding:8px 16px;">NixOS ${d.version||''} • ${d.generation_count||0} generations</div>`;
+    checkWatchdog();
+  } catch(e) { document.getElementById('nixos-section').style.display='none'; }
+}
+async function nixValidate() {
+  try { ui.toast('Validating...','info'); const r = await csrfFetch('/api/nixos/validate',{method:'POST',body:JSON.stringify({flake_path:'/etc/nixos'})}); const d = await r.json();
+    const el = document.getElementById('nix-output'); el.style.display='block';
+    el.textContent = d.output||d.error||'No output'; d.success ? ui.toast('Config valid','success') : ui.toast('Validation failed','error');
+  } catch(e) { ui.toast('Error','error'); }
+}
+async function nixApply() {
+  if (!await ui.confirm('Apply NixOS Config','Apply configuration? Auto-rollback if not confirmed within 120 seconds.')) return;
+  try { ui.toast('Applying...','info'); const r = await csrfFetch('/api/nixos/apply',{method:'POST',body:JSON.stringify({flake_path:'/etc/nixos',timeout_seconds:120})}); const d = await r.json();
+    const el = document.getElementById('nix-output'); el.style.display='block'; el.textContent = d.output||'';
+    d.success ? ui.toast('Applied — confirm within 120s!','warning') : ui.toast('Failed','error'); checkWatchdog();
+  } catch(e) { ui.toast('Error','error'); }
+}
+async function nixConfirm() {
+  try { const r = await csrfFetch('/api/nixos/confirm',{method:'POST'}); const d = await r.json();
+    d.success ? ui.toast('Confirmed — watchdog cancelled','success') : ui.toast(d.error,'error'); checkWatchdog();
+  } catch(e) { ui.toast('Error','error'); }
+}
+async function checkWatchdog() {
+  try { const r = await csrfFetch('/api/nixos/watchdog'); const d = await r.json();
+    document.getElementById('watchdog-status').innerHTML = d.watchdog_active ? `<span class="badge badge-warning">Watchdog: ${d.remaining_sec}s remaining</span>` : '';
+  } catch(e) {}
+}
+async function nixDiff() {
+  const from = document.getElementById('diff-from').value;
+  const to = document.getElementById('diff-to').value;
+  if (!from) { ui.toast('Enter "from" generation','warning'); return; }
+  try { const r = await csrfFetch('/api/nixos/diff?from='+from+(to?'&to='+to:'')); const d = await r.json();
+    const el = document.getElementById('diff-output'); el.style.display='block'; el.textContent = d.diff||JSON.stringify(d,null,2);
+  } catch(e) { ui.toast('Error','error'); }
+}
+
+// NixOS Generations
+async function nixGenerations() {
+  try { const r = await csrfFetch('/api/nixos/generations'); const d = await r.json();
+    const el = document.getElementById('diff-output'); el.style.display = 'block';
+    if (d.generations && d.generations.length) {
+      el.innerHTML = d.generations.map(g => '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">Gen #'+g.number+' — '+(g.date||'')+' '+(g.current?' <strong>(current)</strong>':'')+'</div>').join('');
+    } else { el.textContent = d.output || 'No generations found'; }
+  } catch(e) { ui.toast('Error','error'); }
+}
+async function nixRollback() {
+  const gen = await ui.prompt('NixOS Rollback', 'Generation number to rollback to:');
+  if (!gen) return;
+  if (!await ui.confirm('Rollback NixOS', 'Rollback to generation '+gen+'? System will switch config.')) return;
+  try { ui.toast('Rolling back...','info');
+    const r = await csrfFetch('/api/nixos/rollback',{method:'POST',body:JSON.stringify({generation:parseInt(gen)})});
+    const d = await r.json();
+    d.success ? ui.toast('Rolled back to gen '+gen,'success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Error','error'); }
+}
+
+// Inject SMTP + NixOS buttons
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('.main');
+  if (!main) return;
+
+  // SMTP Alert Configuration
+  const smtp = document.createElement('div');
+  smtp.style.marginTop = '48px';
+  smtp.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">Email Alerts (SMTP)</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">Get notified about disk failures, capacity warnings, scrub results</p>
+    <div class="card" style="padding:32px;border-left:4px solid #f59e0b;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">SMTP Host</label>
+          <input id="smtp-host" type="text" placeholder="smtp.gmail.com" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Port</label>
+          <input id="smtp-port" type="number" value="587" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Username</label>
+          <input id="smtp-user" type="text" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Password</label>
+          <input id="smtp-pass" type="password" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">From Address</label>
+          <input id="smtp-from" type="email" placeholder="nas@example.com" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">To Address(es)</label>
+          <input id="smtp-to" type="text" placeholder="admin@example.com" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-end;">
+        <button class="btn" onclick="testSMTP()" style="background:rgba(255,255,255,0.05);">Send Test Email</button>
+        <button class="btn btn-primary" onclick="saveSMTP()">Save SMTP Config</button>
+      </div>
+    </div>
+  `;
+  main.appendChild(smtp);
+  loadSMTPConfig();
+});
+
+async function loadSMTPConfig() {
+  try { const r = await csrfFetch('/api/alerts/smtp'); const d = await r.json();
+    if (d.configured && d.config) {
+      document.getElementById('smtp-host').value = d.config.host||'';
+      document.getElementById('smtp-port').value = d.config.port||587;
+      document.getElementById('smtp-user').value = d.config.username||'';
+      document.getElementById('smtp-from').value = d.config.from||'';
+      document.getElementById('smtp-to').value = d.config.to||'';
+    }
+  } catch(e) {}
+}
+function getSMTPData() {
+  return { host: document.getElementById('smtp-host').value, port: parseInt(document.getElementById('smtp-port').value)||587,
+    username: document.getElementById('smtp-user').value, password: document.getElementById('smtp-pass').value,
+    from: document.getElementById('smtp-from').value, to: document.getElementById('smtp-to').value };
+}
+async function saveSMTP() {
+  const data = getSMTPData();
+  if (!data.host || !data.from || !data.to) { ui.toast('Host, from, and to are required','warning'); return; }
+  try { const r = await csrfFetch('/api/alerts/smtp',{method:'POST',body:JSON.stringify(data)}); const d = await r.json();
+    d.success ? ui.toast('SMTP config saved','success') : ui.toast(d.error,'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+async function testSMTP() {
+  const data = getSMTPData();
+  if (!data.host) { ui.toast('Configure SMTP first','warning'); return; }
+  try { ui.toast('Sending test email...','info');
+    const r = await csrfFetch('/api/alerts/smtp/test',{method:'POST',body:JSON.stringify(data)}); const d = await r.json();
+    d.success ? ui.toast(d.message||'Test email sent','success') : ui.toast('Failed: '+(d.error||'Unknown'),'error');
+  } catch(e) { ui.toast('Failed','error'); }
+}
+
+// === Configuration ===
+var __config_init=false;function init_config(){if(__config_init)return;__config_init=true;// Initialize
+        let systemProfile = null;
+        let hasECC = false;
+
+        // Load system profile
+        async function loadSystemProfile() {
+            try {
+                const response = await daemonAPI('/api/system/profile');
+                systemProfile = response;
+                hasECC = systemProfile.has_ecc || false;
+                
+                // Update UI based on profile
+                updateARCRecommendation();
+            } catch (error) {
+                console.error('Failed to load system profile:', error);
+            }
+        }
+
+        // Update live metrics
+        async function updateMetrics() {
+            try {
+                const metrics = await daemonAPI('/api/metrics/current');
+                
+                // Inotify
+                document.getElementById('inotify-used').textContent = formatNumber(metrics.inotify.used);
+                document.getElementById('inotify-limit').textContent = formatNumber(metrics.inotify.limit);
+                updateStatusBar('inotify-bar', metrics.inotify.percent);
+                
+                // Memory
+                document.getElementById('memory-used').textContent = formatBytes(metrics.memory.used);
+                document.getElementById('memory-total').textContent = formatBytes(metrics.memory.total);
+                updateStatusBar('memory-bar', metrics.memory.percent);
+                
+                // ZFS ARC
+                document.getElementById('arc-used').textContent = formatBytes(metrics.arc.used);
+                document.getElementById('arc-limit').textContent = formatBytes(metrics.arc.limit);
+                updateStatusBar('arc-bar', metrics.arc.percent);
+                
+                // I/O Wait
+                document.getElementById('iowait-value').textContent = metrics.iowait + '%';
+                updateStatusBar('iowait-bar', metrics.iowait);
+                
+                // Check for alerts
+                checkThresholds(metrics);
+                
+            } catch (error) {
+                console.error('Failed to update metrics:', error);
+            }
+        }
+
+        function updateStatusBar(barId, percent) {
+            const bar = document.getElementById(barId);
+            bar.style.width = percent + '%';
+            
+            // Color coding
+            if (percent < 70) {
+                bar.className = 'status-bar-fill ok';
+            } else if (percent < 90) {
+                bar.className = 'status-bar-fill warning';
+            } else {
+                bar.className = 'status-bar-fill critical';
+            }
+        }
+
+        function checkThresholds(metrics) {
+            const alerts = [];
+            
+            // Inotify
+            const inotifyWarn = parseInt(document.getElementById('inotify-warn-slider').value);
+            if (metrics.inotify.percent >= inotifyWarn) {
+                alerts.push({
+                    type: 'warning',
+                    icon: 'visibility_off',
+                    title: 'Inotify Watches Critical',
+                    message: `Usage at ${metrics.inotify.percent}%. Some file changes may not be detected. Consider stopping unused Docker containers or enabling periodic scan mode.`
+                });
+            }
+            
+            // Memory
+            const memoryWarn = parseInt(document.getElementById('memory-warn-slider').value);
+            if (metrics.memory.percent >= memoryWarn) {
+                alerts.push({
+                    type: 'warning',
+                    icon: 'memory',
+                    title: 'High Memory Usage',
+                    message: `Memory at ${metrics.memory.percent}%. System may start swapping, causing performance degradation.`
+                });
+            }
+            
+            // I/O Wait
+            const iowaitWarn = parseInt(document.getElementById('iowait-warn-slider').value);
+            if (metrics.iowait >= iowaitWarn) {
+                alerts.push({
+                    type: 'warning',
+                    icon: 'hourglass_empty',
+                    title: 'High I/O Wait',
+                    message: `CPU waiting ${metrics.iowait}% for disk I/O. UI may feel laggy. Check if ZFS scrub is running.`
+                });
+            }
+            
+            // Non-ECC Warning
+            if (!hasECC && metrics.arc.percent > 40) {
+                alerts.push({
+                    type: 'error',
+                    icon: 'warning',
+                    title: 'Non-ECC RAM Risk',
+                    message: `ZFS ARC using ${metrics.arc.percent}% of RAM. With Non-ECC RAM, keep ARC ≤40% to reduce bit-flip corruption risk.`
+                });
+            }
+            
+            displayAlerts(alerts);
+        }
+
+        function displayAlerts(alerts) {
+            const container = document.getElementById('alerts-container');
+            
+            if (alerts.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            container.innerHTML = alerts.map(alert => `
+                <div class="alert ${alert.type}">
+                    <span class="material-icons">${alert.icon}</span>
+                    <div class="alert-content">
+                        <h3>${alert.title}</h3>
+                        <p>${alert.message}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Slider updates
+        document.getElementById('arc-slider').addEventListener('input', (e) => {
+            const value = e.target.value;
+            document.getElementById('arc-limit-value').textContent = value + ' GB';
+            updateARCRecommendation();
+        });
+
+        document.getElementById('swappiness-slider').addEventListener('input', (e) => {
+            const value = e.target.value;
+            document.getElementById('swappiness-value').textContent = value;
+        });
+
+        document.getElementById('inotify-warn-slider').addEventListener('input', (e) => {
+            const value = e.target.value;
+            document.getElementById('inotify-warn-value').textContent = value + '%';
+        });
+
+        document.getElementById('memory-warn-slider').addEventListener('input', (e) => {
+            const value = e.target.value;
+            document.getElementById('memory-warn-value').textContent = value + '%';
+        });
+
+        document.getElementById('iowait-warn-slider').addEventListener('input', (e) => {
+            const value = e.target.value;
+            document.getElementById('iowait-warn-value').textContent = value + '%';
+        });
+
+        function updateARCRecommendation() {
+            if (!systemProfile) return;
+            
+            const arcGB = parseInt(document.getElementById('arc-slider').value);
+            const totalRAM = systemProfile.total_ram_gb;
+            const percent = (arcGB / totalRAM * 100).toFixed(0);
+            
+            const recommendation = document.getElementById('arc-recommendation');
+            
+            if (!hasECC && percent > 40) {
+                recommendation.textContent = `⚠️ WARNING: ${percent}% of RAM. With Non-ECC RAM, recommend ≤40% (≤${Math.floor(totalRAM * 0.4)}GB) to reduce corruption risk.`;
+                recommendation.style.color = '#C62828';
+            } else if (percent > 50) {
+                recommendation.textContent = `⚠️ ${percent}% of RAM. May cause memory pressure under heavy load.`;
+                recommendation.style.color = '#F57F17';
+            } else {
+                recommendation.textContent = `✓ ${percent}% of RAM. Safe for your ${totalRAM}GB system${hasECC ? ' with ECC' : ''}.`;
+                recommendation.style.color = 'var(--md-sys-color-tertiary)';
+            }
+        }
+
+        // Save settings
+        async function saveSettings() {
+            const settings = {
+                arc_limit_gb: parseInt(document.getElementById('arc-slider').value),
+                swappiness: parseInt(document.getElementById('swappiness-slider').value),
+                realtime_enabled: document.getElementById('realtime-toggle').checked,
+                periodic_enabled: document.getElementById('periodic-toggle').checked,
+                inotify_warn_threshold: parseInt(document.getElementById('inotify-warn-slider').value),
+                memory_warn_threshold: parseInt(document.getElementById('memory-warn-slider').value),
+                iowait_warn_threshold: parseInt(document.getElementById('iowait-warn-slider').value),
+                websocket_alerts: document.getElementById('websocket-alerts-toggle').checked
+            };
+            
+            try {
+                await daemonAPI('/api/system/settings', 'POST', settings);
+                showToast('Settings saved successfully', 'success');
+            } catch (error) {
+                showToast('Failed to save settings: ' + error.message, 'error');
+            }
+        }
+
+        function resetToDefaults() {
+            if (await ui.confirm('Reset Settings', 'Reset all settings to recommended defaults?')) {
+                document.getElementById('arc-slider').value = 8;
+                document.getElementById('swappiness-slider').value = 10;
+                document.getElementById('inotify-warn-slider').value = 80;
+                document.getElementById('memory-warn-slider').value = 85;
+                document.getElementById('iowait-warn-slider').value = 20;
+                
+                // Trigger updates
+                document.getElementById('arc-slider').dispatchEvent(new Event('input'));
+                document.getElementById('swappiness-slider').dispatchEvent(new Event('input'));
+                document.getElementById('inotify-warn-slider').dispatchEvent(new Event('input'));
+                document.getElementById('memory-warn-slider').dispatchEvent(new Event('input'));
+                document.getElementById('iowait-warn-slider').dispatchEvent(new Event('input'));
+                
+                showToast('Settings reset to defaults', 'info');
+            }
+        }
+
+        async function runPreFlight() {
+            try {
+                const result = await daemonAPI('/api/system/preflight');
+                
+                if (result.errors > 0) {
+                    showToast(`Pre-flight check failed with ${result.errors} critical issue(s)`, 'error');
+                } else if (result.warnings > 0) {
+                    showToast(`Pre-flight check passed with ${result.warnings} warning(s)`, 'warning');
+                } else {
+                    showToast('Pre-flight check passed - system ready', 'success');
+                }
+                
+                // Show detailed results
+                window.open('/system/preflight-results', '_blank');
+            } catch (error) {
+                showToast('Failed to run pre-flight check: ' + error.message, 'error');
+            }
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toString();
+        }
+
+        function formatBytes(bytes) {
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let i = 0;
+            while (bytes >= 1024 && i < units.length - 1) {
+                bytes /= 1024;
+                i++;
+            }
+            return bytes.toFixed(1) + ' ' + units[i];
+        }
+
+        function showToast(message, type) {
+            // Simple toast implementation
+            const toast = document.createElement('div');
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                background: ${type === 'error' ? '#C62828' : type === 'warning' ? '#F57F17' : '#2E7D32'};
+                color: white;
+                padding: 16px 24px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+            `;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        // Initialize
+        loadSystemProfile();
+        updateMetrics();
+        
+        // Update metrics every 10 seconds
+        setInterval(updateMetrics, 10000);
+        
+        // WebSocket monitoring
+        if (window.monitorWS) {
+            monitorWS.on('inotify_status', (event) => {
+                updateMetrics();
+            });
+        }}
+
+// === Power ===
+var __power_init=false;function init_power(){if(__power_init)return;__power_init=true;function getSessionId(){return document.cookie.replace(/(?:(?:^|.*;\s*)session_id\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("session_id")||"";}
+function getUser(){return document.cookie.replace(/(?:(?:^|.*;\s*)username\s*=\s*([^;]*).*$)|^.*$/,"$1")||localStorage.getItem("username")||"admin";}
+function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}
+
+var spindownConf={};
+
+async function loadDisks(){
+  try{
+    var res=await fetch("/api/power/disks",{headers:{"X-Session-ID":getSessionId(),"X-User":getUser()}});
+    var data=await res.json();
+    if(!data.success)return;
+    spindownConf=data.spindown||{};
+    var disks=data.disks||[];
+    
+    if(!disks.length){
+      document.getElementById("diskList").innerHTML="<div style='padding:40px;text-align:center;color:rgba(255,255,255,0.4);'><span class='material-symbols-rounded' style='font-size:48px;display:block;margin-bottom:12px;'>storage</span>No disks detected</div>";
+      return;
+    }
+    
+    var html="";
+    disks.forEach(function(d){
+      var isHDD=d.rotational==="1";
+      var iconClass=isHDD?"hdd":"ssd";
+      var stateClass=(d.power_state||"unknown").toLowerCase();
+      var savedTimeout=spindownConf[d.device]||0;
+      
+      html+="<div class='disk-row'>"+
+        "<div class='disk-icon "+iconClass+"'><span class='material-symbols-rounded'>"+(isHDD?"hard_drive":"memory")+"</span></div>"+
+        "<div class='disk-info'><div class='disk-name'>"+esc(d.device)+"</div>"+
+        "<div class='disk-meta'>"+esc(d.model||"Unknown")+" · "+esc(d.size||"?")+" · "+esc(d.transport||"?")+(d.apm_level?" · APM: "+esc(d.apm_level):"")+"</div></div>"+
+        "<span class='disk-state "+stateClass+"'>"+esc(d.power_state||"unknown")+"</span>"+
+        "<div class='disk-controls'>"+
+        "<select class='spindown-select' onchange=\"setSpindown('"+esc(d.device)+"',this.value)\">"+
+        "<option value='0'"+(savedTimeout===0?" selected":"")+">No spindown</option>"+
+        "<option value='60'"+(savedTimeout===60?" selected":"")+">5 min</option>"+
+        "<option value='120'"+(savedTimeout===120?" selected":"")+">10 min</option>"+
+        "<option value='240'"+(savedTimeout===240?" selected":"")+">20 min</option>"+
+        "<option value='241'"+(savedTimeout===241?" selected":"")+">30 min</option>"+
+        "<option value='242'"+(savedTimeout===242?" selected":"")+">1 hour</option>"+
+        "<option value='244'"+(savedTimeout===244?" selected":"")+">2 hours</option>"+
+        "</select>"+
+        (isHDD?"<button class='btn' onclick=\"spindownNow('"+esc(d.device)+"')\" title='Spindown now' style='padding:6px 10px;font-size:12px;'><span class='material-symbols-rounded' style='font-size:16px;'>power_settings_new</span></button>":"")+
+        "</div></div>";
+    });
+    document.getElementById("diskList").innerHTML=html;
+  }catch(e){document.getElementById("diskList").textContent="Failed to load disk info";}
+}
+
+async function setSpindown(device,timeout){
+  try{
+    await fetch("/api/power/spindown",{method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify({device:device,timeout:parseInt(timeout)})});
+    if(window.EnhancedUI)EnhancedUI.toast("Spindown set for "+device,"success");
+  }catch(e){if(window.EnhancedUI)EnhancedUI.toast("Error: "+e.message,"error");}
+}
+
+async function spindownNow(device){
+  try{
+    await fetch("/api/power/spindown-now",{method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify({device:device})});
+    if(window.EnhancedUI)EnhancedUI.toast("Spindown command sent to "+device,"success");
+    setTimeout(loadDisks,2000);
+  }catch(e){if(window.EnhancedUI)EnhancedUI.toast("Error: "+e.message,"error");}
+}
+
+document.addEventListener("DOMContentLoaded",loadDisks);
+setInterval(loadDisks,30000);}
+
 </script>
 </body></html>

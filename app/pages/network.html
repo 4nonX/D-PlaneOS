@@ -34,6 +34,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
 .icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
 .fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: #fff; }
 .fab:hover { transform: translateY(-4px); box-shadow: 0 12px 48px rgba(102, 126, 234, 0.6); }
+
+/* Consolidated Tab Navigation */
+.consolidation-tabs {
+  display: flex; gap: 4px; padding: 8px; margin-bottom: 24px;
+  background: rgba(255,255,255,0.03); border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.consolidation-tab {
+  padding: 10px 20px; border-radius: var(--radius-lg); border: none;
+  background: transparent; color: rgba(255,255,255,0.6);
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: all 0.2s; font-family: inherit;
+}
+.consolidation-tab:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.consolidation-tab.active {
+  background: var(--primary); color: #fff; font-weight: 600;
+}
+.consolidation-content { display: none; }
+.consolidation-content.active { display: block; }
+
 </style>
 <style type="text/css" id="operaUserStyle"></style><link rel="stylesheet" href="/assets/css/ui-components.css">
 <script src="/assets/js/core.js"></script>
@@ -457,6 +477,19 @@ if (window.ConnectionMonitor) {
 <main class="main">
 <div class="page-header">
 <h1 class="page-title">Network</h1>
+<p class="page-subtitle">Interfaces • DNS • Routing • VPN</p>
+</div>
+<div class="consolidation-tabs">
+  <button class="consolidation-tab active" data-tab="vlan" onclick="switchConsolidatedTab('vlan')">VLAN & Bonding</button>
+  <button class="consolidation-tab" data-tab="interfaces" onclick="switchConsolidatedTab('interfaces')">Interfaces</button>
+  <button class="consolidation-tab" data-tab="dns" onclick="switchConsolidatedTab('dns')">DNS</button>
+  <button class="consolidation-tab" data-tab="routing" onclick="switchConsolidatedTab('routing')">Routing</button>
+</div>
+
+
+<div id="tab-vlan" class="consolidation-content active">
+<div class="page-header">
+<h1 class="page-title">Network</h1>
 <p class="page-subtitle">Configuration • VPN • Remote access</p>
 </div>
 <div id="network-interfaces-container">
@@ -466,6 +499,72 @@ if (window.ConnectionMonitor) {
     </div>
   </div>
 </div>
+</div>
+
+<div id="tab-interfaces" class="consolidation-content">
+<h1>Network Interfaces</h1>
+  
+  <div id="interfaceList">
+    <div style="text-align: center; padding: 60px; color: var(--text-dim);">
+      <span class="material-symbols-rounded" style="font-size: 32px; opacity: 0.3;">refresh</span>
+      <p>Loading interfaces...</p>
+    </div>
+  </div>
+</div>
+
+<div id="tab-dns" class="consolidation-content">
+<div style="max-width: 1600px; margin: 160px auto 60px; padding: 0 40px;">
+  <h1 style="font-size: 32px; font-weight: 700; margin-bottom: 30px;">DNS Configuration</h1>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 24px; margin-bottom: 24px;">
+    <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 20px;">Nameservers</h3>
+    <div id="dnsServers"></div>
+    <button class="btn btn-primary" onclick="addDNS()" style="margin-top: 16px;">
+      <span class="material-symbols-rounded" style="font-size: 18px;">add</span>
+      Add Nameserver
+    </button>
+  </div>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 24px;">
+    <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 20px;">Search Domains</h3>
+    <div id="searchDomains"></div>
+    <button class="btn btn-primary" onclick="addSearchDomain()" style="margin-top: 16px;">
+      <span class="material-symbols-rounded" style="font-size: 18px;">add</span>
+      Add Search Domain
+    </button>
+  </div>
+</div>
+</div>
+
+<div id="tab-routing" class="consolidation-content">
+<div style="max-width: 1600px; margin: 160px auto 60px; padding: 0 40px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+    <h1 style="font-size: 32px; font-weight: 700; margin: 0;">Network Routing</h1>
+    <button class="btn btn-primary" onclick="addRoute()">
+      <span class="material-symbols-rounded" style="font-size: 18px;">add</span>
+      Add Route
+    </button>
+  </div>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 24px;">
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr>
+          <th style="text-align: left; color: var(--text-dim); font-size: 11px; padding: 12px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-weight: 700;">Destination</th>
+          <th style="text-align: left; color: var(--text-dim); font-size: 11px; padding: 12px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-weight: 700;">Gateway</th>
+          <th style="text-align: left; color: var(--text-dim); font-size: 11px; padding: 12px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-weight: 700;">Interface</th>
+          <th style="text-align: left; color: var(--text-dim); font-size: 11px; padding: 12px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-weight: 700;">Metric</th>
+          <th style="text-align: left; color: var(--text-dim); font-size: 11px; padding: 12px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-weight: 700;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="routeTable">
+        <tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-dim);">Loading routes...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+
 </main>
 <button class="fab" onclick="testNetwork()"><span class="material-symbols-rounded" style="font-size:28px;">network_check</span></button>
 <script src="/assets/js/m3-ripple.js"></script>

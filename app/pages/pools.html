@@ -40,6 +40,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
 .btn-primary:hover { box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4); }
 .fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: #fff; }
 .fab:hover { transform: translateY(-4px); box-shadow: 0 12px 48px rgba(102, 126, 234, 0.6); }
+
+/* Consolidated Tab Navigation */
+.consolidation-tabs {
+  display: flex; gap: 4px; padding: 8px; margin-bottom: 24px;
+  background: rgba(255,255,255,0.03); border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.consolidation-tab {
+  padding: 10px 20px; border-radius: var(--radius-lg); border: none;
+  background: transparent; color: rgba(255,255,255,0.6);
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: all 0.2s; font-family: inherit;
+}
+.consolidation-tab:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.consolidation-tab.active {
+  background: var(--primary); color: #fff; font-weight: 600;
+}
+.consolidation-content { display: none; }
+.consolidation-content.active { display: block; }
+
 </style>
 <style type="text/css" id="operaUserStyle"></style><link rel="stylesheet" href="/assets/css/ui-components.css">
 <script src="/assets/js/core.js"></script>
@@ -463,11 +483,179 @@ if (window.ConnectionMonitor) {
 <main class="main">
 <div class="page-header">
 <h1 class="page-title">ZFS Storage</h1>
+<p class="page-subtitle">Pools • Advanced • Quotas • Encryption</p>
+</div>
+<div class="consolidation-tabs">
+  <button class="consolidation-tab active" data-tab="pools" onclick="switchConsolidatedTab('pools')">Pools</button>
+  <button class="consolidation-tab" data-tab="advanced" onclick="switchConsolidatedTab('advanced')">Advanced</button>
+  <button class="consolidation-tab" data-tab="quotas" onclick="switchConsolidatedTab('quotas')">Quotas</button>
+  <button class="consolidation-tab" data-tab="encryption" onclick="switchConsolidatedTab('encryption')">Encryption</button>
+</div>
+
+
+<div id="tab-pools" class="consolidation-content active">
+<div class="page-header">
+<h1 class="page-title">ZFS Storage</h1>
 <p class="page-subtitle">Enterprise redundancy • Snapshots • Compression • Data integrity</p>
 </div>
 <div id="poolList" style="padding:40px;text-align:center;color:rgba(255,255,255,0.5);">
   Loading ZFS pools...
 </div>
+</div>
+
+<div id="tab-advanced" class="consolidation-content">
+<div class="page-header">
+<h1 class="page-title">Network</h1>
+<p class="page-subtitle">Configuration • VPN • Remote access</p>
+</div>
+<div id="network-interfaces-container">
+        <main class="main">
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Advanced ZFS Management</h1>
+                    <p class="page-subtitle">Encryption • Caching • Dedup • Automation</p>
+                </div>
+                <a href="pools.html" class="btn">← Back to Pools</a>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('encryption')">Encryption</button>
+                <button class="tab" onclick="switchTab('cache')">Cache & Log</button>
+                <button class="tab" onclick="switchTab('compression')">Compression</button>
+                <button class="tab" onclick="switchTab('snapshots')">Snapshots</button>
+            </div>
+
+            <!-- Encryption Tab -->
+            <div id="encryption-tab" class="tab-content active">
+                <div class="card">
+                    <h2>Create Encrypted Dataset</h2>
+                    <div class="form-group">
+                        <label>Dataset Name</label>
+                        <input type="text" id="enc-dataset" placeholder="pool/encrypted-data" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Encryption Algorithm</label>
+                        <select id="enc-algorithm" class="form-input">
+                            <option value="aes-256-gcm">AES-256-GCM (Recommended)</option>
+                            <option value="aes-128-gcm">AES-128-GCM</option>
+                            <option value="aes-256-ccm">AES-256-CCM</option>
+                            <option value="aes-128-ccm">AES-128-CCM</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Passphrase (16+ characters)</label>
+                        <input type="password" id="enc-passphrase" class="form-input">
+                    </div>
+                    <div class="warning-box">
+                        ⚠️ <strong>WARNING:</strong> Store your passphrase securely! Lost passphrase = permanent data loss.
+                    </div>
+                    <button class="btn btn-primary" onclick="createEncryptedDataset()">Create Encrypted Dataset</button>
+                </div>
+            </div>
+
+            <!-- Cache & Log Tab -->
+            <div id="cache-tab" class="tab-content">
+                <div class="card">
+                    <h2>L2ARC (Read Cache)</h2>
+                    <p>Add SSD/NVMe as read cache to accelerate frequently accessed data</p>
+                    <div class="form-group">
+                        <label>Pool</label>
+                        <select id="l2arc-pool" class="form-input"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Cache Device</label>
+                        <select id="l2arc-device" class="form-input"></select>
+                    </div>
+                    <button class="btn btn-primary" onclick="addL2ARC()">Add L2ARC</button>
+                </div>
+
+                <div class="card">
+                    <h2>ZIL (Write Log)</h2>
+                    <p>Separate log device for synchronous writes</p>
+                    <div class="form-group">
+                        <label>Pool</label>
+                        <select id="zil-pool" class="form-input"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Log Device</label>
+                        <select id="zil-device" class="form-input"></select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="zil-mirror" style="accent-color:var(--md-sys-color-primary);width:18px;height:18px;"> Mirror ZIL (recommended)</label>
+                    </div>
+                    <button class="btn btn-primary" onclick="addZIL()">Add ZIL</button>
+                </div>
+            </div>
+
+            <!-- Compression Tab -->
+            <div id="compression-tab" class="tab-content">
+                <div class="card">
+                    <h2>Compression Settings</h2>
+                    <div class="form-group">
+                        <label>Dataset</label>
+                        <select id="comp-dataset" class="form-input"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Compression Algorithm</label>
+                        <select id="comp-algorithm" class="form-input">
+                            <option value="lz4">LZ4 (Fast, Recommended)</option>
+                            <option value="gzip">GZIP (Balanced)</option>
+                            <option value="gzip-9">GZIP-9 (Max Compression)</option>
+                            <option value="zstd">ZSTD (Modern)</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="setCompression()">Apply Compression</button>
+                </div>
+
+                <div class="card">
+                    <h2>Deduplication</h2>
+                    <div class="warning-box">
+                        ⚠️ <strong>WARNING:</strong> Dedup requires ~5GB RAM per 1TB of data!
+                    </div>
+                    <div class="form-group">
+                        <label>Dataset</label>
+                        <select id="dedup-dataset" class="form-input"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Deduplication</label>
+                        <select id="dedup-setting" class="form-input">
+                            <option value="off">Off (Recommended)</option>
+                            <option value="on">On</option>
+                            <option value="verify">On with Verification</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="setDedup()">Apply Deduplication</button>
+                </div>
+            </div>
+
+            <!-- Snapshots Tab -->
+            <div id="snapshots-tab" class="tab-content">
+                <div class="card">
+                    <h2>Automated Snapshot Schedules</h2>
+                    <button class="btn btn-primary" onclick="createSnapshotSchedule()">+ Create Schedule</button>
+                    <div id="snapshot-schedules" style="margin-top: 16px;"></div>
+                </div>
+            </div>
+</div>
+
+<div id="tab-quotas" class="consolidation-content">
+
+</div>
+
+<div id="tab-encryption" class="consolidation-content">
+<h1>ZFS Encryption Management</h1>
+
+<div class="toolbar">
+  <button class="btn" onclick="loadDatasets()">🔄 Refresh</button>
+  <button class="btn" onclick="createEncryptedDataset()">➕ Create Encrypted Dataset</button>
+</div>
+
+<div id="status" class="loading">Loading...</div>
+<div id="datasets" class="dataset-list"></div>
+</div>
+
 </main>
 <button class="fab" onclick="showPoolMenu()"><span class="material-symbols-rounded" style="font-size:28px;">add</span></button>
 
