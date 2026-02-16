@@ -170,7 +170,11 @@ func (h *UserGroupHandler) updateUser(w http.ResponseWriter, req userActionReque
 		h.db.Exec(`UPDATE users SET active = ? WHERE id = ?`, active, req.ID)
 	}
 	if req.Password != "" && len(req.Password) >= 8 {
-		hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			respondErrorSimple(w, "Failed to hash password", http.StatusInternalServerError)
+			return
+		}
 		h.db.Exec(`UPDATE users SET password_hash = ? WHERE id = ?`, string(hash), req.ID)
 	}
 

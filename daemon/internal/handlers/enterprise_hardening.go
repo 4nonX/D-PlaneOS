@@ -1,9 +1,10 @@
 package handlers
 
 import (
-	"encoding/json"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"

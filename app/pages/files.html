@@ -1083,9 +1083,9 @@ async function processNext() {
         const end = Math.min(start + CHUNK_SIZE, item.file.size);
         const chunk = item.file.slice(start, end);
         const fd = new FormData();
-        fd.append('chunk', chunk);
+        fd.append('file', chunk, item.file.name);
         fd.append('filename', item.file.name);
-        fd.append('path', currentPath);
+        fd.append('path', currentPath + '/' + item.file.name);
         fd.append('chunkIndex', i);
         fd.append('totalChunks', item.chunks);
         fd.append('fileSize', item.file.size);

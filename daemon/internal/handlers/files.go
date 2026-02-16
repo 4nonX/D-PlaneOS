@@ -3,11 +3,39 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"dplaned/internal/audit"
 	"dplaned/internal/cmdutil"
 	"dplaned/internal/security"
 )
+
+// allowedBasePaths defines the directories file operations are restricted to
+var allowedBasePaths = []string{"/mnt/", "/home/", "/tmp/", "/var/lib/dplaneos/"}
+
+// validateFilePath sanitizes and validates a file path to prevent traversal attacks
+func validateFilePath(path string) (string, bool) {
+	if path == "" {
+		return "", false
+	}
+	cleaned := filepath.Clean(path)
+	// Block directory traversal
+	if strings.Contains(cleaned, "..") {
+		return "", false
+	}
+	// Must be absolute
+	if !filepath.IsAbs(cleaned) {
+		return "", false
+	}
+	// Must be under an allowed base path
+	for _, base := range allowedBasePaths {
+		if strings.HasPrefix(cleaned, base) {
+			return cleaned, true
+		}
+	}
+	return "", false
+}
 
 // CreateDirectory creates a directory
 func CreateDirectory(w http.ResponseWriter, r *http.Request) {
@@ -28,6 +56,12 @@ func CreateDirectory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	safePath, ok := validateFilePath(req.Path)
+	if !ok {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		return
+	}
+	req.Path = safePath
 	output, err := cmdutil.RunFast("mkdir", "-p", req.Path)
 
 	audit.LogActivity(user, "directory_create", map[string]interface{}{
@@ -65,6 +99,13 @@ func DeletePath(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
+
+	safePath, ok := validateFilePath(req.Path)
+	if !ok {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		return
+	}
+	req.Path = safePath
 
 	output, err := cmdutil.RunFast("rm", "-rf", req.Path)
 
@@ -105,6 +146,13 @@ func ChangeOwnership(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
+
+	safePath, ok := validateFilePath(req.Path)
+	if !ok {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		return
+	}
+	req.Path = safePath
 
 	ownerGroup := req.Owner
 	if req.Group != "" {
@@ -150,6 +198,13 @@ func ChangePermissions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
+
+	safePath, ok := validateFilePath(req.Path)
+	if !ok {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		return
+	}
+	req.Path = safePath
 
 	output, err := cmdutil.RunFast("chmod", req.Permissions, req.Path)
 

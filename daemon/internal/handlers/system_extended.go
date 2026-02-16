@@ -150,7 +150,9 @@ func (h *SnapshotScheduleHandler) regenerateCron(schedules []SnapshotSchedule) {
 		lines = append(lines, fmt.Sprintf("%s root %s", cronExpr, cmd))
 	}
 
-	os.WriteFile(cronFile, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	if err := os.WriteFile(cronFile, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
+		log.Printf("ERROR: failed to write cron file %s: %v", cronFile, err)
+	}
 }
 
 func (h *SnapshotScheduleHandler) RunNow(w http.ResponseWriter, r *http.Request) {
@@ -433,8 +435,14 @@ func (h *MetricsHandler) appendToHistory(period string, point map[string]interfa
 		history = history[len(history)-maxPoints:]
 	}
 
-	data, _ := json.Marshal(history)
-	os.WriteFile(filename, data, 0644)
+	data, err := json.Marshal(history)
+	if err != nil {
+		log.Printf("WARN: failed to marshal metrics: %v", err)
+		return
+	}
+	if err := os.WriteFile(filename, data, 0644); err != nil {
+		log.Printf("WARN: failed to write metrics file %s: %v", filename, err)
+	}
 }
 
 // ============================================================
@@ -744,7 +752,9 @@ func (h *TrashHandler) MoveToTrash(w http.ResponseWriter, r *http.Request) {
 
 	// Store original path for restore
 	metaPath := trashPath + ".meta"
-	os.WriteFile(metaPath, []byte(req.Path), 0644)
+	if err := os.WriteFile(metaPath, []byte(req.Path), 0644); err != nil {
+		log.Printf("WARN: failed to write trash metadata: %v", err)
+	}
 
 	start := time.Now()
 	err := os.Rename(req.Path, trashPath)
@@ -986,8 +996,12 @@ func (h *PowerMgmtHandler) SetSpindown(w http.ResponseWriter, r *http.Request) {
 	}
 	spindownConf[req.Device] = req.Timeout
 	os.MkdirAll(ConfigDir, 0755)
-	data, _ := json.MarshalIndent(spindownConf, "", "  ")
-	os.WriteFile(configPath("power-management.json"), data, 0644)
+	data, err := json.MarshalIndent(spindownConf, "", "  ")
+	if err != nil {
+		log.Printf("WARN: failed to marshal power config: %v", err)
+	} else if err := os.WriteFile(configPath("power-management.json"), data, 0644); err != nil {
+		log.Printf("WARN: failed to write power config: %v", err)
+	}
 
 	audit.LogAction("power_spindown", user, fmt.Sprintf("Set spindown %d on %s", req.Timeout, req.Device), true, duration)
 	w.Header().Set("Content-Type", "application/json")

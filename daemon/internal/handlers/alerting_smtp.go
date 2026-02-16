@@ -67,7 +67,11 @@ func SaveSMTPConfig(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, "Host, port, from, and to are required", http.StatusBadRequest)
 		return
 	}
-	data, _ := json.Marshal(cfg)
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		respondErrorSimple(w, "Failed to encode config", http.StatusInternalServerError)
+		return
+	}
 
 	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
 	if err != nil {
@@ -193,7 +197,11 @@ func SaveScrubSchedules(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save to DB (prepared statement — safe against SQL injection)
-	data, _ := json.Marshal(schedules)
+	data, err := json.Marshal(schedules)
+	if err != nil {
+		respondErrorSimple(w, "Failed to encode schedules", http.StatusInternalServerError)
+		return
+	}
 	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
 	if err == nil {
 		defer db.Close()

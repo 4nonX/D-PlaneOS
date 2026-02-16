@@ -246,6 +246,58 @@ func (h *FilesExtendedHandler) UploadChunk(w http.ResponseWriter, r *http.Reques
 
 	targetPath = filepath.Clean(targetPath)
 
+	// Check if this is a chunked upload
+	chunkIndex := r.FormValue("chunkIndex")
+	totalChunks := r.FormValue("totalChunks")
+
+	if chunkIndex != "" && totalChunks != "" {
+		// Chunked upload: append to file
+		idx := 0
+		fmt.Sscanf(chunkIndex, "%d", &idx)
+
+		var openFlag int
+		if idx == 0 {
+			openFlag = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+		} else {
+			openFlag = os.O_CREATE | os.O_WRONLY | os.O_APPEND
+		}
+
+		targetFile, err := os.OpenFile(targetPath, openFlag, 0644)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   fmt.Sprintf("Failed to open file: %v", err),
+			})
+			return
+		}
+		defer targetFile.Close()
+
+		_, err = targetFile.ReadFrom(file)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   fmt.Sprintf("Failed to write chunk: %v", err),
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"chunk":   idx,
+			"message": "Chunk uploaded",
+		})
+		return
+	}
+
+	// Simple (non-chunked) upload
+	// If path doesn't include filename, append it
+	if fi, err := os.Stat(targetPath); err == nil && fi.IsDir() {
+		targetPath = filepath.Join(targetPath, header.Filename)
+	}
+
 	// Create target file
 	targetFile, err := os.Create(targetPath)
 	if err != nil {
