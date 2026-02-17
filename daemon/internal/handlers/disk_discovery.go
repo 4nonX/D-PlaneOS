@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -103,12 +104,20 @@ func hasMountPoint(dev blockDevice) bool {
 }
 
 func isInZFSPool(diskName string) bool {
-	zpoolOut, err := cmdutil.RunFast("zpool", "status")
+	zpoolOut, err := cmdutil.RunFast("zpool", "status", "-P")
 	if err != nil {
 		return false
 	}
 
-	return strings.Contains(string(zpoolOut), diskName)
+	return diskNameInZpoolStatus(string(zpoolOut), diskName)
+}
+
+func diskNameInZpoolStatus(status, diskName string) bool {
+	if diskName == "" {
+		return false
+	}
+	pattern := regexp.MustCompile(`(^|[^[:alnum:]])` + regexp.QuoteMeta(diskName) + `(p?[0-9]+)?([^[:alnum:]]|$)`)
+	return pattern.MatchString(status)
 }
 
 func detectDiskType(name string) string {
@@ -246,10 +255,21 @@ func HandlePoolCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if request.Name == "" {
+		http.Error(w, "pool name is required", http.StatusBadRequest)
+		return
+	}
+	if len(request.Disks) == 0 {
+		http.Error(w, "at least one disk is required", http.StatusBadRequest)
+		return
+	}
+
 	// Build zpool create command
 	args := []string{"create", "-f", request.Name}
 
 	switch request.Type {
+	case "", "Single":
+		// stripe/single vdev, no extra argument
 	case "Mirror":
 		args = append(args, "mirror")
 	case "RAID-Z1":
@@ -258,6 +278,9 @@ func HandlePoolCreate(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "raidz2")
 	case "RAID-Z3":
 		args = append(args, "raidz3")
+	default:
+		http.Error(w, "invalid pool type", http.StatusBadRequest)
+		return
 	}
 
 	args = append(args, request.Disks...)

@@ -75,6 +75,10 @@ func (h *ZFSEncryptionHandler) UnlockDataset(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "Invalid dataset name: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	if req.Key == "" {
+		http.Error(w, "key is required", http.StatusBadRequest)
+		return
+	}
 
 	// Create temporary key file
 	output, err := cmdutil.RunWithStdin(cmdutil.TimeoutMedium, req.Key+"\n", "zfs", "load-key", req.Dataset)
@@ -138,6 +142,10 @@ func (h *ZFSEncryptionHandler) CreateEncryptedDataset(w http.ResponseWriter, r *
 	if req.Encryption == "" {
 		req.Encryption = "aes-256-gcm"
 	}
+	if req.Key == "" {
+		http.Error(w, "key is required", http.StatusBadRequest)
+		return
+	}
 
 	if err := security.ValidateDatasetName(req.Name); err != nil {
 		http.Error(w, "Invalid dataset name: "+err.Error(), http.StatusBadRequest)
@@ -187,6 +195,10 @@ func (h *ZFSEncryptionHandler) ChangeKey(w http.ResponseWriter, r *http.Request)
 
 	if err := security.ValidateDatasetName(req.Dataset); err != nil {
 		http.Error(w, "Invalid dataset name: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.OldKey == "" || req.NewKey == "" {
+		http.Error(w, "old_key and new_key are required", http.StatusBadRequest)
 		return
 	}
 
