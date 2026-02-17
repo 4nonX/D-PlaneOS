@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,9 +20,9 @@ import (
 func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ContainerName string `json:"container_name"`
-		Image         string `json:"image"`          // e.g. "lscr.io/linuxserver/plex:latest"
-		ZfsDataset    string `json:"zfs_dataset"`     // e.g. "tank/docker" (optional, auto-detected)
-		SkipSnapshot  bool   `json:"skip_snapshot"`   // skip ZFS snapshot
+		Image         string `json:"image"`         // e.g. "lscr.io/linuxserver/plex:latest"
+		ZfsDataset    string `json:"zfs_dataset"`   // e.g. "tank/docker" (optional, auto-detected)
+		SkipSnapshot  bool   `json:"skip_snapshot"` // skip ZFS snapshot
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
@@ -427,9 +428,9 @@ func (h *DockerHandler) ComposeStatus(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		respondOK(w, map[string]interface{}{
-			"success":    true,
-			"services":   []interface{}{},
-			"error":      "Compose stack not found or not running",
+			"success":  true,
+			"services": []interface{}{},
+			"error":    "Compose stack not found or not running",
 		})
 		return
 	}

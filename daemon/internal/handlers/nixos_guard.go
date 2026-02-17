@@ -1,12 +1,11 @@
 package handlers
 
 import (
+	"dplaned/internal/cmdutil"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"dplaned/internal/cmdutil"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -31,7 +30,7 @@ func (h *NixOSGuardHandler) DetectNixOS(w http.ResponseWriter, r *http.Request) 
 	nixos := isNixOS()
 
 	result := map[string]interface{}{
-		"success": true,
+		"success":  true,
 		"is_nixos": nixos,
 	}
 

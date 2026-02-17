@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,12 +26,12 @@ func NewSnapshotScheduleHandler() *SnapshotScheduleHandler {
 }
 
 type SnapshotSchedule struct {
-	Dataset    string `json:"dataset"`
-	Frequency  string `json:"frequency"` // hourly, daily, weekly, monthly
-	Retention  int    `json:"retention"` // number of snapshots to keep
-	Enabled    bool   `json:"enabled"`
-	Prefix     string `json:"prefix"` // auto-hourly, auto-daily, etc.
-	LastRun    string `json:"last_run,omitempty"`
+	Dataset   string `json:"dataset"`
+	Frequency string `json:"frequency"` // hourly, daily, weekly, monthly
+	Retention int    `json:"retention"` // number of snapshots to keep
+	Enabled   bool   `json:"enabled"`
+	Prefix    string `json:"prefix"` // auto-hourly, auto-daily, etc.
+	LastRun   string `json:"last_run,omitempty"`
 }
 
 // ConfigDir is the base directory for D-PlaneOS config files.
@@ -92,7 +93,7 @@ func (h *SnapshotScheduleHandler) SaveSchedules(w http.ResponseWriter, r *http.R
 	}
 
 	// Save to file
-	os.MkdirAll(filepath.Dir(scheduleFile), 0755)
+	os.MkdirAll(ConfigDir, 0755)
 	data, _ := json.MarshalIndent(schedules, "", "  ")
 	if err := os.WriteFile(configPath("snapshot-schedules.json"), data, 0644); err != nil {
 		http.Error(w, "Failed to save schedules", http.StatusInternalServerError)
@@ -473,10 +474,10 @@ func (h *FirewallHandler) SetRule(w http.ResponseWriter, r *http.Request) {
 	user := r.Header.Get("X-User")
 
 	var req struct {
-		Action    string `json:"action"`    // allow, deny, delete, enable, disable, reset
-		Port      string `json:"port"`      // e.g. "80/tcp", "443", "22/tcp"
-		From      string `json:"from"`      // source IP/CIDR (optional)
-		RuleNum   int    `json:"rule_num"`  // for delete
+		Action  string `json:"action"`   // allow, deny, delete, enable, disable, reset
+		Port    string `json:"port"`     // e.g. "80/tcp", "443", "22/tcp"
+		From    string `json:"from"`     // source IP/CIDR (optional)
+		RuleNum int    `json:"rule_num"` // for delete
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
@@ -593,10 +594,10 @@ func (h *CertHandler) GenerateSelfSigned(w http.ResponseWriter, r *http.Request)
 	user := r.Header.Get("X-User")
 
 	var req struct {
-		Name    string `json:"name"`
-		CN      string `json:"cn"` // Common Name
-		Days    int    `json:"days"`
-		SANs    string `json:"sans"` // comma-separated
+		Name string `json:"name"`
+		CN   string `json:"cn"` // Common Name
+		Days int    `json:"days"`
+		SANs string `json:"sans"` // comma-separated
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
