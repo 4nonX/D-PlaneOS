@@ -7,8 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
+
+	"dplaned/internal/cmdutil"
 )
 
 // ShareCRUDHandler handles SMB share CRUD operations
@@ -135,19 +136,19 @@ func (h *ShareCRUDHandler) getShare(w http.ResponseWriter, id string) {
 }
 
 type shareActionRequest struct {
-	Action       string `json:"action"` // create, update, delete
-	ID           int    `json:"id"`
-	Name         string `json:"name"`
-	Path         string `json:"path"`
-	Comment      string `json:"comment"`
-	Browsable    *bool  `json:"browsable"`
-	ReadOnly     *bool  `json:"read_only"`
-	GuestOk      *bool  `json:"guest_ok"`
-	ValidUsers   string `json:"valid_users"`
-	WriteList    string `json:"write_list"`
-	CreateMask   string `json:"create_mask"`
+	Action        string `json:"action"` // create, update, delete
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	Path          string `json:"path"`
+	Comment       string `json:"comment"`
+	Browsable     *bool  `json:"browsable"`
+	ReadOnly      *bool  `json:"read_only"`
+	GuestOk       *bool  `json:"guest_ok"`
+	ValidUsers    string `json:"valid_users"`
+	WriteList     string `json:"write_list"`
+	CreateMask    string `json:"create_mask"`
 	DirectoryMask string `json:"directory_mask"`
-	Enabled      *bool  `json:"enabled"`
+	Enabled       *bool  `json:"enabled"`
 }
 
 func (h *ShareCRUDHandler) shareAction(w http.ResponseWriter, r *http.Request) {
@@ -247,22 +248,34 @@ func (h *ShareCRUDHandler) updateShare(w http.ResponseWriter, req shareActionReq
 		h.db.Exec(`UPDATE smb_shares SET comment = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, req.Comment, req.ID)
 	}
 	if req.Browsable != nil {
-		v := 0; if *req.Browsable { v = 1 }
+		v := 0
+		if *req.Browsable {
+			v = 1
+		}
 		h.db.Exec(`UPDATE smb_shares SET browsable = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, v, req.ID)
 	}
 	if req.ReadOnly != nil {
-		v := 0; if *req.ReadOnly { v = 1 }
+		v := 0
+		if *req.ReadOnly {
+			v = 1
+		}
 		h.db.Exec(`UPDATE smb_shares SET read_only = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, v, req.ID)
 	}
 	if req.GuestOk != nil {
-		v := 0; if *req.GuestOk { v = 1 }
+		v := 0
+		if *req.GuestOk {
+			v = 1
+		}
 		h.db.Exec(`UPDATE smb_shares SET guest_ok = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, v, req.ID)
 	}
 	if req.ValidUsers != "" {
 		h.db.Exec(`UPDATE smb_shares SET valid_users = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, req.ValidUsers, req.ID)
 	}
 	if req.Enabled != nil {
-		v := 0; if *req.Enabled { v = 1 }
+		v := 0
+		if *req.Enabled {
+			v = 1
+		}
 		h.db.Exec(`UPDATE smb_shares SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, v, req.ID)
 	}
 
@@ -407,6 +420,8 @@ func (h *ShareCRUDHandler) regenerateSMBConf() {
 	}
 
 	// Reload samba
-	if _, err := cmdutil.RunFast("smbcontrol", "all", "reload-config"); err != nil { log.Printf("WARN: smbcontrol reload: %v", err) }
+	if _, err := cmdutil.RunFast("smbcontrol", "all", "reload-config"); err != nil {
+		log.Printf("WARN: smbcontrol reload: %v", err)
+	}
 	log.Printf("SMB config regenerated and reloaded (VFS: tm=%d sc=%d rb=%d)", globalTimeMachine, globalShadowCopy, globalRecycleBin)
 }

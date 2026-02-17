@@ -7,11 +7,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"dplaned/internal/cmdutil"
 )
 
 // ═══════════════════════════════════════════════════════════════
@@ -187,8 +188,8 @@ func (h *NixOSGuardHandler) DiffGenerations(w http.ResponseWriter, r *http.Reque
 		toPkgs, _ := executeCommandWithTimeout(TimeoutFast, "/bin/ls", []string{toPath + "/sw/bin/"})
 
 		respondOK(w, map[string]interface{}{
-			"success":      true,
-			"method":       "package-list",
+			"success":       true,
+			"method":        "package-list",
 			"from_packages": strings.Fields(fromPkgs),
 			"to_packages":   strings.Fields(toPkgs),
 		})
@@ -288,19 +289,21 @@ func (h *NixOSGuardHandler) ApplyWithWatchdog(w http.ResponseWriter, r *http.Req
 		defer watchdogMu.Unlock()
 		if watchdogActive {
 			// Auto-rollback — nobody confirmed
-			if _, err := cmdutil.RunSlow("/run/current-system/sw/bin/nixos-rebuild", "switch", "--rollback"); err != nil { log.Printf("ERROR: nixos rollback failed: %v", err) }
+			if _, err := cmdutil.RunSlow("/run/current-system/sw/bin/nixos-rebuild", "switch", "--rollback"); err != nil {
+				log.Printf("ERROR: nixos rollback failed: %v", err)
+			}
 			watchdogActive = false
 		}
 	})
 	watchdogMu.Unlock()
 
 	respondOK(w, map[string]interface{}{
-		"success":          true,
-		"output":           output,
-		"watchdog_active":  true,
-		"confirm_before":   watchdogDeadline.Format(time.RFC3339),
-		"timeout_seconds":  req.TimeoutSeconds,
-		"message":          fmt.Sprintf("Config applied. Confirm within %d seconds or auto-rollback.", req.TimeoutSeconds),
+		"success":         true,
+		"output":          output,
+		"watchdog_active": true,
+		"confirm_before":  watchdogDeadline.Format(time.RFC3339),
+		"timeout_seconds": req.TimeoutSeconds,
+		"message":         fmt.Sprintf("Config applied. Confirm within %d seconds or auto-rollback.", req.TimeoutSeconds),
 	})
 }
 
@@ -376,9 +379,9 @@ func (h *DockerHandler) PreFlightCheck(w http.ResponseWriter, r *http.Request) {
 	} else {
 		healthy := !strings.Contains(poolOut, "DEGRADED") && !strings.Contains(poolOut, "FAULTED")
 		checks = append(checks, map[string]interface{}{
-			"check":   "zfs_pools",
-			"pass":    healthy,
-			"pools":   strings.TrimSpace(poolOut),
+			"check": "zfs_pools",
+			"pass":  healthy,
+			"pools": strings.TrimSpace(poolOut),
 		})
 	}
 
@@ -409,9 +412,9 @@ func (h *DockerHandler) PreFlightCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondOK(w, map[string]interface{}{
-		"success":   true,
-		"all_pass":  allPass,
-		"checks":    checks,
+		"success":  true,
+		"all_pass": allPass,
+		"checks":   checks,
 	})
 }
 
