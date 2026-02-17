@@ -499,7 +499,17 @@ if (window.ConnectionMonitor) {
             const data = await response.json();
             
             if (data.success) {
-                allModules = data.modules;
+                const raw = data.modules || data.data || [];
+                allModules = raw.map(m => ({
+                    id: m.id || m.ID || m.Names || m.name || 'unknown',
+                    name: m.name || m.Names || m.Image || 'Container',
+                    description: m.description || ('Docker image: ' + (m.Image || 'unknown')),
+                    version: m.version || m.Image || '-',
+                    installed: m.installed !== undefined ? m.installed : true,
+                    category: m.category || 'virtualization',
+                    icon: m.icon || 'deployed_code',
+                    dependencies: m.dependencies || {}
+                }));
                 renderModules(allModules);
             } else {
                 showToast(data.error || 'Failed to load modules', 'error');
@@ -547,9 +557,9 @@ if (window.ConnectionMonitor) {
             </div>
             <div class="module-actions">
                 ${module.installed ?
-                    `<button class="btn" onclick="uninstallModule('${module.id}')">Uninstall</button>
+                    `<button class="btn" onclick="uninstallModule('${module.id}')">Stop</button>
                      <button class="btn btn-primary" onclick="configureModule('${module.id}')">Configure</button>` :
-                    `<button class="btn btn-primary" onclick="installModule('${module.id}')">Install</button>`
+                    `<button class="btn btn-primary" onclick="installModule('${module.id}')">Start</button>`
                 }
             </div>
         `;
@@ -558,62 +568,62 @@ if (window.ConnectionMonitor) {
     }
 
     async function installModule(moduleId) {
-        if (!await ui.confirm('Install Module', 'Install this module? It may require system packages to be installed.')) {
+        if (!await ui.confirm('Start Container', 'Start this container?')) {
             return;
         }
 
         try {
-            showLoading('Installing module...');
-            const response = await csrfFetch('/api/docker/containers', {
+            showLoading('Starting container...');
+            const response = await csrfFetch('/api/docker/action', {
                 method: 'POST',
                 body: JSON.stringify({
-                    action: 'install',
-                    module_id: moduleId
+                    action: 'start',
+                    container_id: moduleId, session_id: getSessionId(), user: getUser()
                 })
             });
 
             const data = await response.json();
 
             if (data.success) {
-                showToast('Module installed successfully', 'success');
+                showToast('Container started successfully', 'success');
                 loadModules();
             } else {
-                showToast(data.error || 'Failed to install module', 'error');
+                showToast(data.error || 'Failed to start container', 'error');
             }
         } catch (error) {
             console.error('Error installing module:', error);
-            showToast('Failed to install module', 'error');
+            showToast('Failed to start container', 'error');
         } finally {
             hideLoading();
         }
     }
 
     async function uninstallModule(moduleId) {
-        if (!await ui.confirm('Uninstall Module', 'Uninstall this module? Configuration will be preserved.')) {
+        if (!await ui.confirm('Stop Container', 'Stop this container?')) {
             return;
         }
 
         try {
-            showLoading('Uninstalling module...');
-            const response = await csrfFetch('/api/docker/containers', {
+            showLoading('Stopping container...');
+            const response = await csrfFetch('/api/docker/action', {
                 method: 'POST',
                 body: JSON.stringify({
-                    action: 'uninstall',
-                    module_id: moduleId
+                    action: 'stop',
+                    container_id: moduleId, session_id: getSessionId(), user: getUser()
                 })
             });
 
             const data = await response.json();
 
             if (data.success) {
-                showToast('Module uninstalled successfully', 'success');
+                showToast('Container stopped successfully', 'success');
                 loadModules();
             } else {
-                showToast(data.error || 'Failed to uninstall module', 'error');
+                showToast(data.error || 'Failed to stop container', 'error');
             }
         } catch (error) {
             console.error('Error uninstalling module:', error);
-            showToast('Failed to uninstall module', 'error');
+            showToast('Failed to stop container', 'error');
         } finally {
             hideLoading();
         }

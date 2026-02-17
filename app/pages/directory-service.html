@@ -1047,10 +1047,14 @@ async function syncLDAP() {
 async function searchLDAPUser() {
   const q = document.getElementById('ldap-search-query').value;
   if (!q) return;
-  try { const r = await csrfFetch('/api/ldap/search-user?q='+encodeURIComponent(q)); const d = await r.json();
+  try { const r = await csrfFetch('/api/ldap/search-user',{method:'POST',body:JSON.stringify({username:q})}); const d = await r.json();
     const el = document.getElementById('ldap-search-results');
-    if (!d.users || !d.users.length) { el.innerHTML = '<div style="padding:16px;color:rgba(255,255,255,0.3);">No results</div>'; return; }
-    el.innerHTML = d.users.map(u => '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'+( u.cn||u.uid||u.username)+' <span style="color:rgba(255,255,255,0.3);">'+(u.dn||'')+'</span></div>').join('');
+    if (!d.success) { el.innerHTML = '<div style="padding:16px;color:#EF4444;">'+(d.error||'Search failed')+'</div>'; return; }
+    const data = d.data || {};
+    el.innerHTML = '<div style="padding:12px 0;"><strong>User:</strong> '+(data.username||q)+'</div>'
+      + '<div style="padding:8px 0;color:rgba(255,255,255,0.75);"><strong>Filter:</strong> '+(data.filter||'')+'</div>'
+      + '<div style="padding:8px 0;color:rgba(255,255,255,0.75);"><strong>Base DN:</strong> '+(data.base_dn||'')+'</div>'
+      + '<div style="padding:8px 0;color:rgba(255,255,255,0.55);">'+(data.message||'Search request sent')+'</div>';
   } catch(e) { ui.toast('Search failed','error'); }
 }
 async function loadSyncLog() {

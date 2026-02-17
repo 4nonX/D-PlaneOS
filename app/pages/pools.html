@@ -1800,7 +1800,7 @@ async function listDatasets(poolName) {
   try {
     ui.showLoading('Loading datasets...');
     
-    const response = await csrfFetch(`/api/zfs/datasets&pool=${poolName}`);
+    const response = await csrfFetch(`/api/zfs/datasets?pool=${poolName}`);
     const data = await response.json();
     ui.hideLoading();
     
@@ -1861,7 +1861,7 @@ async function viewProperties(name) {
   ui.showLoading(`Loading ${name} properties...`);
   
   try {
-    const response = await csrfFetch(`/api/zfs/pools&pool=${name}`);
+    const response = await csrfFetch(`/api/zfs/pools?pool=${name}`);
     const result = await response.json();
     ui.hideLoading();
     

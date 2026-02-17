@@ -1551,7 +1551,7 @@ function displayInterfaces(interfaces) {
 
 async function configureInterface(name) {
   // Get current config
-  const response = await csrfFetch(`/api/system/network&interface=${name}`);
+  const response = await csrfFetch(`/api/system/network?interface=${name}`);
   const data = await response.json();
   
   if (!data.success) {
