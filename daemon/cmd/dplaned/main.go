@@ -218,7 +218,7 @@ func main() {
 	// System handlers
 	systemHandler := handlers.NewSystemHandler()
 	r.HandleFunc("/api/system/ups", systemHandler.GetUPSStatus).Methods("GET")
-	r.HandleFunc("/api/system/network", systemHandler.GetNetworkInfo).Methods("GET")
+	r.HandleFunc("/api/system/network", systemHandler.GetNetworkInfo).Methods("GET", "POST")
 	r.HandleFunc("/api/system/logs", systemHandler.GetSystemLogs).Methods("GET")
 
 	// Docker handlers

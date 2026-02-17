@@ -1866,7 +1866,9 @@ async function viewProperties(name) {
     ui.hideLoading();
     
     if (result.success) {
-      await ui.modal(`Properties: ${name}`, `<pre style="font-family:monospace;font-size:13px;line-height:1.6;">${JSON.stringify(result.properties, null, 2)}</pre>`, [
+      const pools = result.pools || result.data || [];
+      const pool = pools.find(p => (p.name || p.Name) === name) || {};
+      await ui.modal(`Properties: ${name}`, `<pre style="font-family:monospace;font-size:13px;line-height:1.6;">${JSON.stringify(pool, null, 2)}</pre>`, [
         { text: 'Close', primary: true }
       ]);
     } else {
