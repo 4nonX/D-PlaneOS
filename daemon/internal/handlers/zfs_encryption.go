@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"dplaned/internal/cmdutil"
 	"strings"
 
+	"dplaned/internal/cmdutil"
 	"dplaned/internal/security"
 )
 
@@ -76,9 +76,14 @@ func (h *ZFSEncryptionHandler) UnlockDataset(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	if req.Key == "" {
+		http.Error(w, "key is required", http.StatusBadRequest)
+		return
+	}
+
 	// Create temporary key file
-	out, err := cmdutil.RunWithStdin(cmdutil.TimeoutMedium, req.Key, "zfs", "load-key", req.Dataset)
-	
+	output, err := cmdutil.RunWithStdin(cmdutil.TimeoutMedium, req.Key+"\n", "zfs", "load-key", req.Dataset)
+
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -108,7 +113,7 @@ func (h *ZFSEncryptionHandler) LockDataset(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	out, err := cmdutil.RunFast("zfs", "unload-key", req.Dataset)
+	output, err := cmdutil.RunFast("zfs", "unload-key", req.Dataset)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -137,6 +142,11 @@ func (h *ZFSEncryptionHandler) CreateEncryptedDataset(w http.ResponseWriter, r *
 
 	if req.Encryption == "" {
 		req.Encryption = "aes-256-gcm"
+	}
+
+	if req.Key == "" {
+		http.Error(w, "key is required", http.StatusBadRequest)
+		return
 	}
 
 	if err := security.ValidateDatasetName(req.Name); err != nil {
@@ -190,9 +200,14 @@ func (h *ZFSEncryptionHandler) ChangeKey(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	out, err = cmdutil.RunWithStdin(cmdutil.TimeoutMedium, req.OldKey+"\n"+req.NewKey+"\n"+req.NewKey+"\n",
-		"zfs", "change-key", req.Dataset)
-	
+	if req.OldKey == "" || req.NewKey == "" {
+		http.Error(w, "old_key and new_key are required", http.StatusBadRequest)
+		return
+	}
+
+	out, err := cmdutil.RunWithStdin(cmdutil.TimeoutMedium, req.OldKey+"\n"+req.NewKey+"\n"+req.NewKey+"\n",
+		"zfs", "change-key", "-l", req.Dataset)
+
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{

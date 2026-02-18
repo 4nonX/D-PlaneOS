@@ -153,6 +153,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
         <span class="material-symbols-rounded">dns</span>
         Docker Containers
       </a>
+      <a href="git-sync.html" class="sub-link" data-page="git-sync">
+        <span class="material-symbols-rounded">sync</span>
+        Git Sync
+      </a>
       <a href="modules.html" class="sub-link" data-page="modules">
         <span class="material-symbols-rounded">extension</span>
         App Modules
@@ -499,7 +503,17 @@ if (window.ConnectionMonitor) {
             const data = await response.json();
             
             if (data.success) {
-                allModules = data.modules;
+                const raw = data.data || data.modules || [];
+                allModules = raw.map(m => ({
+                    id: m.id || m.ID || (Array.isArray(m.Names) ? (m.Names[0] || '').replace(/^\//, '') : m.Names) || m.name || 'unknown',
+                    name: m.name || (Array.isArray(m.Names) ? (m.Names[0] || '').replace(/^\//, '') : m.Names) || m.Image || 'Container',
+                    description: m.description || ('Docker image: ' + (m.Image || 'unknown')),
+                    version: m.version || m.Image || '-',
+                    installed: m.installed !== undefined ? m.installed : true,
+                    category: m.category || 'virtualization',
+                    icon: m.icon || 'deployed_code',
+                    dependencies: m.dependencies || {}
+                }));
                 renderModules(allModules);
             } else {
                 showToast(data.error || 'Failed to load modules', 'error');
@@ -547,9 +561,9 @@ if (window.ConnectionMonitor) {
             </div>
             <div class="module-actions">
                 ${module.installed ?
-                    `<button class="btn" onclick="uninstallModule('${module.id}')">Uninstall</button>
-                     <button class="btn btn-primary" onclick="configureModule('${module.id}')">Configure</button>` :
-                    `<button class="btn btn-primary" onclick="installModule('${module.id}')">Install</button>`
+                    `<button class="btn" data-action="stop" data-module-id="${escapeHtml(module.id)}">Stop</button>
+                     <button class="btn btn-primary" data-action="configure" data-module-id="${escapeHtml(module.id)}">Configure</button>` :
+                    `<button class="btn btn-primary" data-action="start" data-module-id="${escapeHtml(module.id)}">Start</button>`
                 }
             </div>
         `;
@@ -557,63 +571,63 @@ if (window.ConnectionMonitor) {
         return card;
     }
 
-    async function installModule(moduleId) {
-        if (!await ui.confirm('Install Module', 'Install this module? It may require system packages to be installed.')) {
+    async function startContainer(moduleId) {
+        if (!await ui.confirm('Start Container', 'Start this container?')) {
             return;
         }
 
         try {
-            showLoading('Installing module...');
-            const response = await csrfFetch('/api/docker/containers', {
+            showLoading('Starting container...');
+            const response = await csrfFetch('/api/docker/action', {
                 method: 'POST',
                 body: JSON.stringify({
-                    action: 'install',
-                    module_id: moduleId
+                    action: 'start',
+                    container_id: moduleId, session_id: getSessionId(), user: getUser()
                 })
             });
 
             const data = await response.json();
 
             if (data.success) {
-                showToast('Module installed successfully', 'success');
+                showToast('Container started successfully', 'success');
                 loadModules();
             } else {
-                showToast(data.error || 'Failed to install module', 'error');
+                showToast(data.error || 'Failed to start container', 'error');
             }
         } catch (error) {
-            console.error('Error installing module:', error);
-            showToast('Failed to install module', 'error');
+            console.error('Error starting container:', error);
+            showToast('Failed to start container', 'error');
         } finally {
             hideLoading();
         }
     }
 
-    async function uninstallModule(moduleId) {
-        if (!await ui.confirm('Uninstall Module', 'Uninstall this module? Configuration will be preserved.')) {
+    async function stopContainer(moduleId) {
+        if (!await ui.confirm('Stop Container', 'Stop this container?')) {
             return;
         }
 
         try {
-            showLoading('Uninstalling module...');
-            const response = await csrfFetch('/api/docker/containers', {
+            showLoading('Stopping container...');
+            const response = await csrfFetch('/api/docker/action', {
                 method: 'POST',
                 body: JSON.stringify({
-                    action: 'uninstall',
-                    module_id: moduleId
+                    action: 'stop',
+                    container_id: moduleId, session_id: getSessionId(), user: getUser()
                 })
             });
 
             const data = await response.json();
 
             if (data.success) {
-                showToast('Module uninstalled successfully', 'success');
+                showToast('Container stopped successfully', 'success');
                 loadModules();
             } else {
-                showToast(data.error || 'Failed to uninstall module', 'error');
+                showToast(data.error || 'Failed to stop container', 'error');
             }
         } catch (error) {
-            console.error('Error uninstalling module:', error);
-            showToast('Failed to uninstall module', 'error');
+            console.error('Error stopping container:', error);
+            showToast('Failed to stop container', 'error');
         } finally {
             hideLoading();
         }
@@ -632,6 +646,20 @@ if (window.ConnectionMonitor) {
             setTimeout(() => window.location.href = 'settings.html', 1500);
         }
     }
+
+    document.getElementById('module-grid').addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-action][data-module-id]');
+        if (!button) return;
+        const moduleId = button.dataset.moduleId;
+        if (!moduleId) return;
+        if (button.dataset.action === 'start') {
+            startContainer(moduleId);
+        } else if (button.dataset.action === 'stop') {
+            stopContainer(moduleId);
+        } else if (button.dataset.action === 'configure') {
+            configureModule(moduleId);
+        }
+    });
 
     // Search and filter
     document.getElementById('module-search').addEventListener('input', filterModules);

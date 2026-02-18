@@ -47,11 +47,16 @@ func (h *DockerHandler) ListContainers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	containers := parseDockerPS(output)
+	stacks := groupContainersByStack(containers)
 
-	respondOK(w, CommandResponse{
-		Success:  true,
-		Data:     containers,
-		Duration: duration.Milliseconds(),
+	respondOK(w, map[string]interface{}{
+		"success":          true,
+		"data":             containers,
+		"containers":       containers,
+		"total_containers": len(containers),
+		"stacks":           stacks,
+		"total_stacks":     len(stacks),
+		"duration_ms":      duration.Milliseconds(),
 	})
 }
 
@@ -142,4 +147,34 @@ func parseDockerPS(output string) []map[string]interface{} {
 	}
 
 	return containers
+}
+
+func groupContainersByStack(containers []map[string]interface{}) []map[string]interface{} {
+	grouped := map[string][]map[string]interface{}{}
+	for _, c := range containers {
+		stack := "ungrouped"
+		if labelsRaw, ok := c["Labels"].(string); ok && labelsRaw != "" {
+			for _, pair := range strings.Split(labelsRaw, ",") {
+				kv := strings.SplitN(pair, "=", 2)
+				if len(kv) != 2 {
+					continue
+				}
+				if kv[0] == "com.docker.compose.project" || kv[0] == "stack" {
+					stack = kv[1]
+					break
+				}
+			}
+		}
+		grouped[stack] = append(grouped[stack], c)
+	}
+
+	stacks := make([]map[string]interface{}, 0, len(grouped))
+	for name, cs := range grouped {
+		stacks = append(stacks, map[string]interface{}{
+			"name":       name,
+			"containers": cs,
+			"count":      len(cs),
+		})
+	}
+	return stacks
 }

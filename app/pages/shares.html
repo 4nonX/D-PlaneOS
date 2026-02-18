@@ -153,6 +153,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
         <span class="material-symbols-rounded">dns</span>
         Docker Containers
       </a>
+      <a href="git-sync.html" class="sub-link" data-page="git-sync">
+        <span class="material-symbols-rounded">sync</span>
+        Git Sync
+      </a>
       <a href="modules.html" class="sub-link" data-page="modules">
         <span class="material-symbols-rounded">extension</span>
         App Modules
@@ -511,7 +515,7 @@ function renderShares(shares) {
         <div class="share-actions">
           ${protocols.join(' ')}
           <button class="icon-btn" onclick="editShare(${share.id})"><span class="material-symbols-rounded">edit</span></button>
-          <button class="icon-btn" onclick="deleteShare(${share.id}, '${share.name.replace(/'/g, "\\'")}')" style="color: #ef4444;"><span class="material-symbols-rounded">delete</span></button>
+          <button class="icon-btn" onclick="deleteShare(${share.id}, '"+JSON.stringify(share.name)+"')" style="color: #ef4444;"><span class="material-symbols-rounded">delete</span></button>
         </div>
       </div>
       ${share.description ? `<div style="color: rgba(255,255,255,0.6); font-size: 14px; margin-top: 12px;">${share.description}</div>` : ''}

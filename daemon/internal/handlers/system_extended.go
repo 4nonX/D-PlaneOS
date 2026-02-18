@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -92,7 +93,7 @@ func (h *SnapshotScheduleHandler) SaveSchedules(w http.ResponseWriter, r *http.R
 	}
 
 	// Save to file
-	os.MkdirAll(filepath.Dir(scheduleFile), 0755)
+	os.MkdirAll(ConfigDir, 0755)
 	data, _ := json.MarshalIndent(schedules, "", "  ")
 	if err := os.WriteFile(configPath("snapshot-schedules.json"), data, 0644); err != nil {
 		http.Error(w, "Failed to save schedules", http.StatusInternalServerError)

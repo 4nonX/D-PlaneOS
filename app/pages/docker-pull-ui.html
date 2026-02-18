@@ -409,7 +409,7 @@
                             ${progress.status}
                         </span>
                         ${progress.status === 'pulling' ? `
-                            <button class="danger" onclick="cancelPull('${progress.pull_id}')">
+                            <button class="danger" onclick="cancelPull('"+JSON.stringify(progress.pull_id)+"')">
                                 Cancel
                             </button>
                         ` : ''}

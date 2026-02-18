@@ -1,4 +1,4 @@
-# D-PlaneOS v5.8.0 Installation Guide
+# D-PlaneOS v2.1.1 Installation Guide
 
 **Complete enterprise NAS with RBAC - Production Ready**
 
@@ -18,9 +18,31 @@
 - Storage: ZFS pools (any size)
 - Network: 2.5 Gbps+ Ethernet
 
+### **Recommended (for data integrity):**
+- **ECC RAM** — strongly recommended for ZFS integrity at scale
+
+  ZFS is exceptional at detecting and correcting corruption *on disk*, but it
+  cannot protect data that was already corrupted *in RAM* before being written.
+  ECC RAM detects and corrects single-bit memory errors in hardware, closing
+  this gap entirely.
+
+  **Without ECC RAM:**
+  - Home use / media library: acceptable risk with regular scrubs and backups
+  - Business / critical data / databases: not recommended
+
+  **D-PlaneOS v2.1.1 behaviour:**
+  - Detects ECC presence via `dmidecode` on startup
+  - Shows a persistent advisory notice in the dashboard if non-ECC RAM is found
+  - **Never blocks installation or operation** — ECC is your choice, not ours
+  - See `NON-ECC-WARNING.md` for full mitigation strategies
+
+  **Minimum ECC-capable platforms:** Intel Xeon, AMD EPYC, AMD Ryzen Pro,
+  any server/workstation board with ECC UDIMM support.
+
 ### **Supported Platforms:**
 - Ubuntu 24.04 LTS (recommended)
 - Debian 12
+- NixOS (experimental — see NixOS section)
 - Any systemd-based Linux with ZFS support
 
 ---

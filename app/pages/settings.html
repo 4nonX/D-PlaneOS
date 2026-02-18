@@ -157,6 +157,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
         <span class="material-symbols-rounded">dns</span>
         Docker Containers
       </a>
+      <a href="git-sync.html" class="sub-link" data-page="git-sync">
+        <span class="material-symbols-rounded">sync</span>
+        Git Sync
+      </a>
       <a href="modules.html" class="sub-link" data-page="modules">
         <span class="material-symbols-rounded">extension</span>
         App Modules
@@ -1810,7 +1814,7 @@ async function detectNixOS() {
   try { const r = await csrfFetch('/api/nixos/detect'); const d = await r.json();
     const el = document.getElementById('nixos-detect');
     if (!d.success || !d.is_nixos) { document.getElementById('nixos-section').style.display='none'; return; }
-    el.innerHTML = `<div class="badge badge-success" style="font-size:14px;padding:8px 16px;">NixOS ${d.version||''} • ${d.generation_count||0} generations</div>`;
+    el.textContent = `NixOS ${(d.version||'')} • ${d.generation_count||0} generations`; el.className = "badge badge-success"; el.style.cssText = "font-size:14px;padding:8px 16px;";
     checkWatchdog();
   } catch(e) { document.getElementById('nixos-section').style.display='none'; }
 }

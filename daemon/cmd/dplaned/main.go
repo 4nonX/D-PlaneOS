@@ -296,6 +296,32 @@ func main() {
 	// v2.1.0: Docker pre-flight check
 	r.HandleFunc("/api/docker/preflight", dockerHandler.PreFlightCheck).Methods("GET")
 
+	// ── Git Sync ──
+	gitSyncHandler := handlers.NewGitSyncHandler(db)
+	r.HandleFunc("/api/git-sync/config", gitSyncHandler.GetConfig).Methods("GET")
+	r.HandleFunc("/api/git-sync/config", gitSyncHandler.SaveConfig).Methods("POST")
+	r.HandleFunc("/api/git-sync/pull", gitSyncHandler.Pull).Methods("POST")
+	r.HandleFunc("/api/git-sync/status", gitSyncHandler.Status).Methods("GET")
+	r.HandleFunc("/api/git-sync/stacks", gitSyncHandler.ListStacks).Methods("GET")
+	r.HandleFunc("/api/git-sync/deploy", gitSyncHandler.Deploy).Methods("POST")
+	r.HandleFunc("/api/git-sync/export", gitSyncHandler.ExportContainers).Methods("POST")
+	r.HandleFunc("/api/git-sync/push", gitSyncHandler.Push).Methods("POST")
+
+	// Git-Sync: Multi-Repo + Credentials (v2.1.1)
+	gitReposHandler := handlers.NewGitReposHandler(db)
+	r.HandleFunc("/api/git-sync/credentials", gitReposHandler.ListCredentials).Methods("GET")
+	r.HandleFunc("/api/git-sync/credentials", gitReposHandler.SaveCredential).Methods("POST")
+	r.HandleFunc("/api/git-sync/credentials/test", gitReposHandler.TestCredential).Methods("POST")
+	r.HandleFunc("/api/git-sync/credentials/delete", gitReposHandler.DeleteCredential).Methods("DELETE", "POST")
+	r.HandleFunc("/api/git-sync/repos", gitReposHandler.ListRepos).Methods("GET")
+	r.HandleFunc("/api/git-sync/repos", gitReposHandler.SaveRepo).Methods("POST")
+	r.HandleFunc("/api/git-sync/repos/delete", gitReposHandler.DeleteRepo).Methods("DELETE", "POST")
+	r.HandleFunc("/api/git-sync/repos/pull", gitReposHandler.PullRepo).Methods("POST")
+	r.HandleFunc("/api/git-sync/repos/push", gitReposHandler.PushRepo).Methods("POST")
+	r.HandleFunc("/api/git-sync/repos/deploy", gitReposHandler.DeployRepo).Methods("POST")
+	r.HandleFunc("/api/git-sync/repos/export", gitReposHandler.ExportToRepo).Methods("POST")
+	gitSyncHandler.StartAutoSync()
+
 	// v2.1.0: Audit log rotation
 	auditRotationHandler := handlers.NewAuditRotationHandler()
 	r.HandleFunc("/api/system/audit/rotate", auditRotationHandler.RotateAuditLogs).Methods("POST")
@@ -375,6 +401,9 @@ func main() {
 	r.HandleFunc("/api/system/profile", systemStatusHandler.HandleProfile).Methods("GET")
 	r.HandleFunc("/api/system/settings", systemStatusHandler.HandleSettings).Methods("GET", "POST")
 	r.HandleFunc("/api/system/preflight", systemStatusHandler.HandlePreflight).Methods("GET")
+	r.HandleFunc("/api/system/zfs-gate-status", systemStatusHandler.HandleZFSGateStatus).Methods("GET")
+	// /api/status is an alias for /api/system/status (used by dashboard ECC check)
+	r.HandleFunc("/api/status", systemStatusHandler.HandleStatus).Methods("GET")
 	r.HandleFunc("/api/system/setup-complete", systemStatusHandler.HandleSetupComplete).Methods("POST")
 	r.HandleFunc("/api/system/metrics", handlers.HandleSystemMetrics).Methods("GET")
 

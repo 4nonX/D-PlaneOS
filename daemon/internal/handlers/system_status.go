@@ -43,11 +43,16 @@ func (h *SystemStatusHandler) HandleStatus(w http.ResponseWriter, r *http.Reques
 		if p != "" { poolCount++ }
 	}
 
+	// ECC RAM detection — non-blocking, best effort
+	hasECC := detectECCRAM()
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true, "version": h.version, "setup_complete": setupDone > 0,
 		"has_users": userCount > 0, "has_pools": poolCount > 0,
 		"first_run": setupDone == 0 && userCount <= 1,
 		"uptime_seconds": int(time.Since(h.startTime).Seconds()),
+		"ecc_ram":        hasECC,
+		"ecc_warning":    !hasECC, // surface advisory in UI — never blocks operation
 	})
 }
 
@@ -153,4 +158,39 @@ func (h *SystemStatusHandler) HandleSettings(w http.ResponseWriter, r *http.Requ
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// detectECCRAM checks dmidecode for ECC memory presence.
+// Returns true if ECC RAM is detected, false otherwise (including if dmidecode
+// is unavailable — we fail open, not closed, since ECC is advisory not required).
+func detectECCRAM() bool {
+	out, err := cmdutil.RunFast("dmidecode", "-t", "memory")
+	if err != nil {
+		// dmidecode not available or no permission — assume unknown, report as no ECC
+		return false
+	}
+	s := string(out)
+	// dmidecode reports "Error Correction Type: Single-bit ECC" or similar
+	// A system without ECC reports "Error Correction Type: None"
+	return strings.Contains(s, "Error Correction Type:") &&
+		!strings.Contains(s, "Error Correction Type: None") &&
+		!strings.Contains(s, "Error Correction Type: Unknown")
+}
+
+// HandleZFSGateStatus reports whether the ZFS mount gate marker is present.
+// The marker is written by zfs-mount-wait.sh once all pools are online + writable.
+// GET /api/system/zfs-gate-status
+func (h *SystemStatusHandler) HandleZFSGateStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	const markerPath = "/run/dplaneos/zfs-ready"
+	_, err := os.Stat(markerPath)
+	gateReady := err == nil
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success":    true,
+		"gate_ready": gateReady,
+		"marker":     markerPath,
+	})
 }

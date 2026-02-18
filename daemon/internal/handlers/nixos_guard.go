@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"dplaned/internal/cmdutil"
-	"os/exec"
 	"strings"
 	"time"
 )

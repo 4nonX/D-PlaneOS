@@ -127,6 +127,10 @@
         <span class="material-symbols-rounded">dns</span>
         Docker Containers
       </a>
+      <a href="git-sync.html" class="sub-link" data-page="git-sync">
+        <span class="material-symbols-rounded">sync</span>
+        Git Sync
+      </a>
       <a href="modules.html" class="sub-link" data-page="modules">
         <span class="material-symbols-rounded">extension</span>
         App Modules
@@ -648,7 +652,7 @@ async function browseTM() {
         <span class="material-symbols-rounded" style="font-size:20px;color:${f.is_dir?'#f59e0b':'rgba(255,255,255,0.4)'};">${f.is_dir?'folder':'description'}</span>
         <span style="flex:1;">${f.name}</span>
         <span style="color:rgba(255,255,255,0.3);font-size:12px;">${f.size_human||''}</span>
-        ${!f.is_dir?`<button class="btn" style="padding:4px 12px;font-size:12px;background:rgba(255,255,255,0.05);" onclick="event.stopPropagation();restoreFile('${snap}','${path==='/'?'':path}/${f.name}')">Restore</button>`:''}
+        ${!f.is_dir?`<button class="btn" style="padding:4px 12px;font-size:12px;background:rgba(255,255,255,0.05);" onclick="event.stopPropagation();restoreFile('"+JSON.stringify(snap)+"','"+JSON.stringify((path==='/'?'':path)+'/'+f.name)+"')">Restore</button>`:''}
       </div>
     `).join('');
   } catch(e) { ui.toast('Error','error'); }

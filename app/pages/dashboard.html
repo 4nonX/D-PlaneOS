@@ -427,6 +427,21 @@
             const alertsEl = document.getElementById('alerts');
             const alerts = [];
 
+            // Check ECC RAM status — advisory only, never blocks operation
+            try {
+                const r = await csrfFetch('/api/status');
+                const d = await r.json();
+                if (d.success && d.ecc_warning) {
+                    alerts.push({
+                        level: 'info',
+                        msg: 'Non-ECC RAM detected. ZFS cannot protect against in-memory bit flips. ' +
+                             'ECC RAM is recommended for data integrity. Home/media use is acceptable with regular scrubs and backups.',
+                        link: '/pages/hardware.html',
+                        linkText: 'Learn more'
+                    });
+                }
+            } catch(e) {}
+
             // Check ZFS health
             try {
                 const r = await csrfFetch('/api/zfs/health');
@@ -467,18 +482,36 @@
                 }
             } catch(e) {}
 
-            // Render alerts
+            // Render alerts (info=blue advisory, warning=amber, error=red)
             if (alerts.length === 0) {
                 alertsEl.innerHTML = '<div style="padding:16px;text-align:center;color:rgba(255,255,255,0.3);"><span class="material-symbols-rounded" style="font-size:24px;vertical-align:middle;">check_circle</span> All systems healthy</div>';
             } else {
-                alertsEl.innerHTML = alerts.map(a => {
-                    const color = a.level==='error'?'#ef4444':'#f59e0b';
-                    const icon = a.level==='error'?'error':'warning';
-                    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.05);">
-                        <span class="material-symbols-rounded" style="color:${color};font-size:20px;">${icon}</span>
-                        <span style="font-size:14px;">${a.msg}</span>
-                    </div>`;
-                }).join('');
+                const el = document.createDocumentFragment();
+                alerts.forEach(a => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.05);';
+                    const color = a.level==='error'?'#ef4444':a.level==='info'?'#60a5fa':'#f59e0b';
+                    const icon = a.level==='error'?'error':a.level==='info'?'info':'warning';
+                    const ic = document.createElement('span');
+                    ic.className = 'material-symbols-rounded';
+                    ic.style.cssText = `color:${color};font-size:20px;flex-shrink:0;`;
+                    ic.textContent = icon;
+                    const txt = document.createElement('span');
+                    txt.style.fontSize = '14px';
+                    txt.textContent = a.msg;
+                    row.appendChild(ic);
+                    row.appendChild(txt);
+                    if (a.link) {
+                        const lnk = document.createElement('a');
+                        lnk.href = a.link;
+                        lnk.textContent = a.linkText || 'Details';
+                        lnk.style.cssText = `color:${color};font-size:13px;margin-left:auto;white-space:nowrap;`;
+                        row.appendChild(lnk);
+                    }
+                    el.appendChild(row);
+                });
+                alertsEl.innerHTML = '';
+                alertsEl.appendChild(el);
             }
         }
         

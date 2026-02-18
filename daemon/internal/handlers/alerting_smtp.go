@@ -33,7 +33,7 @@ type SMTPConfig struct {
 // GetSMTPConfig returns current SMTP configuration
 // GET /api/alerts/smtp
 func GetSMTPConfig(w http.ResponseWriter, r *http.Request) {
-	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&_busy_timeout=30000&cache=shared&_synchronous=FULL")
 	if err != nil {
 		respondOK(w, map[string]interface{}{"success": true, "configured": false})
 		return
@@ -73,7 +73,7 @@ func SaveSMTPConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&_busy_timeout=30000&cache=shared&_synchronous=FULL")
 	if err != nil {
 		respondErrorSimple(w, "Database error", http.StatusInternalServerError)
 		return
@@ -113,7 +113,7 @@ func TestSMTP(w http.ResponseWriter, r *http.Request) {
 
 // SendSMTPAlert sends an alert email (called internally by other handlers)
 func SendSMTPAlert(subject, body string) {
-	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&_busy_timeout=30000&cache=shared&_synchronous=FULL")
 	if err != nil {
 		return
 	}
@@ -156,7 +156,7 @@ type ScrubSchedule struct {
 // GetScrubSchedules returns configured scrub schedules
 // GET /api/zfs/scrub/schedule
 func GetScrubSchedules(w http.ResponseWriter, r *http.Request) {
-	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&_busy_timeout=30000&cache=shared&_synchronous=FULL")
 	if err != nil {
 		respondOK(w, map[string]interface{}{"success": true, "schedules": []ScrubSchedule{}})
 		return
@@ -202,7 +202,7 @@ func SaveScrubSchedules(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, "Failed to encode schedules", http.StatusInternalServerError)
 		return
 	}
-	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&cache=shared")
+	db, err := sql.Open("sqlite3", alertDBPath+"?_journal_mode=WAL&_busy_timeout=30000&cache=shared&_synchronous=FULL")
 	if err == nil {
 		defer db.Close()
 		db.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", "scrub_schedules", string(data))

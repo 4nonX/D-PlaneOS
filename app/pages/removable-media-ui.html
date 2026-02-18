@@ -175,6 +175,10 @@ body { font-family: sans-serif; padding: 20px; background: #0a0a0a; color: #fff;
         <span class="material-symbols-rounded">dns</span>
         Docker Containers
       </a>
+      <a href="git-sync.html" class="sub-link" data-page="git-sync">
+        <span class="material-symbols-rounded">sync</span>
+        Git Sync
+      </a>
       <a href="modules.html" class="sub-link" data-page="modules">
         <span class="material-symbols-rounded">extension</span>
         App Modules
@@ -520,9 +524,9 @@ async function loadDevices() {
         '<span class="device-status status-unmounted">○ UNMOUNTED</span>';
       
       const actions = device.mounted ?
-        `<button class="btn btn-danger" onclick="unmountDevice('${device.path}')">⏏️ Unmount</button>
-         <button class="btn btn-danger" onclick="ejectDevice('${device.path}')">📤 Eject</button>` :
-        `<button class="btn" onclick="mountDevice('${device.path}')">📥 Mount</button>`;
+        `<button class="btn btn-danger" onclick="unmountDevice('"+JSON.stringify(device.path)+"')">⏏️ Unmount</button>
+         <button class="btn btn-danger" onclick="ejectDevice('"+JSON.stringify(device.path)+"')">📤 Eject</button>` :
+        `<button class="btn" onclick="mountDevice('"+JSON.stringify(device.path)+"')">📥 Mount</button>`;
       
       item.innerHTML = `
         <div class="device-header">

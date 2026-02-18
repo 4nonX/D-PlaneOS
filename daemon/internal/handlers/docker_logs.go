@@ -2,8 +2,9 @@ package handlers
 
 import (
 	"net/http"
-	"os/exec"
 	"regexp"
+
+	"dplaned/internal/cmdutil"
 )
 
 // HandleDockerLogs returns logs for a specific container

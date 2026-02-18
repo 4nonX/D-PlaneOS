@@ -6,41 +6,146 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
-## v2.2.0 (2026-02-18) — **"The Declarative Shift"**
+## v2.2.0 (2026-02-17) — **"Git Sync: Bidirectional Multi-Repo"**
 
-### ⚡ GitOps & NixOS Native
+### ✨ New Feature: Bidirectional Git Sync
 
-D-PlaneOS v2.2.0 transforms the system into a fully declarative storage appliance. With the introduction of **Bidirectional Git-Sync** and **Native NixOS Flake support**, the configuration is decoupled from the host. Your NAS is no longer a "Pet," but "Cattle"—instantly reproducible from a Git repository at any time.
+Full Arcane-style GitHub/Gitea integration for Docker Compose stacks — but built directly
+into D-PlaneOS with no external tool required.
 
-### Added
+**What it does:**
 
-- **Bidirectional Git-Sync** — `POST /api/git/sync`, `GET /api/git/status` (Mirrors the entire system state, including Docker stacks, ZFS dataset hierarchy, and user permissions to a private Git repo; UI changes trigger automatic commits).
-- **Native NixOS Flake Support** — Seamless integration into the Nix ecosystem via `flake.nix`. D-PlaneOS is now installable and manageable as a standard Nix package.
-- **Hard Systemd Boot-Gate** — `dplaneos-zfs-mount-wait.service` (Blocks Docker and the D-PlaneOS daemon until all ZFS pools are verified, mounted, and writable—eliminating boot-time race conditions).
-- **OS-Agnostic Core** — Refactored abstraction layer making D-PlaneOS indifferent to the host OS, whether running on NixOS (read-only store), Debian, or Ubuntu.
-- **NixOS Generation Manager** — `GET /api/nixos/generations`, `POST /api/nixos/rollback` (Manage system rollbacks directly from the D-PlaneOS UI—exclusive to NixOS).
-- **Adaptive ARC Limiter** — Intelligent ZFS cache control in the Nix config, protecting non-ECC systems (e.g., 32GB setups) from memory corruption risks by enforcing strict cache limits.
+| Direction | Trigger | Effect |
+|---|---|---|
+| Pull ← Git | Manual / Auto | Clone or pull repo, update local compose file |
+| Deploy ← Git | Manual | `docker compose up -d` from repo compose file |
+| Export → Git | Manual | Snapshot running containers as `docker-compose.yml` |
+| Push → Git | Manual | `git commit + push` compose file to remote |
 
-### Fixed
+**Architecture: Multi-Repo Syncs**
 
-- **SQL FTS5 Trigger Bug** — Full fix for database triggers; search indices for files and logs now update without performance degradation or deadlocks during bulk operations.
-- **ZFS Dataset Discovery** — Fixed an edge case where deeply nested datasets were not correctly listed in the UI after a pool import.
-- **Git SSH-Key Handling** — Improved `GIT_ASKPASS` integration; SSH keys for syncing are now securely loaded from the protected D-PlaneOS Vault, leaving no traces in environment variables.
+Replaces the old single-global-config model with named syncs — each with its own:
+- Repository URL + branch
+- Compose file path (relative to repo root, e.g. `stacks/nextcloud/compose.yml`)
+- Credential reference
+- Optional auto-sync interval (1–1440 min)
+- Commit author identity
 
-### Changed
+**Credential Store (`git_credentials` table)**
 
-- **Binary Size** — Optimized Go build process; static binary reduced from 8 MB to ~7.2 MB despite new features.
-- **Logging** — Switched to structured JSON logging for better integration with `journalctl` and external log aggregators.
-- **Architecture** — Complete decoupling of application logic from host configuration.
+A new credential store decouples auth from individual syncs:
+- Name each credential for reuse across multiple repos
+- PAT (Personal Access Token): stored server-side via `GIT_ASKPASS` script — never appears in URLs or logs
+- SSH Key: written to `/var/lib/dplaneos/ssh-keys/`, referenced by path in `GIT_SSH_COMMAND`
+- Test button: runs `git ls-remote` against a target repo to verify connectivity before saving
 
-### Security
+**PAT Setup Wizard in UI**
 
-- **Immutability Enforcement** — On NixOS, the daemon is restricted from modifying the system root, operating strictly within `/var/lib/dplaneos`.
-- **Credential Masking** — Enhanced masking of sensitive data in audit logs during Git push/pull operations.
+The "Add Credential" modal includes a step-by-step GitHub PAT guide:
+1. Link to `github.com/settings/tokens` (fine-grained and classic)
+2. Required scopes shown as badges: `repo` (classic) or `Contents: R/W` + `Metadata: R` (fine-grained)
+3. Explanation that tokens are stored server-side and masked in the UI after first save
 
-### No Breaking Changes
+**New Backend: `git_sync_repos.go`**
+- `GET/POST /api/git-sync/credentials` — list and save credentials
+- `POST /api/git-sync/credentials/test` — test connectivity via `git ls-remote`
+- `POST /api/git-sync/credentials/delete`
+- `GET/POST /api/git-sync/repos` — list and save syncs
+- `POST /api/git-sync/repos/delete`
+- `POST /api/git-sync/repos/pull` — clone or `git pull --rebase`
+- `POST /api/git-sync/repos/push` — `git add compose_path && git commit && git push`
+- `POST /api/git-sync/repos/deploy` — `docker compose up -d --remove-orphans`
+- `POST /api/git-sync/repos/export` — `docker inspect` → compose YAML → write to repo
 
-Drop-in replacement for v2.1.0. Same database schema, same daemon flags, same frontend.
+**New DB Tables (non-breaking, `IF NOT EXISTS`)**
+- `git_sync_repos` — per-sync configuration
+- `git_credentials` — named credential store
+- Index: `idx_git_repos_name`
+
+**New Frontend: `git-sync.html` (956 lines)**
+- Three-tab layout: Syncs · Credentials · Legacy Config
+- Per-sync cards with: status dot, last commit hash, relative time, error display
+- Action buttons: Pull / Deploy / Export Stack / Push to Git
+- Add/Edit sync modal with credential picker + auto-sync toggle
+- Add/Edit credential modal with PAT wizard, SSH paste, connection test
+- JetBrains Mono monospace aesthetic consistent with terminal/ops theme
+- All onclick string args use `JSON.stringify()` — XSS-safe
+
+**Legacy Compatibility**
+The old single-repo config (`/api/git-sync/config`, `pull`, `push`, `stacks`, `deploy`,
+`export`) is fully preserved on a "Legacy Config" tab. Existing setups are not broken.
+
+### 🔧 Other Fixes (carried from prior session)
+- `docker_enhanced.go`: missing `regexp` import added
+- `go vet ./...`: clean
+
+---
+
+## v2.1.1 (2026-02-17) — **"Security, Stability & Architecture"**
+
+### 🔴 Showstopper Fix: ZFS-Docker Boot Race (Critical)
+The most dangerous bug in any ZFS NAS: Docker starting before ZFS pools are mounted,
+causing containers to write to the bare mountpoint directory on the root filesystem.
+When ZFS mounts seconds later, those writes are lost or inaccessible — **silent data loss**.
+
+**Fix: Hard systemd gate** (`dplaneos-zfs-mount-wait.service`)
+- Polls until every configured pool is `ONLINE`, mounted, **and writable** (write-probe test)
+- `dplaned.service` and `docker.service` both `Require=` this gate — they **cannot start** without it
+- 5-minute timeout with 30-second progress logging; failure message includes manual override instructions
+- `install.sh` writes `/etc/dplaneos/expected-pools.conf` with currently imported pools
+- Dashboard reports gate status via `/api/system/zfs-gate-status`
+- New file: `systemd/dplaneos-zfs-mount-wait.service`
+- New file: `scripts/zfs-mount-wait.sh`
+- New file: `systemd/docker.service.d/zfs-dependency.conf`
+
+### 🟡 ECC RAM: Advisory, Not Blocker
+- Dashboard (`/api/status`) detects non-ECC RAM via `dmidecode` and shows a persistent
+  **informational** notice (blue, not red). Never blocks operation.
+- `INSTALLATION-GUIDE.md`: new ECC recommendation section with clear home-vs-business guidance
+- `NON-ECC-WARNING.md`: updated mitigations to reflect v2.1.1 actual implementations
+  (ARC limiting, weekly scrub scheduling, WAL FULL sync, dashboard advisory)
+- Version references fixed throughout (was erroneously citing v5.x)
+
+### 🟡 Notification Debouncing (Flooding Fix)
+- `monitoring/background.go` completely rewritten with proper debounce/hysteresis:
+  - **Hysteresis window** (30s): condition must persist before first alert fires
+  - **Cooldown** (5 min): same event+level won't repeat within cooldown period
+  - **Clear event**: fires once when condition resolves, then enters clearance cooldown (2 min)
+  - **Info level** (UI dashboard refresh): always passes through, no debounce
+- Prevents fan-flapping from sending thousands of alerts per second
+
+### 🟡 SQLite Durability (Power-Loss Safety)
+- `alerting_smtp.go`: all 5 DB connections upgraded to `_synchronous=FULL` (was missing)
+- `enterprise_hardening.go`: rotDB connection upgraded to `_synchronous=FULL`
+- Main DB and session DB already had `_synchronous=FULL` — now consistent across all connections
+- Combined with existing WAL mode + checkpoint-on-startup, audit log survives hard power loss
+
+### 🔒 Security Fixes (XSS)
+- All `onclick="func('${serverData}')"` patterns replaced with `JSON.stringify()` across 9 pages:
+  cloud-sync, docker, files, network, pools, removable-media, replication, shares, snapshot-scheduler, users
+- `audit.html`, `ups.html`: truncated `handleLogout()` completed
+- `settings.html`: NixOS version display switched from `innerHTML` to `textContent`
+- Dashboard alert rendering rewritten with DOM API (no innerHTML with alert messages)
+
+### 🐛 Bug Fixes
+- URL fixes (`&param=` → `?param=`): 5 locations across ZFS, RBAC, network endpoints
+- `docker-containers-ui.html`: log URL fixed to `/api/docker/logs?container=`
+- `modules.html`: data normalization, Names array handling, action endpoints corrected
+- `pools.html`: stray Network header removed; DOM-rewritten card rendering; `handleLogout` fixed
+- `users.html`: `handleLogout` and `editGroup` URL fixed
+- `network.html`: `window.ui` double-init guard; DOM-rewritten interface cards
+
+### 🔧 Backend Fixes
+- `disk_discovery.go`: recursive `hasMountPoint()`, regex `diskNameInZpoolStatus()` (no false positives)
+- `docker.go`: `groupContainersByStack()` — response normalized with stacks/totals
+- `enterprise_hardening.go`: watchdog status safe zero values when inactive
+- `system.go`: `handleNetworkPost` with IP/CIDR validation, atomic `ip addr replace`
+- `system_extended.go`: `ConfigDir` fix for cron directory creation
+- `users_groups.go`: `respondError` argument order corrected
+- `zfs_encryption.go`: `change-key -l` flag; key validation
+
+### 🧪 Tests
+- New: `daemon/internal/handlers/disk_discovery_test.go`
 
 ---
 

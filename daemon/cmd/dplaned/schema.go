@@ -163,6 +163,70 @@ func initSchema(db *sql.DB) error {
 
 		// Migration: Add last_activity if missing (idempotent)
 		`ALTER TABLE sessions ADD COLUMN last_activity INTEGER NOT NULL DEFAULT 0`,
+
+		// ── Git Sync ──
+		`CREATE TABLE IF NOT EXISTS git_sync_config (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			repo_url TEXT NOT NULL DEFAULT '',
+			branch TEXT NOT NULL DEFAULT 'main',
+			local_path TEXT NOT NULL DEFAULT '/var/lib/dplaneos/git-stacks',
+			sync_interval INTEGER NOT NULL DEFAULT 0,
+			auto_deploy INTEGER NOT NULL DEFAULT 0,
+			auth_type TEXT NOT NULL DEFAULT 'none',
+			auth_token TEXT NOT NULL DEFAULT '',
+			ssh_key_path TEXT NOT NULL DEFAULT '',
+			host_key_mode TEXT NOT NULL DEFAULT 'accept',
+			commit_name TEXT NOT NULL DEFAULT 'D-PlaneOS',
+			commit_email TEXT NOT NULL DEFAULT 'dplaneos@localhost',
+			last_sync_at TEXT,
+			last_commit TEXT,
+			last_error TEXT
+		)`,
+		`INSERT OR IGNORE INTO git_sync_config (id) VALUES (1)`,
+
+		// Migration: add auth columns if missing
+		`ALTER TABLE git_sync_config ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'none'`,
+		`ALTER TABLE git_sync_config ADD COLUMN auth_token TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE git_sync_config ADD COLUMN ssh_key_path TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE git_sync_config ADD COLUMN host_key_mode TEXT NOT NULL DEFAULT 'accept'`,
+		`ALTER TABLE git_sync_config ADD COLUMN commit_name TEXT NOT NULL DEFAULT 'D-PlaneOS'`,
+		`ALTER TABLE git_sync_config ADD COLUMN commit_email TEXT NOT NULL DEFAULT 'dplaneos@localhost'`,
+		// ── Git Sync: Multi-Repo Support (v2.1.1) ──
+		`CREATE TABLE IF NOT EXISTS git_sync_repos (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			name        TEXT NOT NULL UNIQUE,
+			repo_url    TEXT NOT NULL DEFAULT '',
+			branch      TEXT NOT NULL DEFAULT 'main',
+			local_path  TEXT NOT NULL DEFAULT '',
+			compose_path TEXT NOT NULL DEFAULT 'docker-compose.yml',
+			auto_sync   INTEGER NOT NULL DEFAULT 0,
+			sync_interval INTEGER NOT NULL DEFAULT 5,
+			auth_type   TEXT NOT NULL DEFAULT 'none',
+			auth_token  TEXT NOT NULL DEFAULT '',
+			ssh_key_path TEXT NOT NULL DEFAULT '',
+			host_key_mode TEXT NOT NULL DEFAULT 'accept',
+			commit_name TEXT NOT NULL DEFAULT 'D-PlaneOS',
+			commit_email TEXT NOT NULL DEFAULT 'dplaneos@localhost',
+			last_sync_at TEXT,
+			last_commit TEXT,
+			last_error  TEXT,
+			enabled     INTEGER NOT NULL DEFAULT 1,
+			created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// ── GitHub PAT Store (shared credentials, referenced by name) ──
+		`CREATE TABLE IF NOT EXISTS git_credentials (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			name        TEXT NOT NULL UNIQUE,
+			host        TEXT NOT NULL DEFAULT 'github.com',
+			auth_type   TEXT NOT NULL DEFAULT 'token',
+			token       TEXT NOT NULL DEFAULT '',
+			ssh_key     TEXT NOT NULL DEFAULT '',
+			notes       TEXT NOT NULL DEFAULT '',
+			created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_git_repos_name ON git_sync_repos(name)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user)`,
 		`CREATE INDEX IF NOT EXISTS idx_user_roles_user ON user_roles(user_id)`,

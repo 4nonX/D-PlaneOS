@@ -36,7 +36,7 @@ func (h *UserGroupHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 func (h *UserGroupHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(`SELECT id, username, COALESCE(email,''), COALESCE(role,'user'), active, COALESCE(created_at,'') FROM users ORDER BY id`)
 	if err != nil {
-		respondError(w, "Failed to list users", http.StatusInternalServerError, err)
+		respondError(w, http.StatusInternalServerError, "Failed to list users", err)
 		return
 	}
 	defer rows.Close()
@@ -242,7 +242,7 @@ func (h *UserGroupHandler) listGroups(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Query(`SELECT id, name, COALESCE(description,''), COALESCE(gid,0), COALESCE(created_at,'') FROM groups ORDER BY name`)
 	if err != nil {
-		respondError(w, "Failed to list groups", http.StatusInternalServerError, err)
+		respondError(w, http.StatusInternalServerError, "Failed to list groups", err)
 		return
 	}
 	defer rows.Close()

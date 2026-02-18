@@ -50,7 +50,7 @@ From ZFS's perspective:
 
 ---
 
-## What D-PlaneOS v5.2.3 Can Do
+## What D-PlaneOS v2.1.1 Can Do
 
 ### 1. Pool Heartbeat (✅ Implemented)
 - **What it does:** Detects when ZFS pool stalls
@@ -69,7 +69,7 @@ From ZFS's perspective:
 
 ---
 
-## What D-PlaneOS v5.2.3 Cannot Do
+## What D-PlaneOS v2.1.1 Cannot Do
 
 ### ❌ Prevent Silent Data Corruption
 **Why:** Software cannot fix hardware problems.
@@ -126,47 +126,64 @@ From ZFS's perspective:
 
 ## Mitigation Strategies (Without ECC)
 
-### 1. Reduce RAM Exposure ✅ Already Implemented
+### 1. Reduce RAM Exposure ✅ Implemented in install.sh
 ```bash
-# install-v5.2.3.sh sets:
-zfs_arc_max = 4GB (was: dynamic, up to 8GB)
+# install.sh sets ZFS ARC limit appropriate to your RAM:
+# For 16GB RAM: arc_max = 4GB
+# For 32GB RAM: arc_max = 8GB
+# Configured in /etc/modprobe.d/zfs.conf
 ```
 
-**Effect:** Less data in RAM = less exposure time = lower corruption risk
+**Effect:** Less data in RAM at any moment = less exposure time = lower probability of a flipped bit hitting active data.
 
-### 2. Enable ZFS Scrubs ✅ Recommended
+### 2. ZFS Scrubs ✅ Configured by install.sh
 ```bash
-# Add to crontab:
-0 2 * * 0 /sbin/zfs scrub tank
-```
-
-**Effect:**
-- ✅ Detects corruption that made it to disk
-- ✅ Can repair from RAIDZ2 parity
-- ❌ Cannot detect if ALL copies are corrupted identically
-
-### 3. Backup Everything ✅ Mandatory
-```bash
-# External backup to separate hardware
-rsync -av /tank/ /external-drive/backup/
+# install.sh adds to root crontab:
+0 2 * * 0 /sbin/zfs scrub <poolname>
 ```
 
 **Effect:**
-- ✅ Protects against catastrophic failure
-- ✅ Protects against silent corruption (if backup is clean)
-- ❌ Does not prevent corruption, only recovers from it
+- ✅ Detects corruption that has reached disk storage
+- ✅ Can auto-repair from RAIDZ/mirror parity
+- ❌ Cannot detect if all copies were already corrupted identically in RAM
 
-### 4. Monitor for Anomalies ✅ Implemented
+### 3. 3-2-1 Backup Rule ✅ Strongly Recommended
+Three copies — two media types — one off-site. Use ZFS send/receive
+or rsync to an external drive. D-PlaneOS's Replication page automates this.
+
+**Effect:**
+- ✅ Recovers from catastrophic pool loss
+- ✅ Recovers from silent corruption IF backup was taken before the corrupt write
+- ❌ Does not prevent corruption
+
+### 4. Dashboard Advisory ✅ Implemented in v2.1.1
+The D-PlaneOS dashboard detects non-ECC RAM at startup via `dmidecode`
+and displays a persistent informational notice. This is **advisory only** —
+it never blocks operation or prevents pool creation.
+
+### 5. memtest86+ (One-Time Hardware Validation) ✅ Recommended
+Run memtest86+ for at least 4 passes before first use of a NAS.
+While it cannot detect all RAM issues, it catches gross failures.
+
 ```bash
-# D-PlaneOS monitors:
-- Pool health (heartbeat)
-- Inotify usage (exhaustion)
-- SQLite integrity (WAL checkpoints)
+# On Debian/Ubuntu:
+apt install memtest86+
+# Reboot and select memtest86+ from GRUB
+```
+
+### 6. Monitor for Anomalies ✅ Implemented
+```
+D-PlaneOS v2.1.1 monitors:
+- Pool health (ZFS heartbeat with write probe)
+- SMART drive temperatures and health
+- Inotify usage (exhaustion prevention)
+- SQLite WAL integrity (FULL sync mode)
+- ZFS mount readiness gate (Docker race condition prevention)
 ```
 
 **Effect:**
-- ✅ Detects **detectable** problems
-- ❌ Cannot detect silent RAM corruption
+- ✅ Catches everything detectable at software level
+- ❌ Cannot detect silent in-memory bit flips (hardware limitation)
 
 ---
 
@@ -259,7 +276,7 @@ rsync -av /tank/ /external-drive/backup/
 ### For Your Use Case (Home Media NAS)
 
 **Current Setup:**
-- ✅ D-PlaneOS v5.2.3 configured optimally
+- ✅ D-PlaneOS v2.1.1 configured optimally
 - ✅ 4GB ARC limit (appropriate for 16GB Non-ECC)
 - ✅ RAIDZ2 (survives 2 disk failures)
 - ✅ All software mitigations in place
@@ -290,7 +307,7 @@ rsync -av /tank/ /external-drive/backup/
 
 ## Conclusion
 
-**D-PlaneOS v5.2.3 is production-ready** for what software can control:
+**D-PlaneOS v2.1.1 is production-ready** for what software can control:
 - ✅ Pool management
 - ✅ Concurrent access
 - ✅ Monitoring

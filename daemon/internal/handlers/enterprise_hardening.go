@@ -2,12 +2,13 @@ package handlers
 
 import (
 	"database/sql"
+
+	"dplaned/internal/cmdutil"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -288,7 +289,9 @@ func (h *NixOSGuardHandler) ApplyWithWatchdog(w http.ResponseWriter, r *http.Req
 		defer watchdogMu.Unlock()
 		if watchdogActive {
 			// Auto-rollback — nobody confirmed
-			if _, err := cmdutil.RunSlow("/run/current-system/sw/bin/nixos-rebuild", "switch", "--rollback"); err != nil { log.Printf("ERROR: nixos rollback failed: %v", err) }
+			if _, err := cmdutil.RunSlow("/run/current-system/sw/bin/nixos-rebuild", "switch", "--rollback"); err != nil {
+			log.Printf("ERROR: nixos rollback failed: %v", err)
+		}
 			watchdogActive = false
 		}
 	})
@@ -333,11 +336,21 @@ func (h *NixOSGuardHandler) WatchdogStatus(w http.ResponseWriter, r *http.Reques
 	watchdogMu.Lock()
 	defer watchdogMu.Unlock()
 
+	remaining := 0
+	deadline := ""
+	if watchdogActive {
+		remaining = int(time.Until(watchdogDeadline).Seconds())
+		if remaining < 0 {
+			remaining = 0
+		}
+		deadline = watchdogDeadline.Format(time.RFC3339)
+	}
+
 	respondOK(w, map[string]interface{}{
 		"success":         true,
 		"watchdog_active": watchdogActive,
-		"deadline":        watchdogDeadline.Format(time.RFC3339),
-		"remaining_sec":   int(time.Until(watchdogDeadline).Seconds()),
+		"deadline":        deadline,
+		"remaining_sec":   remaining,
 	})
 }
 
@@ -455,7 +468,7 @@ func (h *AuditRotationHandler) RotateAuditLogs(w http.ResponseWriter, r *http.Re
 
 	// Delete old entries
 	cutoff := time.Now().AddDate(0, 0, -req.KeepDays).Format("2006-01-02 15:04:05")
-	rotDB, dbErr := sql.Open("sqlite3", "/var/lib/dplaneos/dplaneos.db?_journal_mode=WAL&cache=shared")
+	rotDB, dbErr := sql.Open("sqlite3", "/var/lib/dplaneos/dplaneos.db?_journal_mode=WAL&_busy_timeout=30000&cache=shared&_synchronous=FULL")
 	var err error
 	if dbErr == nil {
 		defer rotDB.Close()

@@ -153,6 +153,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
         <span class="material-symbols-rounded">dns</span>
         Docker Containers
       </a>
+      <a href="git-sync.html" class="sub-link" data-page="git-sync">
+        <span class="material-symbols-rounded">sync</span>
+        Git Sync
+      </a>
       <a href="modules.html" class="sub-link" data-page="modules">
         <span class="material-symbols-rounded">extension</span>
         App Modules
@@ -273,186 +277,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
   </div>
 </nav>
 
-<script>
-// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
-
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
-}
-
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
-    }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
-}
-
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
-</script>
+<script src="/assets/js/nav-shared.js"></script>
 
 <main class="main">
 <div class="page-header">
@@ -467,186 +292,7 @@ if (window.ConnectionMonitor) {
 </div>
 
 <div id="tab-vlan" class="consolidation-content active">
-<script>
-// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
 
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
-}
-
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
-    }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
-}
-
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
-</script>
 
 <div class="page-header">
 <h1 class="page-title">Network</h1>
@@ -663,7 +309,7 @@ if (window.ConnectionMonitor) {
 <script src="/assets/js/m3-ripple.js"></script>
 <script src="/assets/js/ui-components.js"></script>
 <script>
-const ui = new DPlaneUI();
+window.ui = window.ui || new DPlaneUI();
 
 async function configureInterface(name) {
   const result = await ui.form(`Configure ${name}`, [
@@ -776,18 +422,45 @@ function renderInterfaces(interfaces) {
     const statusIcon = iface.status === 'up' ? 'link' : 'link_off';
     const statusText = iface.status === 'up' ? 'Connected' : 'Disconnected';
     
-    card.innerHTML = `
-      <div class="interface-header">
-        <span class="material-symbols-rounded interface-icon">${icon}</span>
-        <div class="interface-info">
-          <div class="interface-name">${iface.name}${iface.primary ? ' (Primary)' : ''}</div>
-          <div class="interface-details">${iface.ip || 'No IP'} • ${iface.speed || 'Unknown'} • Gateway: ${iface.gateway || 'None'}</div>
-        </div>
-        <div class="badge"><span class="material-symbols-rounded" style="font-size:16px;">${statusIcon}</span> ${statusText}</div>
-        <button class="icon-btn" onclick="configureInterface('${iface.name}')"><span class="material-symbols-rounded">settings</span></button>
-      </div>
-      ${iface.details ? `<div style="display:flex;gap:12px;">${iface.details.map(d => `<span style="padding:6px 12px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:13px;">${d}</span>`).join('')}</div>` : ''}
-    `;
+    const header = document.createElement('div');
+    header.className = 'interface-header';
+    const iconEl = document.createElement('span');
+    iconEl.className = 'material-symbols-rounded interface-icon';
+    iconEl.textContent = icon;
+    const info = document.createElement('div');
+    info.className = 'interface-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'interface-name';
+    nameEl.textContent = `${iface.name || ''}${iface.primary ? ' (Primary)' : ''}`;
+    const detailsEl = document.createElement('div');
+    detailsEl.className = 'interface-details';
+    detailsEl.textContent = `${iface.ip || 'No IP'} • ${iface.speed || 'Unknown'} • Gateway: ${iface.gateway || 'None'}`;
+    info.append(nameEl, detailsEl);
+    const badge = document.createElement('div');
+    badge.className = 'badge';
+    const badgeIcon = document.createElement('span');
+    badgeIcon.className = 'material-symbols-rounded';
+    badgeIcon.style.fontSize = '16px';
+    badgeIcon.textContent = statusIcon;
+    badge.append(badgeIcon, document.createTextNode(` ${statusText}`));
+    const btn = document.createElement('button');
+    btn.className = 'icon-btn';
+    btn.addEventListener('click', () => configureInterface(iface.name));
+    btn.innerHTML = '<span class="material-symbols-rounded">settings</span>';
+    header.append(iconEl, info, badge, btn);
+    card.appendChild(header);
+    if (Array.isArray(iface.details) && iface.details.length) {
+      const detailsWrap = document.createElement('div');
+      detailsWrap.style.display = 'flex';
+      detailsWrap.style.gap = '12px';
+      iface.details.forEach((d) => {
+        const chip = document.createElement('span');
+        chip.style.cssText = 'padding:6px 12px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:13px;';
+        chip.textContent = String(d || '');
+        detailsWrap.appendChild(chip);
+      });
+      card.appendChild(detailsWrap);
+    }
     
     container.appendChild(card);
   });
@@ -833,186 +506,7 @@ loadNetworkInterfaces();
   </div>
 </div>
 
-<script>
-// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
 
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
-}
-
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
-    }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
-}
-
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
-</script>
 </div>
 <div id="tab-routing" class="consolidation-content">
 <div style="max-width: 1600px; margin: 160px auto 60px; padding: 0 40px;">
@@ -1042,186 +536,7 @@ if (window.ConnectionMonitor) {
   </div>
 </div>
 
-<script>
-// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
 
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
-}
-
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
-    }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
-}
-
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
-</script>
 </div>
 
 </main>
@@ -1229,7 +544,7 @@ if (window.ConnectionMonitor) {
 <script src="/assets/js/m3-ripple.js"></script>
 <script src="/assets/js/ui-components.js"></script>
 <script>
-const ui = new DPlaneUI();
+window.ui = window.ui || new DPlaneUI();
 
 async function configureInterface(name) {
   const result = await ui.form(`Configure ${name}`, [
@@ -1342,18 +657,45 @@ function renderInterfaces(interfaces) {
     const statusIcon = iface.status === 'up' ? 'link' : 'link_off';
     const statusText = iface.status === 'up' ? 'Connected' : 'Disconnected';
     
-    card.innerHTML = `
-      <div class="interface-header">
-        <span class="material-symbols-rounded interface-icon">${icon}</span>
-        <div class="interface-info">
-          <div class="interface-name">${iface.name}${iface.primary ? ' (Primary)' : ''}</div>
-          <div class="interface-details">${iface.ip || 'No IP'} • ${iface.speed || 'Unknown'} • Gateway: ${iface.gateway || 'None'}</div>
-        </div>
-        <div class="badge"><span class="material-symbols-rounded" style="font-size:16px;">${statusIcon}</span> ${statusText}</div>
-        <button class="icon-btn" onclick="configureInterface('${iface.name}')"><span class="material-symbols-rounded">settings</span></button>
-      </div>
-      ${iface.details ? `<div style="display:flex;gap:12px;">${iface.details.map(d => `<span style="padding:6px 12px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:13px;">${d}</span>`).join('')}</div>` : ''}
-    `;
+    const header = document.createElement('div');
+    header.className = 'interface-header';
+    const iconEl = document.createElement('span');
+    iconEl.className = 'material-symbols-rounded interface-icon';
+    iconEl.textContent = icon;
+    const info = document.createElement('div');
+    info.className = 'interface-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'interface-name';
+    nameEl.textContent = `${iface.name || ''}${iface.primary ? ' (Primary)' : ''}`;
+    const detailsEl = document.createElement('div');
+    detailsEl.className = 'interface-details';
+    detailsEl.textContent = `${iface.ip || 'No IP'} • ${iface.speed || 'Unknown'} • Gateway: ${iface.gateway || 'None'}`;
+    info.append(nameEl, detailsEl);
+    const badge = document.createElement('div');
+    badge.className = 'badge';
+    const badgeIcon = document.createElement('span');
+    badgeIcon.className = 'material-symbols-rounded';
+    badgeIcon.style.fontSize = '16px';
+    badgeIcon.textContent = statusIcon;
+    badge.append(badgeIcon, document.createTextNode(` ${statusText}`));
+    const btn = document.createElement('button');
+    btn.className = 'icon-btn';
+    btn.addEventListener('click', () => configureInterface(iface.name));
+    btn.innerHTML = '<span class="material-symbols-rounded">settings</span>';
+    header.append(iconEl, info, badge, btn);
+    card.appendChild(header);
+    if (Array.isArray(iface.details) && iface.details.length) {
+      const detailsWrap = document.createElement('div');
+      detailsWrap.style.display = 'flex';
+      detailsWrap.style.gap = '12px';
+      iface.details.forEach((d) => {
+        const chip = document.createElement('span');
+        chip.style.cssText = 'padding:6px 12px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:13px;';
+        chip.textContent = String(d || '');
+        detailsWrap.appendChild(chip);
+      });
+      card.appendChild(detailsWrap);
+    }
     
     container.appendChild(card);
   });
@@ -1474,7 +816,7 @@ async function confirmNetwork() {
     const o = document.getElementById('net-confirm-overlay'); if(o) o.remove();
   } catch(e) { ui.toast('Failed','error'); }
 }
-var __interfaces_init=false;function init_interfaces(){if(__interfaces_init)return;__interfaces_init=true;const ui = new DPlaneUI();
+var __interfaces_init=false;function init_interfaces(){if(__interfaces_init)return;__interfaces_init=true;window.ui = window.ui || new DPlaneUI();
 
 async function loadInterfaces() {
   try {
@@ -1537,7 +879,7 @@ function displayInterfaces(interfaces) {
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
           ${statusBadge}
-          <button class="btn btn-ghost" onclick="configureInterface('${iface.name}')">
+          <button class="btn btn-ghost" onclick="configureInterface('"+JSON.stringify(iface.name)+"')">
             <span class="material-symbols-rounded" style="font-size: 18px;">settings</span>
             Configure
           </button>
@@ -1551,7 +893,7 @@ function displayInterfaces(interfaces) {
 
 async function configureInterface(name) {
   // Get current config
-  const response = await csrfFetch(`/api/system/network&interface=${name}`);
+  const response = await csrfFetch(`/api/system/network?interface=${name}`);
   const data = await response.json();
   
   if (!data.success) {
@@ -1637,7 +979,7 @@ document.addEventListener('DOMContentLoaded', loadInterfaces);
 
 // Refresh every 30 seconds
 setInterval(loadInterfaces, 30000);}
-var __dns_init=false;function init_dns(){if(__dns_init)return;__dns_init=true;const ui = new DPlaneUI();
+var __dns_init=false;function init_dns(){if(__dns_init)return;__dns_init=true;window.ui = window.ui || new DPlaneUI();
 
 async function loadDNS() {
   try {
@@ -1731,7 +1073,7 @@ async function saveDNSChange(data) {
 }
 
 document.addEventListener('DOMContentLoaded', loadDNS);}
-var __routing_init=false;function init_routing(){if(__routing_init)return;__routing_init=true;const ui = new DPlaneUI();
+var __routing_init=false;function init_routing(){if(__routing_init)return;__routing_init=true;window.ui = window.ui || new DPlaneUI();
 
 async function loadRoutes() {
   try {

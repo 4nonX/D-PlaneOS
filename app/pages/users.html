@@ -128,6 +128,10 @@
         <span class="material-symbols-rounded">dns</span>
         Docker Containers
       </a>
+      <a href="git-sync.html" class="sub-link" data-page="git-sync">
+        <span class="material-symbols-rounded">sync</span>
+        Git Sync
+      </a>
       <a href="modules.html" class="sub-link" data-page="modules">
         <span class="material-symbols-rounded">extension</span>
         App Modules
@@ -248,186 +252,7 @@
   </div>
 </nav>
 
-<script>
-// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
-
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
-}
-
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
-    }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
-}
-
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
-</script>
+<script src="/assets/js/nav-shared.js"></script>
 
 
   <div class="nav-glass">
@@ -643,186 +468,7 @@ if (window.ConnectionMonitor) {
     </div>
 </main>
 
-<script>
-// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
 
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
-}
-
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
-    }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
-}
-
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
-</script>
 
 <script src="../assets/js/daemon-api.js"></script><script>
         let roles = [];
@@ -876,8 +522,8 @@ if (window.ConnectionMonitor) {
             grid.innerHTML = roles.map(role => `
                 <div class="role-card ${role.is_system ? 'system' : ''}" onclick="viewRole(${role.id})">
                     ${role.is_system ? '<div class="role-badge">SYSTEM</div>' : ''}
-                    <div class="role-name">${role.display_name}</div>
-                    <div class="role-description">${role.description || 'No description'}</div>
+                    <div class="role-name">${escapeHtml(role.display_name)}</div>
+                    <div class="role-description">${escapeHtml(role.description || 'No description')}</div>
                     <div class="role-stats">
                         <div class="role-stat">
                             <span class="material-icons">verified_user</span>
@@ -940,8 +586,8 @@ if (window.ConnectionMonitor) {
                     <div class="permissions-grid">
                         ${perms.map(perm => `
                             <div class="permission-item">
-                                <span class="permission-label">${perm.display_name}</span>
-                                <span class="permission-action">${perm.action}</span>
+                                <span class="permission-label">${escapeHtml(perm.display_name)}</span>
+                                <span class="permission-action">${escapeHtml(perm.action)}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -996,8 +642,8 @@ if (window.ConnectionMonitor) {
                                        data-permission-id="${perm.id}"
                                        ${perm.enabled ? 'checked' : ''}
                                        ${selectedRole.is_system ? 'disabled' : ''}>
-                                <span class="permission-label">${perm.display_name}</span>
-                                <span class="permission-action">${perm.action}</span>
+                                <span class="permission-label">${escapeHtml(perm.display_name)}</span>
+                                <span class="permission-action">${escapeHtml(perm.action)}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -1134,381 +780,31 @@ if (window.ConnectionMonitor) {
 </div>
 </div>
 <script>
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>'"\/]/g, function(ch) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;'}[ch];
+  });
+}
 function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(function(c){c.classList.remove('active')});document.querySelectorAll('.consolidation-tab').forEach(function(b){b.classList.remove('active')});var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
-// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
-
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
-}
-
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
-    }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
-}
-
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
 const ROLES={admin:{name:'Administrator',desc:'Full system access',perms:['All permissions','User management','System config']},power_user:{name:'Power User',desc:'Manage storage, Docker, shares',perms:['Manage pools/datasets','Manage Docker','Manage shares']},user:{name:'User',desc:'Access files, upload/download',perms:['Browse files','Upload/download','View dashboard']},readonly:{name:'Read Only',desc:'View-only access',perms:['View dashboard','View logs']}};
 async function loadUsers(){try{const r=await csrfFetch('/api/rbac/users');const d=await r.json();if(d.success)displayUsers(d.users);else ui.toast(d.error||'Failed to load users','error');}catch(e){ui.toast('Failed to load users','error');}}
 function displayUsers(users){const tbody=document.getElementById('userTableBody');if(!users||users.length===0){tbody.innerHTML='<tr><td colspan="6" class="text-center">No users</td></tr>';return;}
-tbody.innerHTML=users.map(u=>{const role=ROLES[u.role]||ROLES.user;const lastLogin=u.last_login_at?new Date(u.last_login_at).toLocaleString():'Never';const isLocked=u.locked_until&&new Date(u.locked_until)>new Date();return`<tr><td><div style="display:flex;align-items:center;gap:12px;"><div class="avatar">${u.username.charAt(0).toUpperCase()}</div><div><div style="font-weight:600;">${u.username}</div><div style="font-size:12px;color:rgba(255,255,255,0.5);">ID: ${u.id}</div></div></div></td><td>${u.email}</td><td><span class="badge badge-role-${u.role}">${role.name}</span></td><td>${lastLogin}</td><td>${isLocked?'<span class="badge badge-error">Locked</span>':'<span class="badge badge-success">Active</span>'}</td><td><div style="display:flex;gap:8px;"><button class="btn btn-sm btn-icon" onclick="showUserDetails(${u.id})" title="Details"><span class="material-symbols-rounded">info</span></button><button class="btn btn-sm btn-icon" onclick="showEditModal(${u.id})" title="Edit"><span class="material-symbols-rounded">edit</span></button><button class="btn btn-sm btn-icon btn-danger" onclick="deleteUser(${u.id},'${u.username}')" title="Delete"><span class="material-symbols-rounded">delete</span></button></div></td></tr>`;}).join('');}
-async function showCreateModal(){const roleOpts=Object.entries(ROLES).map(([k,r])=>`<div class="role-option" onclick="selectRole('${k}')"><input type="radio" name="role" value="${k}" id="role_${k}" ${k==='user'?'checked':''}><label for="role_${k}"><div class="role-name">${r.name}</div><div class="role-desc">${r.desc}</div></label></div>`).join('');
+tbody.innerHTML=users.map(u=>{const role=ROLES[u.role]||ROLES.user;const lastLogin=u.last_login_at?new Date(u.last_login_at).toLocaleString():'Never';const isLocked=u.locked_until&&new Date(u.locked_until)>new Date();const roleKey=String(u.role||'user').replace(/[^a-zA-Z0-9_-]/g,'');const safeUsername=escapeHtml(u.username||'');const safeEmail=escapeHtml(u.email||'');const safeID=escapeHtml(String(u.id));return`<tr><td><div style="display:flex;align-items:center;gap:12px;"><div class="avatar">${safeUsername.charAt(0).toUpperCase()}</div><div><div style="font-weight:600;">${safeUsername}</div><div style="font-size:12px;color:rgba(255,255,255,0.5);">ID: ${safeID}</div></div></div></td><td>${safeEmail}</td><td><span class="badge badge-role-${roleKey}">${escapeHtml(role.name)}</span></td><td>${escapeHtml(lastLogin)}</td><td>${isLocked?'<span class="badge badge-error">Locked</span>':'<span class="badge badge-success">Active</span>'}</td><td><div style="display:flex;gap:8px;"><button class="btn btn-sm btn-icon" onclick="showUserDetails(${JSON.stringify(u.id)})" title="Details"><span class="material-symbols-rounded">info</span></button><button class="btn btn-sm btn-icon" onclick="showEditModal(${JSON.stringify(u.id)})" title="Edit"><span class="material-symbols-rounded">edit</span></button><button class="btn btn-sm btn-icon btn-danger" onclick="deleteUser(${JSON.stringify(u.id)},${JSON.stringify(String(u.username||''))})" title="Delete"><span class="material-symbols-rounded">delete</span></button></div></td></tr>`;}).join('');}
+async function showCreateModal(){const roleOpts=Object.entries(ROLES).map(([k,r])=>`<div class="role-option" onclick="selectRole('"+JSON.stringify(k)+"')"><input type="radio" name="role" value="${k}" id="role_${k}" ${k==='user'?'checked':''}><label for="role_${k}"><div class="role-name">${r.name}</div><div class="role-desc">${r.desc}</div></label></div>`).join('');
 const html=`<div style="max-width:600px;"><div class="form-group"><label class="form-label">Username</label><input type="text" id="username" class="form-input" required></div><div class="form-group"><label class="form-label">Email</label><input type="email" id="email" class="form-input" required></div><div class="form-group"><label class="form-label">Password</label><input type="password" id="password" class="form-input" placeholder="Min 8 chars" required></div><div class="form-group"><label class="form-label">Role</label><div class="role-selector">${roleOpts}</div></div><div id="permissionPreview"></div></div>`;
 const ok=await ui.modal('Create User',html,[{label:'Cancel',value:false},{label:'Create',value:true,primary:true}]);
 if(ok)await createUser();}
 function selectRole(k){document.getElementById(`role_${k}`).checked=true;showPermissionPreview(k);}
 function showPermissionPreview(k){const r=ROLES[k];document.getElementById('permissionPreview').innerHTML=`<div style="margin-top:20px;padding:16px;background:rgba(102,126,234,0.1);border:1px solid rgba(102,126,234,0.3);border-radius:12px;"><div style="font-weight:600;margin-bottom:8px;">Permissions:</div><ul style="margin:0;padding-left:20px;font-size:14px;">${r.perms.map(p=>`<li>${p}</li>`).join('')}</ul></div>`;}
 async function createUser(){const u=document.getElementById('username').value;const e=document.getElementById('email').value;const p=document.getElementById('password').value;const r=document.querySelector('input[name="role"]:checked').value;try{const res=await csrfFetch('/api/rbac/users',{method:'POST',body:JSON.stringify({action:'create',username:u,email:e,password:p,role:r})});const d=await res.json();if(d.success){ui.toast('User created','success');loadUsers();}else ui.toast(d.error||'Failed','error');}catch(err){ui.toast('Failed','error');}}
-async function showUserDetails(id){try{const r=await csrfFetch(`/api/rbac/users&id=${id}`);const d=await r.json();if(d.success){const u=d.user;const role=ROLES[u.role]||ROLES.user;const html=`<div style="display:grid;gap:20px;"><div class="info-card"><div class="info-label">Username</div><div class="info-value">${u.username}</div></div><div class="info-card"><div class="info-label">Email</div><div class="info-value">${u.email}</div></div><div class="info-card"><div class="info-label">Role</div><div class="info-value"><span class="badge badge-role-${u.role}">${role.name}</span><div style="margin-top:8px;font-size:13px;">${role.desc}</div></div></div><div class="info-card"><div class="info-label">Permissions</div><div class="info-value"><ul style="margin:0;padding-left:20px;font-size:14px;">${role.perms.map(p=>`<li>${p}</li>`).join('')}</ul></div></div><div class="info-card"><div class="info-label">Info</div><div class="info-value" style="font-size:13px;"><div>Created: ${new Date(u.created_at).toLocaleString()}</div><div>Last Login: ${u.last_login_at?new Date(u.last_login_at).toLocaleString():'Never'}</div></div></div></div>`;await ui.modal(`User: ${u.username}`,html,[{label:'Close',value:true}]);}}catch(e){ui.toast('Failed to load','error');}}
+async function showUserDetails(id){try{const r=await csrfFetch(`/api/rbac/users?id=${id}`);const d=await r.json();if(d.success){const u=d.user;const role=ROLES[u.role]||ROLES.user;const roleKey=String(u.role||'user').replace(/[^a-zA-Z0-9_-]/g,'');const html=`<div style="display:grid;gap:20px;"><div class="info-card"><div class="info-label">Username</div><div class="info-value">${escapeHtml(u.username||''  )}</div></div><div class="info-card"><div class="info-label">Email</div><div class="info-value">${escapeHtml(u.email||''  )}</div></div><div class="info-card"><div class="info-label">Role</div><div class="info-value"><span class="badge badge-role-${roleKey}">${escapeHtml(role.name)}</span><div style="margin-top:8px;font-size:13px;">${escapeHtml(role.desc)}</div></div></div><div class="info-card"><div class="info-label">Permissions</div><div class="info-value"><ul style="margin:0;padding-left:20px;font-size:14px;">${role.perms.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul></div></div><div class="info-card"><div class="info-label">Info</div><div class="info-value" style="font-size:13px;"><div>Created: ${escapeHtml(new Date(u.created_at).toLocaleString())}</div><div>Last Login: ${escapeHtml(u.last_login_at?new Date(u.last_login_at).toLocaleString():'Never')}</div></div></div></div>`;await ui.modal(`User: ${escapeHtml(u.username||'')}`,html,[{label:'Close',value:true}]);}}catch(e){ui.toast('Failed to load','error');}}
 async function deleteUser(id,name){const ok=await ui.confirm('Delete User',`Delete "${name}"?`);if(ok){try{const r=await csrfFetch('/api/rbac/users',{method:'POST',body:JSON.stringify({action:'delete',id:id})});const d=await r.json();if(d.success){ui.toast('Deleted','success');loadUsers();}else ui.toast(d.error||'Failed','error');}catch(e){ui.toast('Failed','error');}}}
-async function handleLogout(){if(!await ui.confirm('Logout','Are you sure?'))return;try{await csrfFetch('/api/auth/logout', {method:'POST'}
+async function handleLogout(){if(!await ui.confirm('Logout','Are you sure?'))return;try{const r=await csrfFetch('/api/auth/logout',{method:'POST'});if(r.ok){window.location.href='/login';return;}ui.toast('Logout failed','error');}catch(e){ui.toast('Logout failed','error');}}
 async function loadCurrentUser(){try{const r=await csrfFetch('/api/auth/session');const d=await r.json();if(d.success&&d.user)document.getElementById('currentUser').textContent=d.user.username;}catch(e){}}
 document.addEventListener('DOMContentLoaded',()=>{loadUsers();loadCurrentUser();showPermissionPreview('user');});
 async function showEditModal(id){try{var r=await csrfFetch('/api/rbac/users?id='+id);var d=await r.json();if(!d.success){ui.toast(d.error||'Failed','error');return;}var u=d.user||(d.users&&d.users.find(function(x){return x.id===id}));if(!u){ui.toast('User not found','error');return;}var roleOpts=Object.entries(ROLES).map(function(e){var k=e[0],rv=e[1];return '<div class="role-option" onclick="document.getElementById(\'edit_role_'+k+'\').checked=true"><input type="radio" name="edit_role" value="'+k+'" id="edit_role_'+k+'" '+(u.role===k?'checked':'')+'><label for="edit_role_'+k+'"><div class="role-name">'+rv.name+'</div></label></div>';}).join('');var html='<div style="max-width:600px;display:grid;gap:16px;"><div class="form-group"><label class="form-label">Username</label><input type="text" class="form-input" value="'+u.username+'" disabled style="opacity:0.5;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div><div class="form-group"><label class="form-label">Email</label><input type="email" id="edit_email" class="form-input" value="'+(u.email||'')+'" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div><div class="form-group"><label class="form-label">Role</label><div class="role-selector">'+roleOpts+'</div></div><div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;"><div class="form-group"><label class="form-label">Reset Password <span style="color:rgba(255,255,255,0.4)">(leave blank to keep)</span></label><input type="password" id="edit_password" class="form-input" placeholder="Min 8 chars" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div></div></div>';var ok=await ui.modal('Edit User: '+u.username,html,[{label:'Cancel',value:false},{label:'Save',value:true,primary:true}]);if(ok){var email=document.getElementById('edit_email').value;var role=document.querySelector('input[name="edit_role"]:checked');role=role?role.value:'';var pw=document.getElementById('edit_password').value;try{var body={action:'update',id:id,email:email,role:role};if(pw)body.password=pw;var res=await csrfFetch('/api/rbac/users',{method:'POST',body:JSON.stringify(body)});var rd=await res.json();if(rd.success){ui.toast('Updated','success');loadUsers();}else ui.toast(rd.error||'Failed','error');}catch(e2){ui.toast('Failed','error');}}}catch(e){ui.toast('Failed','error');}}
 async function showChangeOwnPassword(){var html='<div style="max-width:400px;display:grid;gap:16px;"><div class="form-group"><label class="form-label">Current Password</label><input type="password" id="own_cur" class="form-input" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div><div class="form-group"><label class="form-label">New Password</label><input type="password" id="own_new" class="form-input" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div><div class="form-group"><label class="form-label">Confirm</label><input type="password" id="own_conf" class="form-input" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;color:#fff;"></div></div>';var ok=await ui.modal('Change Password',html,[{label:'Cancel',value:false},{label:'Change',value:true,primary:true}]);if(ok){var c=document.getElementById('own_cur').value,n=document.getElementById('own_new').value,cf=document.getElementById('own_conf').value;if(n!==cf){ui.toast('Passwords do not match','error');return;}try{var r=await csrfFetch('/api/auth/change-password',{method:'POST',body:JSON.stringify({current_password:c,new_password:n})});var d=await r.json();if(d.success)ui.toast('Password changed','success');else ui.toast(d.error||'Failed','error');}catch(e){ui.toast('Failed','error');}}}
-var __groups_init=false;function init_groups(){if(__groups_init)return;__groups_init=true;// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
-
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
-}
-
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
-    }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
-}
-
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
+var __groups_init=false;function init_groups(){if(__groups_init)return;__groups_init=true;
 const ui = new DPlaneUI();
 
 async function loadGroups() {
@@ -1536,7 +832,7 @@ function renderGroups(groups) {
     
     const memberCount = group.members ? group.members.length : 0;
     const membersHtml = group.members && group.members.length > 0 
-      ? group.members.slice(0, 5).map(m => `<span class="member-badge"><span class="material-symbols-rounded" style="font-size:16px;">person</span>${m}</span>`).join('')
+      ? group.members.slice(0, 5).map(m => `<span class="member-badge"><span class="material-symbols-rounded" style="font-size:16px;">person</span>${escapeHtml(m)}</span>`).join('')
       + (group.members.length > 5 ? `<span class="member-badge">+${group.members.length - 5} more</span>` : '')
       : '<p style="color: rgba(255,255,255,0.4); font-size: 14px;">No members</p>';
     
@@ -1544,12 +840,12 @@ function renderGroups(groups) {
       <div class="group-header">
         <span class="material-symbols-rounded group-icon">group</span>
         <div class="group-info">
-          <div class="group-name">${group.name}</div>
-          <div class="group-desc">${group.description || 'No description'} • ${memberCount} member${memberCount !== 1 ? 's' : ''}</div>
+          <div class="group-name">${escapeHtml(group.name)}</div>
+          <div class="group-desc">${escapeHtml(group.description || 'No description')} • ${memberCount} member${memberCount !== 1 ? 's' : ''}</div>
         </div>
         <div style="display: flex; gap: 12px;">
           <button class="icon-btn" onclick="editGroup(${group.id})"><span class="material-symbols-rounded">edit</span></button>
-          <button class="icon-btn" onclick="deleteGroup(${group.id}, '${group.name.replace(/'/g, "\\'")}')" style="color: #ef4444;"><span class="material-symbols-rounded">delete</span></button>
+          <button class="icon-btn" onclick="deleteGroup(${group.id}, '"+JSON.stringify(group.name)+"')" style="color: #ef4444;"><span class="material-symbols-rounded">delete</span></button>
         </div>
       </div>
       <div class="group-members">${membersHtml}</div>
@@ -1595,7 +891,7 @@ async function editGroup(id) {
   ui.showLoading('Loading group...');
   
   try {
-    const response = await csrfFetch(`/api/rbac/groups&id=${id}`);
+    const response = await csrfFetch(`/api/rbac/groups?id=${id}`);
     const data = await response.json();
     ui.hideLoading();
     
@@ -1665,184 +961,7 @@ async function deleteGroup(id, name) {
 
 // Load groups on page load
 loadGroups();}
-var __rbac_init=false;function init_rbac(){if(__rbac_init)return;__rbac_init=true;// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
-
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
-}
-
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
-    }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
-}
-
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
+var __rbac_init=false;function init_rbac(){if(__rbac_init)return;__rbac_init=true;
 let roles = [];
         let permissions = [];
         let selectedRole = null;
@@ -1894,8 +1013,8 @@ let roles = [];
             grid.innerHTML = roles.map(role => `
                 <div class="role-card ${role.is_system ? 'system' : ''}" onclick="viewRole(${role.id})">
                     ${role.is_system ? '<div class="role-badge">SYSTEM</div>' : ''}
-                    <div class="role-name">${role.display_name}</div>
-                    <div class="role-description">${role.description || 'No description'}</div>
+                    <div class="role-name">${escapeHtml(role.display_name)}</div>
+                    <div class="role-description">${escapeHtml(role.description || 'No description')}</div>
                     <div class="role-stats">
                         <div class="role-stat">
                             <span class="material-icons">verified_user</span>
@@ -1958,8 +1077,8 @@ let roles = [];
                     <div class="permissions-grid">
                         ${perms.map(perm => `
                             <div class="permission-item">
-                                <span class="permission-label">${perm.display_name}</span>
-                                <span class="permission-action">${perm.action}</span>
+                                <span class="permission-label">${escapeHtml(perm.display_name)}</span>
+                                <span class="permission-action">${escapeHtml(perm.action)}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -2014,8 +1133,8 @@ let roles = [];
                                        data-permission-id="${perm.id}"
                                        ${perm.enabled ? 'checked' : ''}
                                        ${selectedRole.is_system ? 'disabled' : ''}>
-                                <span class="permission-label">${perm.display_name}</span>
-                                <span class="permission-action">${perm.action}</span>
+                                <span class="permission-label">${escapeHtml(perm.display_name)}</span>
+                                <span class="permission-action">${escapeHtml(perm.action)}</span>
                             </div>
                         `).join('')}
                     </div>
