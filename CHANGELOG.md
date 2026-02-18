@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## v2.2.0 (2026-02-18) — **"The Declarative Shift"**
+
+### ⚡ GitOps & NixOS Native
+
+D-PlaneOS v2.2.0 transforms the system into a fully declarative storage appliance. With the introduction of **Bidirectional Git-Sync** and **Native NixOS Flake support**, the configuration is decoupled from the host. Your NAS is no longer a "Pet," but "Cattle"—instantly reproducible from a Git repository at any time.
+
+### Added
+
+- **Bidirectional Git-Sync** — `POST /api/git/sync`, `GET /api/git/status` (Mirrors the entire system state, including Docker stacks, ZFS dataset hierarchy, and user permissions to a private Git repo; UI changes trigger automatic commits).
+- **Native NixOS Flake Support** — Seamless integration into the Nix ecosystem via `flake.nix`. D-PlaneOS is now installable and manageable as a standard Nix package.
+- **Hard Systemd Boot-Gate** — `dplaneos-zfs-mount-wait.service` (Blocks Docker and the D-PlaneOS daemon until all ZFS pools are verified, mounted, and writable—eliminating boot-time race conditions).
+- **OS-Agnostic Core** — Refactored abstraction layer making D-PlaneOS indifferent to the host OS, whether running on NixOS (read-only store), Debian, or Ubuntu.
+- **NixOS Generation Manager** — `GET /api/nixos/generations`, `POST /api/nixos/rollback` (Manage system rollbacks directly from the D-PlaneOS UI—exclusive to NixOS).
+- **Adaptive ARC Limiter** — Intelligent ZFS cache control in the Nix config, protecting non-ECC systems (e.g., 32GB setups) from memory corruption risks by enforcing strict cache limits.
+
+### Fixed
+
+- **SQL FTS5 Trigger Bug** — Full fix for database triggers; search indices for files and logs now update without performance degradation or deadlocks during bulk operations.
+- **ZFS Dataset Discovery** — Fixed an edge case where deeply nested datasets were not correctly listed in the UI after a pool import.
+- **Git SSH-Key Handling** — Improved `GIT_ASKPASS` integration; SSH keys for syncing are now securely loaded from the protected D-PlaneOS Vault, leaving no traces in environment variables.
+
+### Changed
+
+- **Binary Size** — Optimized Go build process; static binary reduced from 8 MB to ~7.2 MB despite new features.
+- **Logging** — Switched to structured JSON logging for better integration with `journalctl` and external log aggregators.
+- **Architecture** — Complete decoupling of application logic from host configuration.
+
+### Security
+
+- **Immutability Enforcement** — On NixOS, the daemon is restricted from modifying the system root, operating strictly within `/var/lib/dplaneos`.
+- **Credential Masking** — Enhanced masking of sensitive data in audit logs during Git push/pull operations.
+
+### No Breaking Changes
+
+Drop-in replacement for v2.1.0. Same database schema, same daemon flags, same frontend.
+
+---
+
 ## v2.1.0 (2026-02-15) — **"ZFS-Docker Integration"**
 
 ### ⚡ Safe Container Updates (Killer Feature)
