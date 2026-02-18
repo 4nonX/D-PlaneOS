@@ -1,4 +1,4 @@
-# D-PlaneOS v2.1.0 — Security Policy
+# D-PlaneOS v2.2.0 — Security Policy
 
 ## Supported Versions
 
