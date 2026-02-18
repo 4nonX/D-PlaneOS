@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════
-#  D-PlaneOS v2.0.0 — NixOS Configuration (Flake Version)
+#  D-PlaneOS v3.0.0 — NixOS Configuration (Flake Version)
 # ═══════════════════════════════════════════════════════════════
 #
 #  Installation:

@@ -44,7 +44,7 @@ sudo nix-env --list-generations --profile /nix/var/nix/profiles/system
 cd /etc/nixos
 sudo git init
 sudo git add .
-sudo git commit -m "D-PlaneOS v2.0.0 initial setup"
+sudo git commit -m "D-PlaneOS v3.0.0 initial setup"
 
 # After any change:
 sudo git add -A && sudo git commit -m "description of change"
@@ -77,7 +77,7 @@ For the standalone configuration (not needed for flake):
 
 ```bash
 # Source hash:
-nix-shell -p nix-prefetch-github --run "nix-prefetch-github 4nonX dplaneos --rev v2.0.0"
+nix-shell -p nix-prefetch-github --run "nix-prefetch-github 4nonX dplaneos --rev v3.0.0"
 
 # Vendor hash (Go dependencies):
 # Set vendorHash = ""; then run nixos-rebuild switch

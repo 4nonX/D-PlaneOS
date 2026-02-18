@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════
-#  D-PlaneOS v2.0.0 — NixOS Configuration (Standalone)
+#  D-PlaneOS v3.0.0 — NixOS Configuration (Standalone)
 # ═══════════════════════════════════════════════════════════════
 #
 #  Use this if you don't want to use Flakes.
@@ -34,14 +34,14 @@ let
   # Go daemon (dplaned)
   dplaned = pkgs.buildGoModule rec {
     pname = "dplaned";
-    version = "2.0.0";
+    version = "3.0.0";
 
     src = pkgs.fetchFromGitHub {
       owner = "4nonX";
       repo = "dplaneos";
       rev = "v${version}";
       # Get this hash with:
-      #   nix-shell -p nix-prefetch-github --run "nix-prefetch-github 4nonX dplaneos --rev v2.0.0"
+      #   nix-shell -p nix-prefetch-github --run "nix-prefetch-github 4nonX dplaneos --rev v3.0.0"
       hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     };
 
@@ -64,7 +64,7 @@ let
   # Frontend (static website)
   dplaneos-frontend = pkgs.stdenv.mkDerivation rec {
     pname = "dplaneos-frontend";
-    version = "2.0.0";
+    version = "3.0.0";
 
     src = pkgs.fetchFromGitHub {
       owner = "4nonX";
@@ -83,7 +83,7 @@ let
   # Recovery tool for password reset etc.
   dplaneos-recovery = pkgs.writeShellScriptBin "dplaneos-recovery" ''
     DB="/var/lib/dplaneos/dplaneos.db"
-    echo "D-PlaneOS Recovery CLI v2.0.0"
+    echo "D-PlaneOS Recovery CLI v3.0.0"
     echo ""
     echo "1) Reset admin password"
     echo "2) Show system status"
@@ -93,16 +93,17 @@ let
     case $choice in
       1)
         read -sp "New admin password: " pw; echo
-        HASH=$(${pkgs.apacheHttpd}/bin/htpasswd -nbBC 10 "" "$pw" | cut -d: -f2)
-        ${pkgs.sqlite}/bin/sqlite3 "$DB" "UPDATE users SET password_hash='$HASH' WHERE username='admin';"
-        echo "Admin password reset."
+        HASH=$(${pkgs.python3.withPackages (p: [p.bcrypt])}/bin/python3 -c "import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt(10)).decode())" "$pw")
+        ${pkgs.sqlite}/bin/sqlite3 "$DB" "UPDATE users SET password_hash='$HASH', must_change_password=1 WHERE username='admin';"
+        echo "Admin password reset. You must change it on next login."
         ;;
       2)
-        echo "Database: $(du -h $DB)"
-        echo "Sessions: $(${pkgs.sqlite}/bin/sqlite3 "$DB" "SELECT COUNT(*) FROM sessions;")"
-        echo "Users: $(${pkgs.sqlite}/bin/sqlite3 "$DB" "SELECT COUNT(*) FROM users;")"
+        echo "Database: $(du -h $DB 2>/dev/null || echo 'not found')"
+        echo "Sessions: $(${pkgs.sqlite}/bin/sqlite3 "$DB" "SELECT COUNT(*) FROM sessions;" 2>/dev/null || echo '0')"
+        echo "Users: $(${pkgs.sqlite}/bin/sqlite3 "$DB" "SELECT COUNT(*) FROM users;" 2>/dev/null || echo '0')"
         ;;
       3)
+        mkdir -p /var/lib/dplaneos/backups
         BACKUP="/var/lib/dplaneos/backups/dplaneos-$(date +%Y%m%d-%H%M%S).db"
         ${pkgs.sqlite}/bin/sqlite3 "$DB" ".backup $BACKUP"
         echo "Backup saved: $BACKUP"
