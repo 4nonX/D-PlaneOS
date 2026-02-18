@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"dplaned/internal/audit"
+	"dplaned/internal/netlinkx"
 	"dplaned/internal/security"
 )
 
@@ -119,28 +120,38 @@ func (h *SystemHandler) GetNetworkInfo(w http.ResponseWriter, r *http.Request) {
 
 func (h *SystemHandler) handleNetworkGet(w http.ResponseWriter, r *http.Request, user string) {
 	start := time.Now()
-	addrOut, err := executeCommand("/usr/sbin/ip", []string{"-j", "addr", "show"})
+
+	// Get addresses via netlinkx (reads /proc/net — no exec, no injection surface)
+	addrs, addrErr := netlinkx.AddrList("")
 	duration := time.Since(start)
-	audit.LogCommand(audit.LevelInfo, user, "ip_addr", nil, err == nil, duration, err)
-	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error(), "duration_ms": duration.Milliseconds()})
+	audit.LogCommand(audit.LevelInfo, user, "ip_addr", nil, addrErr == nil, duration, addrErr)
+	if addrErr != nil {
+		respondOK(w, map[string]interface{}{"success": false, "error": addrErr.Error(), "duration_ms": duration.Milliseconds()})
 		return
 	}
 
-	var interfaces []map[string]interface{}
-	if err := json.Unmarshal([]byte(addrOut), &interfaces); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": "Failed to parse network data", "duration_ms": duration.Milliseconds()})
-		return
+	// Convert to map slice expected by frontend
+	interfaces := make([]map[string]interface{}, 0, len(addrs))
+	for _, a := range addrs {
+		interfaces = append(interfaces, map[string]interface{}{
+			"addr":  a.IP.String(),
+			"cidr":  a.CIDR.String(),
+		})
 	}
 
-	routesOut, routeErr := executeCommand("/usr/sbin/ip", []string{"-j", "route", "show"})
-	var routes []map[string]interface{}
+	// Get routes via netlinkx (reads /proc/net/route — no exec)
+	nlRoutes, routeErr := netlinkx.RouteList()
+	routes := make([]map[string]interface{}, 0, len(nlRoutes))
 	if routeErr != nil {
 		log.Printf("failed to read routes: %v", routeErr)
-		routes = []map[string]interface{}{}
-	} else if err := json.Unmarshal([]byte(routesOut), &routes); err != nil {
-		log.Printf("failed to parse routes json: %v", err)
-		routes = []map[string]interface{}{}
+	} else {
+		for _, rt := range nlRoutes {
+			routes = append(routes, map[string]interface{}{
+				"dst":  rt.Dst.String(),
+				"via":  rt.Gateway.String(),
+				"dev":  rt.Iface,
+			})
+		}
 	}
 
 	dns := map[string]interface{}{"nameservers": []string{}, "search": []string{}}
@@ -257,14 +268,14 @@ func (h *SystemHandler) handleNetworkPost(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		// Use "addr replace" (atomic, no lockout risk from flush+add)
-		_, err := executeCommand("/usr/sbin/ip", []string{"addr", "replace", address, "dev", iface})
+		// Use netlinkx.AddrReplace (atomic RTM_NEWADDR — no exec, no injection surface)
+		err := netlinkx.AddrReplace(iface, address)
 		if err == nil && gateway != "" {
 			if !isValidIPOrCIDR(gateway) {
 				respondErrorSimple(w, "Invalid gateway", http.StatusBadRequest)
 				return
 			}
-			_, _ = executeCommand("/usr/sbin/ip", []string{"route", "replace", "default", "via", strings.Split(gateway, "/")[0], "dev", iface})
+			_ = netlinkx.RouteReplace("default", strings.Split(gateway, "/")[0], iface)
 		}
 		if err != nil {
 			respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
@@ -287,23 +298,26 @@ func (h *SystemHandler) handleNetworkPost(w http.ResponseWriter, r *http.Request
 			respondErrorSimple(w, "Invalid gateway", http.StatusBadRequest)
 			return
 		}
-		var args []string
-		if action == "add" {
-			args = []string{"route", "add", destination}
-			if gateway != "" {
-				args = append(args, "via", strings.Split(gateway, "/")[0])
-			}
-			if ifaceRe.MatchString(iface) {
-				args = append(args, "dev", iface)
-			}
+		var routeErr error
+		gwStr := strings.Split(gateway, "/")[0]
+		if ifaceRe.MatchString(iface) {
+			routeErr = netlinkx.RouteReplace(destination, gwStr, iface)
+		} else if gateway != "" {
+			routeErr = netlinkx.RouteReplace(destination, gwStr, "")
 		} else {
-			args = []string{"route", "del", destination}
-			if gateway != "" {
-				args = append(args, "via", strings.Split(gateway, "/")[0])
-			}
+			routeErr = fmt.Errorf("interface or gateway required for route add")
 		}
-		if _, err := executeCommand("/usr/sbin/ip", args); err != nil {
-			respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		if action == "delete" {
+			// route del: fall back to exec — RTM_DELROUTE needs full route match
+			// which requires knowing the exact table entry; exec is safer here
+			delArgs := []string{"route", "del", destination}
+			if gateway != "" {
+				delArgs = append(delArgs, "via", gwStr)
+			}
+			_, routeErr = executeCommand("/usr/sbin/ip", delArgs)
+		}
+		if routeErr != nil {
+			respondOK(w, map[string]interface{}{"success": false, "error": routeErr.Error()})
 			return
 		}
 		respondOK(w, map[string]interface{}{"success": true})

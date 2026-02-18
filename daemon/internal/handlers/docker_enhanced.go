@@ -1,15 +1,18 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
-	"regexp"
-
 	"dplaned/internal/audit"
+	"dplaned/internal/cmdutil"
+	"dplaned/internal/dockerclient"
 )
 
 // ═══════════════════════════════════════════════════════════════
@@ -20,9 +23,10 @@ import (
 // POST /api/docker/update
 func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ContainerName string `json:"container_name"`
-		Image         string `json:"image"`          // e.g. "lscr.io/linuxserver/plex:latest"
-		ZfsDataset    string `json:"zfs_dataset"`     // e.g. "tank/docker" (optional, auto-detected)
+		ContainerName      string `json:"container_name"`
+		Image              string `json:"image"`                // e.g. "lscr.io/linuxserver/plex:latest"
+		ZfsDataset         string `json:"zfs_dataset"`          // e.g. "tank/docker"
+		HealthCheckSeconds int    `json:"health_check_seconds"` // 0 = use default (30s) (optional, auto-detected)
 		SkipSnapshot  bool   `json:"skip_snapshot"`   // skip ZFS snapshot
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -44,6 +48,7 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 	steps := []UpdateStep{}
 	startTime := time.Now()
 	var snapshotName string
+	dockerClient := dockerclient.New()
 
 	// Step 1: ZFS Snapshot (if dataset provided and not skipped)
 	if req.ZfsDataset != "" && !req.SkipSnapshot {
@@ -77,10 +82,10 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 	// Step 2: Pull new image
 	image := req.Image
 	if image == "" {
-		// Get image from running container
-		imgOut, err := executeCommand("/usr/bin/docker", []string{
-			"inspect", "--format", "{{.Config.Image}}", req.ContainerName,
-		})
+		// Get image from running container via Docker API
+		ctxDetect, cancelDetect := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancelDetect()
+		detail, err := dockerClient.Inspect(ctxDetect, req.ContainerName)
 		if err != nil {
 			steps = append(steps, UpdateStep{"detect_image", false, err.Error()})
 			respondOK(w, UpdateResult{
@@ -90,11 +95,12 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		image = strings.TrimSpace(imgOut)
+		image = detail.Config.Image
 	}
 
-	_, err := executeCommand("/usr/bin/docker", []string{"pull", image})
-	if err != nil {
+	ctxPull, cancelPull := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancelPull()
+	if err := dockerClient.PullImage(ctxPull, image); err != nil {
 		steps = append(steps, UpdateStep{"pull", false, err.Error()})
 		respondOK(w, UpdateResult{
 			Success:  false,
@@ -107,12 +113,12 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	steps = append(steps, UpdateStep{"pull", true, image})
 
-	// Step 3: Get current container config (for recreate)
-	configOut, err := executeCommand("/usr/bin/docker", []string{
-		"inspect", "--format", "json", req.ContainerName,
-	})
-	if err != nil {
-		steps = append(steps, UpdateStep{"inspect", false, err.Error()})
+	// Step 3: Inspect current config (preserved for recovery reference)
+	ctxInspect, cancelInspect := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancelInspect()
+	_, inspectErr := dockerClient.Inspect(ctxInspect, req.ContainerName)
+	if inspectErr != nil {
+		steps = append(steps, UpdateStep{"inspect", false, inspectErr.Error()})
 		respondOK(w, UpdateResult{
 			Success: false, Steps: steps,
 			Error:    "Failed to inspect container config",
@@ -122,14 +128,16 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	steps = append(steps, UpdateStep{"inspect", true, "config saved"})
-	_ = configOut // Config preserved for potential manual recovery
 
 	// Step 4: Stop container
-	_, err = executeCommand("/usr/bin/docker", []string{"stop", req.ContainerName})
-	if err != nil {
+	ctxStop, cancelStop := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancelStop()
+	if err := dockerClient.Stop(ctxStop, req.ContainerName, 10); err != nil {
 		steps = append(steps, UpdateStep{"stop", false, err.Error()})
 		// Try to restart on failure
-		executeCommand("/usr/bin/docker", []string{"start", req.ContainerName})
+		ctxRecover, cancelRecover := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancelRecover()
+		_ = dockerClient.Start(ctxRecover, req.ContainerName)
 		respondOK(w, UpdateResult{
 			Success: false, Steps: steps,
 			Error:    "Failed to stop container, restarted original",
@@ -140,13 +148,11 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	steps = append(steps, UpdateStep{"stop", true, ""})
 
-	// Step 5: Restart with new image
-	// For simple containers, docker just needs start after pull
-	// The new image is used on next docker-compose up or manual recreate
-	_, err = executeCommand("/usr/bin/docker", []string{"start", req.ContainerName})
-	if err != nil {
+	// Step 5: Start with new image
+	ctxStart, cancelStart := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancelStart()
+	if err := dockerClient.Start(ctxStart, req.ContainerName); err != nil {
 		steps = append(steps, UpdateStep{"start", false, err.Error()})
-		// Container failed to start — this is where ZFS rollback shines
 		respondOK(w, UpdateResult{
 			Success: false, Steps: steps,
 			Error: fmt.Sprintf("Container failed to start after update. "+
@@ -159,19 +165,23 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	steps = append(steps, UpdateStep{"start", true, ""})
 
-	// Step 6: Quick health check (wait 5s, check if still running)
-	time.Sleep(5 * time.Second)
-	statusOut, err := executeCommand("/usr/bin/docker", []string{
-		"inspect", "--format", "{{.State.Running}}", req.ContainerName,
-	})
-	running := strings.TrimSpace(statusOut) == "true"
+	// Step 6: Health check via Docker API — respects HEALTHCHECK, configurable timeout
+	hcTimeout := req.HealthCheckSeconds
+	if hcTimeout <= 0 {
+		hcTimeout = 30
+	}
+	ctxHC, cancelHC := context.WithTimeout(r.Context(), time.Duration(hcTimeout+5)*time.Second)
+	defer cancelHC()
+	running, hcErr := dockerClient.WaitForHealthy(ctxHC, req.ContainerName,
+		time.Duration(hcTimeout)*time.Second)
 
-	if err != nil || !running {
-		steps = append(steps, UpdateStep{"health_check", false, "container not running after 5s"})
+	if hcErr != nil || !running {
+		steps = append(steps, UpdateStep{"health_check", false,
+			fmt.Sprintf("container not healthy after %ds: %v", hcTimeout, hcErr)})
 		respondOK(w, UpdateResult{
 			Success: false, Steps: steps,
-			Error: fmt.Sprintf("Container crashed after update. "+
-				"Rollback data with: zfs rollback %s", snapshotName),
+			Error: fmt.Sprintf("Container not healthy after update (waited %ds). "+
+				"Rollback data with: zfs rollback %s. Tip: increase health_check_seconds for slow-starting apps.", hcTimeout, snapshotName),
 			Rollback: snapshotName,
 			Duration: time.Since(startTime).Milliseconds(),
 		})
@@ -226,14 +236,17 @@ func (h *DockerHandler) PullImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	output, err := executeCommand("/usr/bin/docker", []string{"pull", req.Image})
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	dockerClient := dockerclient.New()
+	err := dockerClient.PullImage(ctx, req.Image)
 	duration := time.Since(start)
 
 	if err != nil {
 		respondOK(w, map[string]interface{}{
-			"success": false,
-			"error":   fmt.Sprintf("Pull failed: %v", err),
-			"output":  output,
+			"success":     false,
+			"error":       fmt.Sprintf("Pull failed: %v", err),
+			"duration_ms": duration.Milliseconds(),
 		})
 		return
 	}
@@ -241,7 +254,6 @@ func (h *DockerHandler) PullImage(w http.ResponseWriter, r *http.Request) {
 	respondOK(w, map[string]interface{}{
 		"success":     true,
 		"image":       req.Image,
-		"output":      output,
 		"duration_ms": duration.Milliseconds(),
 	})
 }
@@ -268,17 +280,12 @@ func (h *DockerHandler) RemoveContainer(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	args := []string{"rm"}
-	if req.Force {
-		args = append(args, "-f")
-	}
-	if req.RemoveVolumes {
-		args = append(args, "-v")
-	}
-	args = append(args, req.ContainerName)
+	// args built by dockerclient.Remove
 
-	_, err := executeCommand("/usr/bin/docker", args)
-	if err != nil {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	dockerClient := dockerclient.New()
+	if err := dockerClient.Remove(ctx, req.ContainerName, req.Force, req.RemoveVolumes); err != nil {
 		respondOK(w, map[string]interface{}{
 			"success": false,
 			"error":   err.Error(),
@@ -299,10 +306,9 @@ func (h *DockerHandler) RemoveContainer(w http.ResponseWriter, r *http.Request) 
 // ContainerStats returns CPU, memory, network stats for all running containers
 // GET /api/docker/stats
 func (h *DockerHandler) ContainerStats(w http.ResponseWriter, r *http.Request) {
-	output, err := executeCommand("/usr/bin/docker", []string{
+	output, err := cmdutil.RunFast("/usr/bin/docker",
 		"stats", "--no-stream", "--format",
-		`{"name":"{{.Name}}","cpu":"{{.CPUPerc}}","memory":"{{.MemUsage}}","mem_perc":"{{.MemPerc}}","net_io":"{{.NetIO}}","block_io":"{{.BlockIO}}","pids":"{{.PIDs}}"}`,
-	})
+		`{"name":"{{.Name}}","cpu":"{{.CPUPerc}}","memory":"{{.MemUsage}}","mem_perc":"{{.MemPerc}}","net_io":"{{.NetIO}}","block_io":"{{.BlockIO}}","pids":"{{.PIDs}}"}`)
 	if err != nil {
 		respondOK(w, map[string]interface{}{
 			"success":    true,
@@ -313,7 +319,7 @@ func (h *DockerHandler) ContainerStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var stats []map[string]interface{}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	for _, line := range lines {
 		if line == "" {
 			continue
@@ -347,32 +353,33 @@ func (h *DockerHandler) ComposeUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Path == "" || strings.Contains(req.Path, "..") {
-		respondErrorSimple(w, "Invalid path", http.StatusBadRequest)
+	cleanPath, err := validateComposeDirPath(req.Path)
+	if err != nil {
+		respondErrorSimple(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	args := []string{"compose", "-f", req.Path + "/docker-compose.yml", "up"}
+	args := []string{"compose", "-f", cleanPath + "/docker-compose.yml", "up"}
 	if req.Detach {
 		args = append(args, "-d")
 	}
 
 	start := time.Now()
-	output, err := executeCommand("/usr/bin/docker", args)
+	output, err := cmdutil.RunSlow("/usr/bin/docker", args...)
 	duration := time.Since(start)
 
 	if err != nil {
 		respondOK(w, map[string]interface{}{
 			"success": false,
 			"error":   err.Error(),
-			"output":  output,
+			"output":  string(output),
 		})
 		return
 	}
 
 	respondOK(w, map[string]interface{}{
 		"success":     true,
-		"output":      output,
+		"output":      string(output),
 		"duration_ms": duration.Milliseconds(),
 	})
 }
@@ -389,44 +396,45 @@ func (h *DockerHandler) ComposeDown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Path == "" || strings.Contains(req.Path, "..") {
-		respondErrorSimple(w, "Invalid path", http.StatusBadRequest)
+	cleanPath, err := validateComposeDirPath(req.Path)
+	if err != nil {
+		respondErrorSimple(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	args := []string{"compose", "-f", req.Path + "/docker-compose.yml", "down"}
+	args := []string{"compose", "-f", cleanPath + "/docker-compose.yml", "down"}
 	if req.RemoveVolumes {
 		args = append(args, "-v")
 	}
 
-	output, err := executeCommand("/usr/bin/docker", args)
+	output, err := cmdutil.RunMedium("/usr/bin/docker", args...)
 	if err != nil {
 		respondOK(w, map[string]interface{}{
 			"success": false,
 			"error":   err.Error(),
-			"output":  output,
+			"output":  string(output),
 		})
 		return
 	}
 
 	respondOK(w, map[string]interface{}{
 		"success": true,
-		"output":  output,
+		"output":  string(output),
 	})
 }
 
 // ComposeStatus shows status of a docker-compose stack
 // GET /api/docker/compose/status?path=/opt/stacks/plex
 func (h *DockerHandler) ComposeStatus(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Query().Get("path")
-	if path == "" || strings.Contains(path, "..") {
-		respondErrorSimple(w, "Invalid path", http.StatusBadRequest)
+	rawPath := r.URL.Query().Get("path")
+	path, pathErr := validateComposeDirPath(rawPath)
+	if pathErr != nil {
+		respondErrorSimple(w, "Invalid path: "+pathErr.Error(), http.StatusBadRequest)
 		return
 	}
 
-	output, err := executeCommand("/usr/bin/docker", []string{
-		"compose", "-f", path + "/docker-compose.yml", "ps", "--format", "json",
-	})
+	output, err := cmdutil.RunFast("/usr/bin/docker",
+		"compose", "-f", path+"/docker-compose.yml", "ps", "--format", "json")
 	if err != nil {
 		respondOK(w, map[string]interface{}{
 			"success":    true,
@@ -437,7 +445,7 @@ func (h *DockerHandler) ComposeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var services []map[string]interface{}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	for _, line := range lines {
 		if line == "" {
 			continue
@@ -463,4 +471,46 @@ var validContainerNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.\-]*$`)
 
 func isValidContainerName(name string) bool {
 	return len(name) >= 1 && len(name) <= 128 && validContainerNameRe.MatchString(name)
+}
+
+// waitForHealthy is implemented in internal/dockerclient — use dockerClient.WaitForHealthy()
+
+
+// validateComposeDirPath validates a directory path for docker compose operations.
+// Rules:
+//   - Must be an absolute path
+//   - No null bytes
+//   - After filepath.Clean, must still be absolute (no traversal to relative)
+//   - Must be under one of the allowed base directories
+//
+// Allowed bases: /opt, /srv, /home, /var/lib/dplaneos/git-stacks, /mnt, /data, /tank, /pool
+// This prevents arbitrary file access outside of typical Docker stack directories.
+func validateComposeDirPath(p string) (string, error) {
+	if strings.ContainsRune(p, 0) {
+		return "", fmt.Errorf("null byte in path")
+	}
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("must be an absolute path")
+	}
+	clean := filepath.Clean(p)
+	if !filepath.IsAbs(clean) {
+		return "", fmt.Errorf("path traversal detected")
+	}
+
+	allowedPrefixes := []string{
+		"/opt/",
+		"/srv/",
+		"/home/",
+		"/var/lib/dplaneos/",
+		"/mnt/",
+		"/data/",
+		"/tank/",
+		"/pool/",
+	}
+	for _, prefix := range allowedPrefixes {
+		if strings.HasPrefix(clean+"/", prefix) || clean == strings.TrimSuffix(prefix, "/") {
+			return clean, nil
+		}
+	}
+	return "", fmt.Errorf("path must be under /opt, /srv, /home, /var/lib/dplaneos, /mnt, /data, /tank, or /pool")
 }

@@ -1,13 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"regexp"
+	"time"
 
-	"dplaned/internal/cmdutil"
+	"dplaned/internal/dockerclient"
 )
 
-// HandleDockerLogs returns logs for a specific container
+// ContainerLogs returns recent logs for a container.
 // GET /api/docker/logs?container=NAME&lines=100
 func (h *DockerHandler) ContainerLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -21,7 +23,6 @@ func (h *DockerHandler) ContainerLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate container name (alphanumeric, dash, underscore, dot)
 	validName := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 	if !validName.MatchString(containerName) {
 		respondErrorSimple(w, "Invalid container name", http.StatusBadRequest)
@@ -29,21 +30,24 @@ func (h *DockerHandler) ContainerLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lines := r.URL.Query().Get("lines")
-	if lines == "" {
-		lines = "200"
-	}
-	// Validate lines is a number
 	validLines := regexp.MustCompile(`^\d{1,5}$`)
 	if !validLines.MatchString(lines) {
 		lines = "200"
 	}
 
-	output, err := cmdutil.RunMedium("/usr/bin/docker", "logs", "--tail", lines, containerName)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	logs, err := h.docker.Logs(ctx, containerName, dockerclient.LogOptions{
+		Stdout: true,
+		Stderr: true,
+		Tail:   lines,
+	})
 	if err != nil {
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"success": false,
 			"error":   err.Error(),
-			"logs":    string(output),
+			"logs":    "",
 		})
 		return
 	}
@@ -51,6 +55,6 @@ func (h *DockerHandler) ContainerLogs(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success":   true,
 		"container": containerName,
-		"logs":      string(output),
+		"logs":      logs,
 	})
 }

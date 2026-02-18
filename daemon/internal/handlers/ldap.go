@@ -28,6 +28,7 @@ type ldapResp struct {
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data,omitempty"`
 	Error   string      `json:"error,omitempty"`
+	Warning string      `json:"warning,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, code int, resp ldapResp) {
@@ -174,7 +175,11 @@ func (h *LDAPHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 		User: r.Header.Get("X-User"), Success: true,
 		Metadata: map[string]interface{}{"enabled": req.Enabled, "server": req.Server},
 	})
-	writeJSON(w, 200, ldapResp{Success: true})
+	warning := ""
+	if req.UseTLS == 0 {
+		warning = "TLS is disabled — LDAP credentials will be transmitted in plaintext. Enable TLS for production use."
+	}
+	writeJSON(w, 200, ldapResp{Success: true, Warning: warning})
 }
 
 // ============================================================

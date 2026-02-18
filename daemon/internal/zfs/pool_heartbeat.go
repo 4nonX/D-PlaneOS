@@ -32,6 +32,14 @@ type PoolHeartbeat struct {
 	stopChan      chan struct{}
 	// Optional callback for critical errors (e.g., Telegram alerts)
 	onCriticalError func(poolName string, err error, details map[string]string)
+
+	// When true: run `systemctl stop docker` if pool goes SUSPENDED/UNAVAIL/read-only.
+	// This prevents containers from writing to the bare mountpoint directory on the
+	// root filesystem while ZFS is offline — the same race that the boot gate prevents.
+	StopDockerOnFailure bool
+
+	// Track whether we already stopped docker in this failure window (avoid repeating)
+	dockerStopped bool
 }
 
 func NewPoolHeartbeat(poolName string, mountPoint string, checkInterval time.Duration) *PoolHeartbeat {
@@ -95,6 +103,7 @@ func (ph *PoolHeartbeat) performCheck() {
 				"Status": "SUSPENDED/UNAVAIL",
 				"Action": "Check pool status immediately",
 			})
+			ph.maybeStopDocker("SUSPENDED/UNAVAIL")
 		}
 		
 		ph.lastError = newErr
@@ -115,6 +124,7 @@ func (ph *PoolHeartbeat) performCheck() {
 				"Error":  "Write failed",
 				"Action": "Pool may be read-only or suspended",
 			})
+			ph.maybeStopDocker("read-only/write-failed")
 		}
 		
 		ph.lastError = newErr
@@ -136,6 +146,7 @@ func (ph *PoolHeartbeat) performCheck() {
 
 	ph.lastSuccess = time.Now()
 	ph.lastError = nil
+	ph.dockerStopped = false // pool recovered — reset guard
 }
 
 func (ph *PoolHeartbeat) GetStatus() (time.Time, error) {
@@ -222,6 +233,26 @@ func (ph *PoolHeartbeat) SetErrorCallback(callback func(poolName string, err err
 	ph.mu.Lock()
 	defer ph.mu.Unlock()
 	ph.onCriticalError = callback
+}
+
+// maybeStopDocker stops the Docker service if StopDockerOnFailure is enabled.
+// Called when a ZFS pool goes SUSPENDED, UNAVAIL, or read-only during runtime.
+// This prevents containers from writing to empty mountpoint directories on the
+// root filesystem while ZFS is offline.
+//
+// Guard: only fires once per failure window (resets on pool recovery).
+func (ph *PoolHeartbeat) maybeStopDocker(reason string) {
+	if !ph.StopDockerOnFailure || ph.dockerStopped {
+		return
+	}
+	ph.dockerStopped = true
+	log.Printf("CRITICAL: ZFS pool %s failure (%s) — stopping Docker to prevent root-FS data loss", ph.poolName, reason)
+	cmd := exec.Command("systemctl", "stop", "docker")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		log.Printf("ERROR: Failed to stop Docker after pool failure: %v — %s", err, strings.TrimSpace(string(out)))
+	} else {
+		log.Printf("WARNING: Docker stopped due to pool failure. Restart when pool is healthy: systemctl start docker")
+	}
 }
 
 // triggerAlert calls the error callback if set

@@ -88,27 +88,70 @@ func (bl *BufferedLogger) Stop() {
 	close(bl.stopChan)
 }
 
-// Log adds an event to the buffer
+// SecurityActions lists action strings that must bypass the buffer and write
+// directly to SQLite. These events must never be lost on crash or SIGKILL.
+// Callers can also set event.Critical = true to force direct write.
+var SecurityActions = map[string]bool{
+	"login":           true,
+	"login_failed":    true,
+	"logout":          true,
+	"auth_failed":     true,
+	"permission_denied": true,
+	"user_created":    true,
+	"user_deleted":    true,
+	"password_changed": true,
+	"token_created":   true,
+	"token_revoked":   true,
+}
+
+// Log adds an event to the buffer.
+// Security events (auth, permission) bypass the buffer and are written directly
+// to SQLite to guarantee they survive a hard crash or SIGKILL.
 //
 // Thread-safe: Can be called from multiple goroutines
 func (bl *BufferedLogger) Log(event AuditEvent) error {
-	bl.bufferMutex.Lock()
-	defer bl.bufferMutex.Unlock()
-
-	// Add to buffer
-	bl.buffer = append(bl.buffer, event)
-
-	// Check if buffer is full
-	if len(bl.buffer) >= bl.maxBuffer {
-		// Flush immediately if buffer is full
-		// Unlock first to avoid deadlock
-		bl.bufferMutex.Unlock()
-		err := bl.Flush()
-		bl.bufferMutex.Lock()
-		return err
+	// Security-critical events skip the buffer entirely
+	if SecurityActions[event.Action] {
+		return bl.writeDirect([]AuditEvent{event})
 	}
 
+	bl.bufferMutex.Lock()
+	bl.buffer = append(bl.buffer, event)
+	needFlush := len(bl.buffer) >= bl.maxBuffer
+	bl.bufferMutex.Unlock()
+
+	// Flush outside the lock — Flush() manages its own locking.
+	// No defer here: we always unlock above, cleanly, before any external call.
+	if needFlush {
+		return bl.Flush()
+	}
 	return nil
+}
+
+// writeDirect writes events synchronously to SQLite, bypassing the buffer.
+// Used for security events that must not be lost on crash.
+func (bl *BufferedLogger) writeDirect(events []AuditEvent) error {
+	tx, err := bl.db.Begin()
+	if err != nil {
+		return fmt.Errorf("audit direct write: begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT INTO audit_logs
+		(timestamp, user, action, resource, details, ip_address, success)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("audit direct write: prepare: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, e := range events {
+		_, err := stmt.Exec(e.Timestamp, e.User, e.Action, e.Resource, e.Details, e.IPAddress, e.Success)
+		if err != nil {
+			log.Printf("audit direct write: exec: %v", err)
+		}
+	}
+	return tx.Commit()
 }
 
 // Flush writes all buffered events to SQLite in a single transaction

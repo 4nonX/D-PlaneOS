@@ -57,6 +57,11 @@ func (h *ReplicationHandler) ReplicateToRemote(w http.ResponseWriter, r *http.Re
 	if req.RemoteUser == "" {
 		req.RemoteUser = "root"
 	}
+	// Validate RemoteUser: only alphanumeric, dots, dashes, underscores (no shell chars)
+	if !isValidSSHUser(req.RemoteUser) {
+		respondErrorSimple(w, "Invalid characters in remote user", http.StatusBadRequest)
+		return
+	}
 	if req.RemotePort == 0 {
 		req.RemotePort = 22
 	}
@@ -205,6 +210,11 @@ func (h *ReplicationHandler) TestRemoteConnection(w http.ResponseWriter, r *http
 	if req.RemoteUser == "" {
 		req.RemoteUser = "root"
 	}
+	// Validate RemoteUser: only alphanumeric, dots, dashes, underscores (no shell chars)
+	if !isValidSSHUser(req.RemoteUser) {
+		respondErrorSimple(w, "Invalid characters in remote user", http.StatusBadRequest)
+		return
+	}
 	if req.RemotePort == 0 {
 		req.RemotePort = 22
 	}
@@ -247,6 +257,21 @@ func (h *ReplicationHandler) TestRemoteConnection(w http.ResponseWriter, r *http
 }
 
 // getResumeToken checks if the remote side has a resume token for an interrupted transfer
+// isValidSSHUser validates SSH usernames: alphanumeric, dot, dash, underscore only.
+// Prevents shell injection when RemoteUser is interpolated into bash -c commands.
+func isValidSSHUser(user string) bool {
+	if len(user) == 0 || len(user) > 64 {
+		return false
+	}
+	for _, c := range user {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') {
+			return false
+		}
+	}
+	return true
+}
+
 func getResumeToken(sshArgs []string, sshTarget, remoteDataset string) string {
 	checkArgs := append([]string{}, sshArgs...)
 	checkArgs = append(checkArgs, sshTarget,

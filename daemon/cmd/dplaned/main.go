@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	Version = "2.1.0"
+	Version = "3.0.0"
 )
 
 func main() {
@@ -138,6 +138,10 @@ func main() {
 	} else if len(poolList) > 0 {
 		for _, pool := range poolList {
 			heartbeat := zfs.NewPoolHeartbeat(pool.Name, pool.MountPoint, 30*time.Second)
+			// SAFETY: Stop Docker if the pool goes offline during runtime.
+			// This prevents containers from writing to bare mountpoint directories
+			// on the root FS — the same data-loss scenario the boot gate prevents.
+			heartbeat.StopDockerOnFailure = true
 			
 			// Set up Telegram alert callback if configured
 			heartbeat.SetErrorCallback(func(poolName string, err error, details map[string]string) {
@@ -196,6 +200,30 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			authHandler.CleanExpiredSessions()
+		}
+	}()
+
+	// Rate limiter cleanup goroutine (prevents memory leak from stale IPs)
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			rateLimitMu.Lock()
+			now := time.Now()
+			for ip, timestamps := range requestCounts {
+				var recent []time.Time
+				for _, t := range timestamps {
+					if now.Sub(t) < timeWindow {
+						recent = append(recent, t)
+					}
+				}
+				if len(recent) == 0 {
+					delete(requestCounts, ip)
+				} else {
+					requestCounts[ip] = recent
+				}
+			}
+			rateLimitMu.Unlock()
 		}
 	}()
 
@@ -349,6 +377,10 @@ func main() {
 	r.HandleFunc("/api/zfs/dataset/quota", handlers.SetDatasetQuota).Methods("POST")
 	r.HandleFunc("/api/zfs/dataset/quota", handlers.GetDatasetQuota).Methods("GET")
 
+	// v3.0.0: Per-user and per-group quotas (ZFS userquota/groupquota)
+	r.HandleFunc("/api/zfs/quota/usergroup", handlers.GetUserGroupQuotas).Methods("GET")
+	r.HandleFunc("/api/zfs/quota/usergroup", handlers.SetUserGroupQuota).Methods("POST")
+
 	// v2.1.0: S.M.A.R.T. tests
 	r.HandleFunc("/api/zfs/smart/test", handlers.RunSMARTTest).Methods("POST")
 	r.HandleFunc("/api/zfs/smart/results", handlers.GetSMARTTestResults).Methods("GET")
@@ -402,6 +434,8 @@ func main() {
 	r.HandleFunc("/api/system/settings", systemStatusHandler.HandleSettings).Methods("GET", "POST")
 	r.HandleFunc("/api/system/preflight", systemStatusHandler.HandlePreflight).Methods("GET")
 	r.HandleFunc("/api/system/zfs-gate-status", systemStatusHandler.HandleZFSGateStatus).Methods("GET")
+	// v3.0.0: IPMI/BMC sensor data (graceful no-op if ipmitool unavailable)
+	r.HandleFunc("/api/system/ipmi", systemStatusHandler.HandleIPMISensors).Methods("GET")
 	// /api/status is an alias for /api/system/status (used by dashboard ECC check)
 	r.HandleFunc("/api/status", systemStatusHandler.HandleStatus).Methods("GET")
 	r.HandleFunc("/api/system/setup-complete", systemStatusHandler.HandleSetupComplete).Methods("POST")
@@ -633,9 +667,14 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 			// Check rate limit
 			if len(recent) >= maxRequests {
 				rateLimitMu.Unlock()
+				// Read user from cookie for audit log
+				auditUser := ""
+				if cookie, err := r.Cookie("dplaneos_user"); err == nil {
+					auditUser = cookie.Value
+				}
 				audit.LogSecurityEvent(
 					fmt.Sprintf("Rate limit exceeded: %d requests in %v", len(recent), timeWindow),
-					r.Header.Get("X-User"),
+					auditUser,
 					ip,
 				)
 				http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
@@ -662,11 +701,16 @@ func sessionMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		sessionID := r.Header.Get("X-Session-ID")
-		user := r.Header.Get("X-User")
+		// Read session from cookie (primary) or header (legacy/API fallback)
+		sessionID := ""
+		if cookie, err := r.Cookie("dplaneos_session"); err == nil && cookie.Value != "" {
+			sessionID = cookie.Value
+		} else {
+			sessionID = r.Header.Get("X-Session-ID")
+		}
 
-		if sessionID == "" || user == "" {
-			audit.LogSecurityEvent("Missing session or user header", user, r.RemoteAddr)
+		if sessionID == "" {
+			audit.LogSecurityEvent("Missing session", "", r.RemoteAddr)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -676,19 +720,12 @@ func sessionMiddleware(next http.Handler) http.Handler {
 		if err != nil {
 			// Fall back to format validation only
 			if !security.IsValidSessionToken(sessionID) {
-				audit.LogSecurityEvent("Invalid session format", user, r.RemoteAddr)
+				audit.LogSecurityEvent("Invalid session format", "", r.RemoteAddr)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 			// Token format OK but DB lookup failed — proceed without context user
 			next.ServeHTTP(w, r)
-			return
-		}
-
-		// Verify header user matches session user
-		if sessionUser.Username != user {
-			audit.LogSecurityEvent("Session user mismatch", user, r.RemoteAddr)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 

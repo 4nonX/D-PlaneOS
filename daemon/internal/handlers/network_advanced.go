@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"dplaned/internal/netlinkx"
 )
 
 // ═══════════════════════════════════════════════════════════════
@@ -163,9 +165,12 @@ func CreateVLAN(w http.ResponseWriter, r *http.Request) {
 
 	ifName := fmt.Sprintf("%s.%d", req.Parent, req.VlanID)
 
-	// Create VLAN interface
-	_, err := executeCommandWithTimeout(TimeoutMedium, "/sbin/ip", []string{
-		"link", "add", "link", req.Parent, "name", ifName, "type", "vlan", "id", fmt.Sprintf("%d", req.VlanID),
+	// Create VLAN interface via netlink (RTM_NEWLINK — no exec, no injection surface)
+	err := netlinkx.LinkAdd(netlinkx.LinkAttrs{
+		Name:       ifName,
+		Type:       netlinkx.LinkTypeVLAN,
+		ParentName: req.Parent,
+		VLANID:     req.VlanID,
 	})
 	if err != nil {
 		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
@@ -173,15 +178,12 @@ func CreateVLAN(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Bring up
-	executeCommandWithTimeout(TimeoutFast, "/sbin/ip", []string{"link", "set", ifName, "up"})
+	_ = netlinkx.LinkSetUp(ifName)
 
 	// Set IP if provided
 	if req.IP != "" && !strings.ContainsAny(req.IP, ";|&$`\\\"'") {
-		executeCommandWithTimeout(TimeoutFast, "/sbin/ip", []string{
-			"addr", "add", req.IP, "dev", ifName,
-		})
+		_ = netlinkx.AddrAdd(ifName, req.IP)
 	}
-
 	respondOK(w, map[string]interface{}{
 		"success":   true,
 		"interface": ifName,
@@ -205,10 +207,7 @@ func DeleteVLAN(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, "Invalid VLAN interface", http.StatusBadRequest)
 		return
 	}
-	_, err := executeCommandWithTimeout(TimeoutFast, "/sbin/ip", []string{
-		"link", "delete", req.Interface,
-	})
-	if err != nil {
+	if err := netlinkx.LinkDel(req.Interface); err != nil {
 		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
 		return
 	}
@@ -218,17 +217,23 @@ func DeleteVLAN(w http.ResponseWriter, r *http.Request) {
 // ListVLANs lists all VLAN interfaces
 // GET /api/network/vlan
 func ListVLANs(w http.ResponseWriter, r *http.Request) {
-	output, err := executeCommandWithTimeout(TimeoutFast, "/sbin/ip", []string{
-		"-d", "link", "show", "type", "vlan",
-	})
+	links, err := netlinkx.LinkList()
 	if err != nil {
 		respondOK(w, map[string]interface{}{"success": true, "vlans": []interface{}{}})
 		return
 	}
-	respondOK(w, map[string]interface{}{
-		"success": true,
-		"vlans":   strings.TrimSpace(output),
-	})
+	vlans := make([]map[string]interface{}, 0)
+	for _, l := range links {
+		// VLAN interfaces are conventionally named PARENT.VLANID (e.g. eth0.100)
+		if strings.Contains(l.Name, ".") {
+			vlans = append(vlans, map[string]interface{}{
+				"name":  l.Name,
+				"index": l.Index,
+				"flags": l.Flags.String(),
+			})
+		}
+	}
+	respondOK(w, map[string]interface{}{"success": true, "vlans": vlans})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -261,11 +266,12 @@ func CreateBond(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create bond
-	_, err := executeCommandWithTimeout(TimeoutMedium, "/sbin/ip", []string{
-		"link", "add", req.Name, "type", "bond", "mode", req.Mode,
-	})
-	if err != nil {
+	// Create bond via netlink (RTM_NEWLINK — no exec, no injection surface)
+	if err := netlinkx.LinkAdd(netlinkx.LinkAttrs{
+		Name:     req.Name,
+		Type:     netlinkx.LinkTypeBond,
+		BondMode: req.Mode,
+	}); err != nil {
 		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
 		return
 	}
@@ -275,19 +281,16 @@ func CreateBond(w http.ResponseWriter, r *http.Request) {
 		if strings.ContainsAny(slave, ";|&$`\\\"' /") {
 			continue
 		}
-		executeCommandWithTimeout(TimeoutFast, "/sbin/ip", []string{"link", "set", slave, "down"})
-		executeCommandWithTimeout(TimeoutFast, "/sbin/ip", []string{"link", "set", slave, "master", req.Name})
+		_ = netlinkx.LinkSetDown(slave)
+		_ = netlinkx.LinkSetMaster(slave, req.Name)
 	}
 
 	// Bring up
-	executeCommandWithTimeout(TimeoutFast, "/sbin/ip", []string{"link", "set", req.Name, "up"})
+	_ = netlinkx.LinkSetUp(req.Name)
 
 	if req.IP != "" && !strings.ContainsAny(req.IP, ";|&$`\\\"'") {
-		executeCommandWithTimeout(TimeoutFast, "/sbin/ip", []string{
-			"addr", "add", req.IP, "dev", req.Name,
-		})
+		_ = netlinkx.AddrAdd(req.Name, req.IP)
 	}
-
 	respondOK(w, map[string]interface{}{
 		"success": true,
 		"name":    req.Name,

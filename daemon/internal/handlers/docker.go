@@ -1,21 +1,28 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
 
 	"dplaned/internal/audit"
+	"dplaned/internal/dockerclient"
 	"dplaned/internal/security"
 )
 
-type DockerHandler struct{}
-
-func NewDockerHandler() *DockerHandler {
-	return &DockerHandler{}
+type DockerHandler struct {
+	docker *dockerclient.Client
 }
 
+func NewDockerHandler() *DockerHandler {
+	return &DockerHandler{
+		docker: dockerclient.New(),
+	}
+}
+
+// ListContainers returns all containers grouped by compose stack.
+// GET /api/docker/containers
 func (h *DockerHandler) ListContainers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -31,8 +38,11 @@ func (h *DockerHandler) ListContainers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
 	start := time.Now()
-	output, err := executeCommand("/usr/bin/docker", []string{"ps", "-a", "--format", "{{json .}}"})
+	containers, err := h.docker.ListAll(ctx)
 	duration := time.Since(start)
 
 	audit.LogCommand(audit.LevelInfo, user, "docker_ps", nil, err == nil, duration, err)
@@ -46,20 +56,25 @@ func (h *DockerHandler) ListContainers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	containers := parseDockerPS(output)
+	raw := make([]map[string]interface{}, 0, len(containers))
+	for _, c := range containers {
+		raw = append(raw, containerToMap(c))
+	}
 	stacks := groupContainersByStack(containers)
 
 	respondOK(w, map[string]interface{}{
 		"success":          true,
-		"data":             containers,
-		"containers":       containers,
-		"total_containers": len(containers),
+		"data":             raw,
+		"containers":       raw,
+		"total_containers": len(raw),
 		"stacks":           stacks,
 		"total_stacks":     len(stacks),
 		"duration_ms":      duration.Milliseconds(),
 	})
 }
 
+// ContainerAction starts, stops, restarts, pauses or unpauses a container.
+// POST /api/docker/action
 func (h *DockerHandler) ContainerAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -67,12 +82,11 @@ func (h *DockerHandler) ContainerAction(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req struct {
-		Action      string `json:"action"`      // start, stop, restart
+		Action      string `json:"action"`
 		ContainerID string `json:"container_id"`
 		SessionID   string `json:"session_id"`
 		User        string `json:"user"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request", http.StatusBadRequest)
 		return
@@ -84,96 +98,81 @@ func (h *DockerHandler) ContainerAction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Validate action
-	validActions := map[string]bool{"start": true, "stop": true, "restart": true, "pause": true, "unpause": true}
+	validActions := map[string]bool{
+		"start": true, "stop": true, "restart": true,
+		"pause": true, "unpause": true,
+	}
 	if !validActions[req.Action] {
 		respondErrorSimple(w, "Invalid action", http.StatusBadRequest)
 		return
 	}
-
-	// Validate container ID format
-	if !strings.HasPrefix(req.ContainerID, "") || len(req.ContainerID) < 3 || len(req.ContainerID) > 64 {
+	if len(req.ContainerID) < 3 || len(req.ContainerID) > 64 {
 		respondErrorSimple(w, "Invalid container ID", http.StatusBadRequest)
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
 	start := time.Now()
-	output, err := executeCommand("/usr/bin/docker", []string{req.Action, req.ContainerID})
+	var err error
+
+	switch req.Action {
+	case "start":
+		err = h.docker.Start(ctx, req.ContainerID)
+	case "stop":
+		err = h.docker.Stop(ctx, req.ContainerID, 10)
+	case "restart":
+		err = h.docker.Restart(ctx, req.ContainerID, 10)
+	case "pause":
+		err = h.docker.Pause(ctx, req.ContainerID)
+	case "unpause":
+		err = h.docker.Unpause(ctx, req.ContainerID)
+	}
+
 	duration := time.Since(start)
 
-	audit.LogCommand(
-		audit.LevelInfo,
-		req.User,
-		"docker_"+req.Action,
-		[]string{req.ContainerID},
-		err == nil,
-		duration,
-		err,
-	)
+	audit.LogCommand(audit.LevelInfo, req.User, "docker_"+req.Action,
+		[]string{req.ContainerID}, err == nil, duration, err)
 
 	if err != nil {
-		respondOK(w, CommandResponse{
-			Success:  false,
-			Error:    err.Error(),
-			Duration: duration.Milliseconds(),
-		})
+		respondOK(w, CommandResponse{Success: false, Error: err.Error(), Duration: duration.Milliseconds()})
 		return
 	}
-
-	respondOK(w, CommandResponse{
-		Success:  true,
-		Output:   output,
-		Duration: duration.Milliseconds(),
-	})
+	respondOK(w, CommandResponse{Success: true, Duration: duration.Milliseconds()})
 }
 
-// Helper functions
+// ─────────────────────────────────────────────
+//  Helpers
+// ─────────────────────────────────────────────
 
-func parseDockerPS(output string) []map[string]interface{} {
-	var containers []map[string]interface{}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-
-		var container map[string]interface{}
-		if err := json.Unmarshal([]byte(line), &container); err != nil {
-			continue
-		}
-
-		containers = append(containers, container)
+func containerToMap(c dockerclient.Container) map[string]interface{} {
+	ports := make([]map[string]interface{}, 0, len(c.Ports))
+	for _, p := range c.Ports {
+		ports = append(ports, map[string]interface{}{
+			"IP": p.IP, "PrivatePort": p.PrivatePort,
+			"PublicPort": p.PublicPort, "Type": p.Type,
+		})
 	}
-
-	return containers
+	return map[string]interface{}{
+		"Id": c.ID, "Names": c.Names, "Image": c.Image,
+		"ImageID": c.ImageID, "Command": c.Command,
+		"Created": c.Created, "State": c.State, "Status": c.Status,
+		"Ports": ports, "Labels": c.Labels,
+		"Name": c.ShortName(), "Stack": c.StackName(),
+	}
 }
 
-func groupContainersByStack(containers []map[string]interface{}) []map[string]interface{} {
+func groupContainersByStack(containers []dockerclient.Container) []map[string]interface{} {
 	grouped := map[string][]map[string]interface{}{}
 	for _, c := range containers {
-		stack := "ungrouped"
-		if labelsRaw, ok := c["Labels"].(string); ok && labelsRaw != "" {
-			for _, pair := range strings.Split(labelsRaw, ",") {
-				kv := strings.SplitN(pair, "=", 2)
-				if len(kv) != 2 {
-					continue
-				}
-				if kv[0] == "com.docker.compose.project" || kv[0] == "stack" {
-					stack = kv[1]
-					break
-				}
-			}
-		}
-		grouped[stack] = append(grouped[stack], c)
+		stack := c.StackName()
+		grouped[stack] = append(grouped[stack], containerToMap(c))
 	}
-
 	stacks := make([]map[string]interface{}, 0, len(grouped))
 	for name, cs := range grouped {
 		stacks = append(stacks, map[string]interface{}{
-			"name":       name,
-			"containers": cs,
-			"count":      len(cs),
+			"name": name, "containers": cs, "count": len(cs),
 		})
 	}
 	return stacks

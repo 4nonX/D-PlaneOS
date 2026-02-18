@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"dplaned/internal/audit"
@@ -154,6 +155,17 @@ func ChangeOwnership(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Path = safePath
 
+	// Validate owner/group format to prevent flag injection
+	ownerPattern := regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.\-]*$`)
+	if !ownerPattern.MatchString(req.Owner) {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "Invalid owner format"})
+		return
+	}
+	if req.Group != "" && !ownerPattern.MatchString(req.Group) {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "Invalid group format"})
+		return
+	}
+
 	ownerGroup := req.Owner
 	if req.Group != "" {
 		ownerGroup = req.Owner + ":" + req.Group
@@ -205,6 +217,13 @@ func ChangePermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Path = safePath
+
+	// Validate permissions format: octal only (e.g. 755, 0644)
+	permPattern := regexp.MustCompile(`^[0-7]{3,4}$`)
+	if !permPattern.MatchString(req.Permissions) {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "Invalid permissions format (use octal, e.g. 755)"})
+		return
+	}
 
 	output, err := cmdutil.RunFast("chmod", req.Permissions, req.Path)
 

@@ -184,10 +184,6 @@
                             <span>Total:</span>
                             <span class="metric-value" id="docker-total">-</span>
                         </div>
-                        <div class="metric">
-                            <span>Images:</span>
-                            <span class="metric-value" id="docker-images">-</span>
-                        </div>
                     </div>
                 </div>
                 
@@ -343,14 +339,6 @@
                     
                     updateStatusIcon('docker', true);
                 }
-                
-                // Load images count
-                const imgResponse = await daemonAPI.docker_list() /* images deprecated */;
-                const imgData = await imgResponse.json();
-                
-                if (imgData.success && imgData.images) {
-                    document.getElementById('docker-images').textContent = imgData.images.length;
-                }
             } catch (error) {
                 console.error('Failed to load docker:', error);
                 updateStatusIcon('docker', false);
@@ -431,14 +419,25 @@
             try {
                 const r = await csrfFetch('/api/status');
                 const d = await r.json();
-                if (d.success && d.ecc_warning) {
-                    alerts.push({
-                        level: 'info',
-                        msg: 'Non-ECC RAM detected. ZFS cannot protect against in-memory bit flips. ' +
-                             'ECC RAM is recommended for data integrity. Home/media use is acceptable with regular scrubs and backups.',
-                        link: '/pages/hardware.html',
-                        linkText: 'Learn more'
-                    });
+                if (d.success) {
+                    if (d.ecc_warning) {
+                        // Definitive non-ECC detection on physical hardware
+                        alerts.push({
+                            level: 'info',
+                            msg: d.ecc_warning_msg || 'Non-ECC RAM detected. ZFS cannot protect against in-memory bit flips. ECC RAM is recommended.',
+                            link: '/pages/hardware.html',
+                            linkText: 'Learn more'
+                        });
+                    } else if (d.ecc_virtual) {
+                        // Running in VM — ECC detection unreliable, inform neutrally
+                        alerts.push({
+                            level: 'info',
+                            msg: 'Virtual environment detected. ECC RAM status cannot be determined — check your host hardware directly.',
+                            link: '/pages/hardware.html',
+                            linkText: 'Details'
+                        });
+                    }
+                    // ecc_known=false && !ecc_virtual → dmidecode unavailable, show nothing
                 }
             } catch(e) {}
 

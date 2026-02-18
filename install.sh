@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# D-PlaneOS v2.2.0 - ONE-CLICK Installation
+# D-PlaneOS v3.0.0 - ONE-CLICK Installation
 # 
 # This installer does EVERYTHING in one go:
 # 1. Install dependencies (ZFS, nginx, etc.)
@@ -65,7 +65,7 @@ fi
 # Banner
 clear
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${BOLD}    D-PlaneOS v2.1.0 - System Hardening Installer${NC}"
+echo -e "${BOLD}    D-PlaneOS v3.0.0 - System Hardening Installer${NC}"
 echo "    Zero Config | Zero Debugging | Just Works"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -297,7 +297,21 @@ chown www-data:www-data "$(dirname "$DB_PATH")"
 # Initialize database
 if [ ! -f "$DB_PATH" ]; then
     log "Creating new database..."
-    
+
+    # Generate a cryptographically random admin password (16 chars, alphanumeric+symbols)
+    ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -dc 'A-Za-z0-9!@#$%' | head -c 16)
+    # Ensure password meets complexity requirements (bcrypt cost 12)
+    ADMIN_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'${ADMIN_PASSWORD}', bcrypt.gensalt(12)).decode())" 2>/dev/null ||                  htpasswd -bnBC 12 "" "${ADMIN_PASSWORD}" 2>/dev/null | tr -d ':\n' | sed 's/^://' ||                  echo "HASH_FAILED")
+    if [ "$ADMIN_HASH" = "HASH_FAILED" ]; then
+        error "Cannot generate bcrypt hash. Install python3-bcrypt or apache2-utils."
+        exit 1
+    fi
+
+    # Write SQL with actual hash substituted (no shell variables in heredoc body)
+    INIT_SQL=$(mktemp)
+    chmod 600 "$INIT_SQL"
+    trap "rm -f $INIT_SQL" EXIT
+
     sqlite3 "$DB_PATH" <<'EOSQL'
 -- Enable WAL mode (CRITICAL for performance)
 PRAGMA journal_mode = WAL;
@@ -312,13 +326,14 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT,
     role TEXT DEFAULT 'user',
     active INTEGER DEFAULT 1,
+    must_change_password INTEGER DEFAULT 0,
     created_at INTEGER DEFAULT (strftime('%s', 'now'))
 );
 
--- Create default admin user (password: admin)
--- CRITICAL: This ensures login always works out of the box!
-INSERT OR IGNORE INTO users (username, password_hash, email, role, active)
-VALUES ('admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin@localhost', 'admin', 1);
+-- Default admin user created below with a randomly generated password.
+-- The hash placeholder is replaced by install.sh before DB init.
+INSERT OR IGNORE INTO users (username, password_hash, email, role, active, must_change_password)
+VALUES ('admin', '__ADMIN_HASH__', 'admin@localhost', 'admin', 1, 1);
 
 -- Sessions table
 CREATE TABLE IF NOT EXISTS sessions (
@@ -421,7 +436,13 @@ ANALYZE;
 PRAGMA optimize;
 EOSQL
 
+    # Replace placeholder hash with actual bcrypt hash
+    sqlite3 "$DB_PATH" "UPDATE users SET password_hash = '${ADMIN_HASH}' WHERE username = 'admin';"
+
     log "✓ Database created with FTS5 search"
+
+    # Store generated password for display at end of install
+    GENERATED_ADMIN_PASSWORD="$ADMIN_PASSWORD"
 else
     log "Database exists, checking FTS5..."
     
@@ -441,11 +462,14 @@ CREATE TRIGGER IF NOT EXISTS files_fts_delete AFTER DELETE ON files BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS files_fts_update AFTER UPDATE ON files BEGIN
-    DELETE FROM files_fts WHERE rowid, old.id;
+    DELETE FROM files_fts WHERE rowid = old.id;
     INSERT INTO files_fts(rowid, path, name) VALUES (new.id, new.path, new.name);
 END;
 EOSQL
-    
+
+    # Migrate: add must_change_password column if upgrading from older version (idempotent)
+    sqlite3 "$DB_PATH" "ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;" 2>/dev/null || true
+
     log "✓ FTS5 search enabled"
 fi
 
@@ -512,7 +536,7 @@ step "Step 7/12: Configuring Web Server"
 log "Creating nginx configuration (Go daemon proxy)..."
 
 cat > /etc/nginx/sites-available/dplaneos <<EONGINX
-# D-PlaneOS v2.1.0 - Pure Go Backend
+# D-PlaneOS v3.0.0 - Pure Go Backend
 # Static files served by nginx, API proxied to dplaned on :9000
 
 server {
@@ -860,7 +884,7 @@ fi
 
 clear
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${BOLD}${GREEN}    D-PlaneOS v2.1.0 Installation COMPLETE!${NC}"
+echo -e "${BOLD}${GREEN}    D-PlaneOS v3.0.0 Installation COMPLETE!${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo -e "${GREEN}✓${NC} Installation directory: $INSTALL_DIR"
@@ -885,9 +909,10 @@ echo "🌐 Web UI: ${BOLD}http://$(hostname -I | awk '{print $1}')${NC}"
 echo ""
 echo "👤 Default Login:"
 echo "   Username: ${BOLD}admin${NC}"
-echo "   Password: ${BOLD}admin${NC}"
+echo "   Password: ${BOLD}${GENERATED_ADMIN_PASSWORD:-<see DB — was pre-existing install>}${NC}"
 echo ""
-echo "⚠️  ${YELLOW}IMPORTANT: Change password after first login!${NC}"
+echo "⚠️  ${YELLOW}IMPORTANT: You will be required to change this password on first login.${NC}"
+echo "⚠️  ${YELLOW}Store this password safely — it will not be shown again.${NC}"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${BOLD}IF SOMETHING GOES WRONG:${NC}"

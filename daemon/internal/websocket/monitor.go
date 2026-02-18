@@ -55,7 +55,8 @@ func (h *MonitorHub) Run() {
 			log.Printf("Monitor client disconnected, total: %d", len(h.clients))
 
 		case event := <-h.broadcast:
-			h.mutex.RLock()
+			// Use Lock (not RLock): we may delete failed clients from the map.
+			h.mutex.Lock()
 			for client := range h.clients {
 				err := client.WriteJSON(event)
 				if err != nil {
@@ -64,7 +65,7 @@ func (h *MonitorHub) Run() {
 					delete(h.clients, client)
 				}
 			}
-			h.mutex.RUnlock()
+			h.mutex.Unlock()
 		}
 	}
 }

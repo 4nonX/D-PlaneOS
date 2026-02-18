@@ -1,105 +1,348 @@
-# D-PlaneOS v2.2.0 — Installation Guide
+# D-PlaneOS v3.0.0 Installation Guide
 
-**Advanced NAS with Declarative State & RBAC**
-
----
-
-## 1. System Requirements & Hardware Validation
-
-### Hardware Minimums:
-- CPU: Dual-core x86_64 (AES-NI support required for ZFS encryption)
-- RAM: 4 GB Minimum. 16 GB+ is recommended for ZFS L2ARC/ZIL performance
-- Storage: 20 GB for OS; separate physical drives for ZFS Data Pools
-- Network: 1 Gbps Ethernet (v2.2.0 supports Multi-Path TCP)
-
-### v2.2.0 Integrity Standards:
-- ECC RAM: Strongly recommended. D-PlaneOS 2.2.0 uses dmidecode to check memory type. Non-ECC hardware will function but will trigger a "Data Integrity Risk" warning in the UI
-- ZFS-Atomic Updates: This version utilizes ZFS snapshots to clone the environment before any container or system update. If the update fails, the Go-daemon performs an automated rollback to the previous snapshot
+**Complete enterprise NAS with RBAC - Production Ready**
 
 ---
 
-## 2. NixOS Installation (Declarative Flake)
+## System Requirements
 
-v2.2.0 is optimized for NixOS. This ensures your NAS configuration is version-controlled and immutable.
+### **Minimum:**
+- CPU: Dual-core x86_64
+- RAM: 4 GB
+- Storage: 20 GB for OS + data drives
+- Network: 1 Gbps Ethernet
 
-### Step 1: Update flake.nix
+### **Recommended:**
+- CPU: Quad-core Intel/AMD (i3/Ryzen 3 or better)
+- RAM: 16 GB+
+- Storage: ZFS pools (any size)
+- Network: 2.5 Gbps+ Ethernet
 
-Include the D-PlaneOS input and pass it to your modules:
+### **Recommended (for data integrity):**
+- **ECC RAM** — strongly recommended for ZFS integrity at scale
 
-{
-  inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.05";
-    dplaneos.url = "github:your-repo/dplaneos/v2.2.0";
-  };
+  ZFS is exceptional at detecting and correcting corruption *on disk*, but it
+  cannot protect data that was already corrupted *in RAM* before being written.
+  ECC RAM detects and corrects single-bit memory errors in hardware, closing
+  this gap entirely.
 
-  outputs = { self, nixpkgs, dplaneos, ... }: {
-    nixosConfigurations.nas-node = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      modules = [
-        ./configuration.nix
-        dplaneos.nixosModules.dplaneos
-      ];
-    };
-  };
-}
+  **Without ECC RAM:**
+  - Home use / media library: acceptable risk with regular scrubs and backups
+  - Business / critical data / databases: not recommended
 
-services.dplaneos = {
-  enable = true;
-  gitops.enable = true;       # Enables declarative state mirroring
-  zfsBootGate = true;          # System holds boot until ZFS pools are online
-  rbac.enforceHardened = true; # Disables default 'admin' if no password set
-};
+  **D-PlaneOS v3.0.0 behaviour:**
+  - Detects ECC presence via `dmidecode` on startup
+  - Shows a persistent advisory notice in the dashboard if non-ECC RAM is found
+  - **Never blocks installation or operation** — ECC is your choice, not ours
+  - See `NON-ECC-WARNING.md` for full mitigation strategies
 
----
+  **Minimum ECC-capable platforms:** Intel Xeon, AMD EPYC, AMD Ryzen Pro,
+  any server/workstation board with ECC UDIMM support.
 
-## 3. Standard Linux Installation (Ubuntu/Debian/RHEL)
-
-Use this for traditional distros where Nix is not the primary manager.
-
-Step 1: Download & Verify
-wget https://github.com/your-repo/dplaneos/releases/download/v2.2.0/dplaneos-v2.2.0-HARDENED.tar.gz
-sha256sum dplaneos-v2.2.0-HARDENED.tar.gz
-
-Step 2: Installation Script
-tar -xzf dplaneos-v2.2.0-HARDENED.tar.gz
-cd dplaneos-v2.2.0
-sudo ./install-v2.2.0.sh
-
-What the Installer Does:
-- Installs zfsutils-linux, docker.io, and sqlite3
-- Compiles the Go-Daemon (v2.2.0) from source
-- Sets up dplaneos-zfs-mount-wait.service to prevent UI startup on empty pools
-- Generates a hardened Nginx config with TLS 1.3 defaults
+### **Supported Platforms:**
+- Ubuntu 24.04 LTS (recommended)
+- Debian 12
+- NixOS (experimental — see NixOS section)
+- Any systemd-based Linux with ZFS support
 
 ---
 
-## 4. Setup Wizard & Initial Logic
+## Pre-Installation Checklist
 
-Once the service is running, navigate to https://<your-ip>
-
-Step 1: Storage Configuration
-The wizard will detect available drives. v2.2.0 logic defaults to RAID-Z2 for any array with 4+ drives to ensure enterprise-grade redundancy. ZFS encryption can be toggled here, with keys managed by the internal secure vault
-
-Step 2: GitOps Identity
-The system generates a unique Ed25519 SSH key. Add this key to your Git provider (GitHub/GitLab) as a Deploy Key with write access. This allows D-PlaneOS to save every UI change as a Git commit
-
-Step 3: RBAC & Security
-Create your primary administrator. v2.2.0 requires a minimum 12-character password with mandatory entropy checks. MFA (TOTP) can be enabled immediately after the first login
+- [ ] Fresh Ubuntu 24.04 install (or compatible)
+- [ ] Root/sudo access
+- [ ] Internet connection
+- [ ] At least 2 drives (1 for OS, 1+ for storage)
+- [ ] Static IP configured (recommended)
+- [ ] Hostname set (`hostnamectl set-hostname nas`)
 
 ---
 
-## 5. Maintenance & Troubleshooting
+## Installation Steps
 
-The "Boot-Gate" Protocol
-If the UI displays `423 Locked: Storage Not Ready`, the Boot-Gate is working
-Cause: One or more ZFS pools failed to mount during boot
-Solution: Check hardware or run `zpool import -a` manually. The UI will unlock automatically once the pool is healthy
+### **Step 1: Download Package**
 
-Logs & Monitoring
-- Core Daemon: journalctl -u dplaned -f
-- ZFS Health: zpool status
-- Git Sync Status: Check the "GitOps" tab in the dashboard for sync lag or authentication errors
+```bash
+# Download latest release
+wget https://github.com/your-repo/dplaneos/releases/download/v3.0.0/dplaneos-v3.0.0.tar.gz
+```
 
-Uninstallation
-- Manual Linux: Run sudo ./uninstall.sh inside the release folder
-- NixOS: Remove the module from flake.nix, delete the service config, and run sudo nixos-rebuild switch
+### **Step 2: Extract and Install**
+
+```bash
+tar -xzf dplaneos-v3.0.0.tar.gz
+cd dplaneos
+sudo make install
+```
+
+**What happens:**
+1. Pre-built `dplaned` binary installed to `/opt/dplaneos/`
+2. Database initialized with RBAC schema (auto-migration)
+3. Default admin user created (username: `admin`, password: `dplaneos`)
+4. systemd service created and enabled
+5. nginx reverse proxy configured
+
+**Installation time:** ~1-2 minutes (no compilation needed with pre-built binary)
+
+### **Step 3: Start the Service**
+
+```bash
+sudo systemctl start dplaned
+```
+
+### **Step 4: Access Web Interface**
+
+```bash
+# Get your IP
+ip addr show
+
+# Open browser
+http://YOUR-IP/
+```
+
+**First login redirects to Setup Wizard automatically**
+
+---
+
+## Setup Wizard
+
+### **Step 1: Welcome**
+- Overview of features
+- Click "Get Started"
+
+### **Step 2: Storage Discovery**
+- System scans all available disks
+- Click on disks to select
+- Choose pool type:
+  - Single (testing only)
+  - Mirror (2+ disks, 50% usable)
+  - RAID-Z1 (3+ disks, 1 disk failure)
+  - RAID-Z2 (4+ disks, 2 disk failures) **← Recommended**
+  - RAID-Z3 (5+ disks, 3 disk failures)
+- Click "Create Pool"
+
+### **Step 3: Admin Account**
+- Username: `admin` (recommended)
+- Password: (strong, 12+ characters)
+- Email: (for recovery)
+- Click "Create Admin"
+
+**First user automatically gets admin role (full permissions)**
+
+### **Step 4: Initial Scan**
+- System indexes your storage
+- Progress: 0-100%
+- Time: ~30 seconds for empty pool
+
+### **Step 5: Complete**
+- System ready
+- Click "Go to Dashboard"
+
+**Total setup time: 3 minutes**
+
+---
+
+## Post-Installation
+
+### **1. Verify Services**
+
+```bash
+# Check daemon
+sudo systemctl status dplaned
+
+# Should show: active (running)
+
+# Check database
+sudo sqlite3 /var/lib/dplaneos/dplaneos.db "SELECT COUNT(*) FROM roles;"
+# Should return: 4 (admin, operator, viewer, user)
+```
+
+### **2. Configure Network (Optional)**
+
+```bash
+# Set static IP (if not already done)
+sudo nmcli con mod "Wired connection 1" ipv4.addresses 192.168.1.100/24
+sudo nmcli con mod "Wired connection 1" ipv4.gateway 192.168.1.1
+sudo nmcli con mod "Wired connection 1" ipv4.dns "8.8.8.8"
+sudo nmcli con mod "Wired connection 1" ipv4.method manual
+sudo nmcli con up "Wired connection 1"
+```
+
+### **3. Enable TLS (Highly Recommended)**
+
+```bash
+# Install certbot
+sudo apt install certbot python3-certbot-nginx
+
+# Get certificate (requires domain pointing to your IP)
+sudo certbot --nginx -d nas.yourdomain.com
+
+# Auto-renewal
+sudo systemctl enable certbot.timer
+```
+
+### **4. Setup Firewall**
+
+```bash
+# Allow HTTP/HTTPS
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Allow SSH (be careful!)
+sudo ufw allow 22/tcp
+
+# Enable firewall
+sudo ufw enable
+```
+
+### **5. Configure Fail2Ban (Security)**
+
+```bash
+# Install
+sudo apt install fail2ban
+
+# Configure for D-PlaneOS
+sudo tee /etc/fail2ban/jail.d/dplaneos.conf << EOF
+[dplaneos]
+enabled = true
+port = 80,443
+filter = dplaneos
+logpath = /var/log/dplaneos/access.log
+maxretry = 5
+bantime = 3600
+findtime = 600
+EOF
+
+# Restart
+sudo systemctl restart fail2ban
+```
+
+---
+
+## Upgrading from v2.x
+
+Drop-in replacement. Database auto-migrates. Users must re-login once (session mechanism changed from sessionStorage to HttpOnly cookies).
+
+```bash
+tar xzf dplaneos-v3.0.0.tar.gz
+cd dplaneos && sudo make install
+sudo systemctl restart dplaned
+```
+
+## Upgrading from v1.x
+
+**Not an in-place upgrade.** v2.0.0+ is a complete rewrite.
+
+1. Backup your data:
+   ```bash
+   zfs snapshot tank@pre-upgrade
+   zfs send tank@pre-upgrade > /backup/tank-pre-upgrade.zfs
+   ```
+
+2. Fresh install v3.0.0
+
+3. Import existing pool:
+   ```bash
+   zpool import tank
+   ```
+
+4. Recreate users via UI with proper roles
+
+---
+
+## Troubleshooting Installation
+
+### **Installer fails with "ZFS not found"**
+
+```bash
+# Install ZFS manually
+sudo apt update
+sudo apt install zfsutils-linux
+sudo modprobe zfs
+```
+
+### **Daemon won't start**
+
+```bash
+# Check logs
+sudo journalctl -u dplaned -n 50
+
+# Common issue: Port 8080 already in use
+sudo lsof -i :8080
+# Kill conflicting process or change port in /etc/dplaneos/config.json
+```
+
+### **Can't access web interface**
+
+```bash
+# Check nginx
+sudo systemctl status nginx
+
+# Check firewall
+sudo ufw status
+
+# Check if daemon is listening
+sudo netstat -tlnp | grep 8080
+```
+
+### **Database initialization failed**
+
+```bash
+# Re-initialize database
+sudo rm /var/lib/dplaneos/dplaneos.db
+sudo systemctl restart dplaned
+
+# Check if it recreated
+ls -lh /var/lib/dplaneos/dplaneos.db
+```
+
+---
+
+## Uninstall
+
+```bash
+cd dplaneos
+sudo make uninstall
+
+# Or manually:
+sudo systemctl stop dplaned
+sudo systemctl disable dplaned
+sudo rm -f /usr/local/bin/dplaned
+sudo rm -f /etc/systemd/system/dplaned.service
+
+# Remove all data (WARNING: destroys everything)
+sudo zpool destroy tank  # if you want to delete pool
+sudo rm -rf /var/lib/dplaneos
+```
+
+---
+
+## Next Steps
+
+After installation:
+
+1. **Create Users:** Settings → Users → Create User
+2. **Assign Roles:** Settings → Users → Select User → Assign Role
+3. **Configure Storage:** Storage → Create datasets
+4. **Setup Docker:** Containers → Deploy containers
+5. **Configure Monitoring:** Monitoring → Set alert thresholds
+
+**Read:** `ADMIN-GUIDE.md` for detailed administration
+
+---
+
+## Support
+
+- Documentation: `/usr/share/doc/dplaneos/`
+- Logs: `/var/log/dplaneos/`
+- Config: `/etc/dplaneos/config.json`
+- Database: `/var/lib/dplaneos/dplaneos.db`
+
+**Log locations:**
+- Daemon: `journalctl -u dplaned`
+- Web: `/var/log/nginx/access.log`
+- Audit: SQLite database (view via UI: Settings → Audit Log)
+
+---
+
+**Installation complete! Your enterprise NAS is ready.**

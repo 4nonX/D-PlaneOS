@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"dplaned/internal/cmdutil"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"time"
@@ -43,16 +45,19 @@ func (h *SystemStatusHandler) HandleStatus(w http.ResponseWriter, r *http.Reques
 		if p != "" { poolCount++ }
 	}
 
-	// ECC RAM detection — non-blocking, best effort
-	hasECC := detectECCRAM()
+	// ECC RAM detection — non-blocking, advisory only
+	ecc := detectECCRAM()
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true, "version": h.version, "setup_complete": setupDone > 0,
 		"has_users": userCount > 0, "has_pools": poolCount > 0,
 		"first_run": setupDone == 0 && userCount <= 1,
 		"uptime_seconds": int(time.Since(h.startTime).Seconds()),
-		"ecc_ram":        hasECC,
-		"ecc_warning":    !hasECC, // surface advisory in UI — never blocks operation
+		"ecc_ram":         ecc.HasECC,
+		"ecc_known":       ecc.Known,
+		"ecc_virtual":     ecc.IsVirtual,
+		"ecc_warning":     !ecc.HasECC && ecc.Known && !ecc.IsVirtual,
+		"ecc_warning_msg": ecc.Warning,
 	})
 }
 
@@ -160,21 +165,71 @@ func (h *SystemStatusHandler) HandleSettings(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// ECCStatus holds the result of ECC detection including reliability info.
+type ECCStatus struct {
+	HasECC      bool   // true = ECC detected
+	Known       bool   // false = detection unreliable (VM or dmidecode unavailable)
+	IsVirtual   bool   // true = running inside a VM
+	Warning     string // human-readable advisory
+}
+
 // detectECCRAM checks dmidecode for ECC memory presence.
-// Returns true if ECC RAM is detected, false otherwise (including if dmidecode
-// is unavailable — we fail open, not closed, since ECC is advisory not required).
-func detectECCRAM() bool {
+// In virtual machines, dmidecode often returns no or incorrect memory type info,
+// so we detect the VM context and adjust the warning accordingly.
+func detectECCRAM() ECCStatus {
+	// Detect virtualisation: check /sys/class/dmi/id/product_name and /proc/cpuinfo
+	virtual := isVirtualMachine()
+
 	out, err := cmdutil.RunFast("dmidecode", "-t", "memory")
 	if err != nil {
-		// dmidecode not available or no permission — assume unknown, report as no ECC
-		return false
+		warning := "ECC status unknown (dmidecode not available)"
+		if virtual {
+			warning = "ECC detection unreliable in virtual machines — check host hardware directly"
+		}
+		return ECCStatus{HasECC: false, Known: false, IsVirtual: virtual, Warning: warning}
 	}
+
 	s := string(out)
-	// dmidecode reports "Error Correction Type: Single-bit ECC" or similar
-	// A system without ECC reports "Error Correction Type: None"
-	return strings.Contains(s, "Error Correction Type:") &&
+
+	// In VMs, dmidecode may return empty memory tables or "Unknown" types
+	if virtual || strings.Count(s, "Memory Device") < 2 {
+		return ECCStatus{
+			HasECC:    false,
+			Known:     false,
+			IsVirtual: virtual,
+			Warning:   "ECC detection unreliable in virtual/container environments. Check host hardware directly.",
+		}
+	}
+
+	hasECC := strings.Contains(s, "Error Correction Type:") &&
 		!strings.Contains(s, "Error Correction Type: None") &&
 		!strings.Contains(s, "Error Correction Type: Unknown")
+
+	warning := ""
+	if !hasECC {
+		warning = "Non-ECC RAM detected. ZFS cannot protect against in-memory bit flips. ECC RAM is recommended for data integrity."
+	}
+	return ECCStatus{HasECC: hasECC, Known: true, IsVirtual: false, Warning: warning}
+}
+
+// isVirtualMachine checks common indicators of VM/container environments.
+func isVirtualMachine() bool {
+	// Check DMI product name
+	if data, err := os.ReadFile("/sys/class/dmi/id/product_name"); err == nil {
+		p := strings.ToLower(strings.TrimSpace(string(data)))
+		for _, vm := range []string{"vmware", "virtualbox", "kvm", "qemu", "xen", "hyper-v", "proxmox", "lxc", "container"} {
+			if strings.Contains(p, vm) {
+				return true
+			}
+		}
+	}
+	// Check hypervisor bit in /proc/cpuinfo
+	if data, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+		if strings.Contains(string(data), "hypervisor") {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleZFSGateStatus reports whether the ZFS mount gate marker is present.
@@ -193,4 +248,124 @@ func (h *SystemStatusHandler) HandleZFSGateStatus(w http.ResponseWriter, r *http
 		"gate_ready": gateReady,
 		"marker":     markerPath,
 	})
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  IPMI / BMC SENSOR DATA  (ipmitool sdr)
+// ═══════════════════════════════════════════════════════════════
+
+// IPMISensor represents one sensor reading from ipmitool.
+type IPMISensor struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Unit   string `json:"unit"`
+	Status string `json:"status"` // "ok", "warn", "critical", "ns" (not supported)
+}
+
+// HandleIPMISensors returns BMC sensor readings via ipmitool sdr.
+// Returns 200 with available=false if ipmitool is not installed or no BMC is found.
+// GET /api/system/ipmi
+func (h *SystemStatusHandler) HandleIPMISensors(w http.ResponseWriter, r *http.Request) {
+	// Check ipmitool availability
+	ipmitoolPath := "/usr/bin/ipmitool"
+	if _, err := os.Stat(ipmitoolPath); os.IsNotExist(err) {
+		// Try alternate location
+		ipmitoolPath = "/usr/sbin/ipmitool"
+		if _, err2 := os.Stat(ipmitoolPath); os.IsNotExist(err2) {
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"available": false,
+				"reason":    "ipmitool not installed",
+				"sensors":   []IPMISensor{},
+			})
+			return
+		}
+	}
+
+	// Run: ipmitool sdr -c (compact/parseable CSV output)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ipmitoolPath, "sdr")
+	out, err := cmd.Output()
+	if err != nil {
+		// BMC not accessible (e.g. consumer hardware, VM)
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"available": false,
+			"reason":    "BMC not accessible: " + err.Error(),
+			"sensors":   []IPMISensor{},
+		})
+		return
+	}
+
+	sensors := parseIPMISdr(string(out))
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"available": true,
+		"sensors":   sensors,
+	})
+}
+
+// parseIPMISdr parses `ipmitool sdr` output (one sensor per line).
+// Format: Name             | Value      | Status
+func parseIPMISdr(output string) []IPMISensor {
+	var sensors []IPMISensor
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
+		raw := strings.TrimSpace(parts[1])
+		status := strings.ToLower(strings.TrimSpace(parts[2]))
+
+		// Parse value and unit from raw (e.g. "3.30 Volts", "45 degrees C", "no reading")
+		value, unit := splitValueUnit(raw)
+
+		normalStatus := "ok"
+		switch {
+		case strings.Contains(status, "ok") || strings.Contains(status, "present"):
+			normalStatus = "ok"
+		case strings.Contains(status, "warn") || strings.Contains(status, "upper non"):
+			normalStatus = "warn"
+		case strings.Contains(status, "crit") || strings.Contains(status, "upper crit") || strings.Contains(status, "lower crit"):
+			normalStatus = "critical"
+		case strings.Contains(status, "no reading") || strings.Contains(status, "ns") || strings.Contains(status, "not present"):
+			normalStatus = "ns"
+		default:
+			normalStatus = status
+		}
+
+		sensors = append(sensors, IPMISensor{
+			Name:   name,
+			Value:  value,
+			Unit:   unit,
+			Status: normalStatus,
+		})
+	}
+	if sensors == nil {
+		sensors = []IPMISensor{}
+	}
+	return sensors
+}
+
+// splitValueUnit splits "3.30 Volts" into ("3.30", "Volts"),
+// "no reading" into ("no reading", ""), etc.
+func splitValueUnit(raw string) (string, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "no reading" || raw == "disabled" {
+		return raw, ""
+	}
+	idx := strings.LastIndex(raw, " ")
+	if idx < 0 {
+		return raw, ""
+	}
+	value := strings.TrimSpace(raw[:idx])
+	unit := strings.TrimSpace(raw[idx+1:])
+	// Sanity: if "unit" looks numeric, it's all one value
+	if len(unit) > 0 && (unit[0] >= '0' && unit[0] <= '9') {
+		return raw, ""
+	}
+	return value, unit
 }
