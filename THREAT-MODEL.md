@@ -1,4 +1,4 @@
-# D-PlaneOS v2.0.0 — Threat Model
+# D-PlaneOS v2.2.0 — Threat Model
 
 ## System Context
 
