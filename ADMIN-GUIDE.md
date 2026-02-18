@@ -1,22 +1,60 @@
-# D-PlaneOS v2.1.0 Administrator Guide
+# D-PlaneOS v2.2.0 Administrator Guide
 
 **Complete guide for system administration and user management**
 
-> Updated for v2.1.0-production: RBAC, LDAP/AD, ZFS encryption, injection-hardened, OOM-protected
+> Updated for v2.2.0-production: GitOps State Sync, NixOS Flake Management, RBAC, LDAP/AD, ZFS encryption, injection-hardened, OOM-protected
 
 ---
 
 ## Table of Contents
 
-1. [User Management](#user-management)
-2. [Role Management](#role-management)
-3. [Storage Management](#storage-management)
-4. [Container Management](#container-management)
-5. [System Settings](#system-settings)
-6. [Monitoring & Alerts](#monitoring--alerts)
-7. [Backup & Recovery](#backup--recovery)
-8. [Security Best Practices](#security-best-practices)
-9. [Troubleshooting](#troubleshooting)
+1. [GitOps & State Sync (v2.2.0)](#gitops--state-sync-v220)
+2. [NixOS Administration (v2.2.0)](#nixos-administration-v220)
+3. [User Management](#user-management)
+4. [Role Management](#role-management)
+5. [Storage Management](#storage-management)
+6. [Container Management](#container-management)
+7. [System Settings](#system-settings)
+8. [Monitoring & Alerts](#monitoring--alerts)
+9. [Backup & Recovery](#backup--recovery)
+10. [Security Best Practices](#security-best-practices)
+11. [Troubleshooting](#troubleshooting)
+12. [Advanced Administration](#advanced-administration)
+13. [Directory Service (LDAP / AD)](#directory-service-ldap--active-directory--v200)
+
+---
+
+## GitOps & State Sync (v2.2.0)
+
+D-PlaneOS now implements bidirectional GitOps. Your NAS state is mirrored to a Git repository, allowing for declarative management and instant recovery.
+
+### Configuring Git Mirroring
+1. Navigate to: **Settings → GitOps**
+2. **Remote URL:** Your repository (SSH or HTTPS)
+3. **Authentication:** Upload SSH Private Key or enter Personal Access Token (PAT)
+4. **Sync Interval:** Define how often state is pushed to Git (default: 60 min)
+5. Click **"Enable Sync"**
+
+**What is synced:**
+- System configuration and users (`dplaneos.db`)
+- Docker Compose stacks
+- ZFS dataset properties and quotas
+- Network and System settings
+
+---
+
+## NixOS Administration (v2.2.0)
+
+If running on NixOS, D-PlaneOS provides a native interface for Flake-based management.
+
+### Generation Management
+Navigate to **Settings → NixOS**.
+- **View Generations:** List all previous system states.
+- **Dry-Activate:** Test a configuration change before applying it.
+- **Rollback:** Instantly switch back to a previous generation if a change fails.
+
+### The Configuration Guard
+D-PlaneOS validates `configuration.nix` syntax before activation. This prevents common errors from bricking the system via the Web UI.
 
 ---
 
@@ -28,9 +66,9 @@
 1. Navigate to: **Settings → Users**
 2. Click **"Create User"**
 3. Fill in details:
-   - Username (lowercase, no spaces)
-   - Email address
-   - Password (12+ characters, mix of upper/lower/numbers/symbols)
+   - Username (lowercase, no spaces)
+   - Email address
+   - Password (12+ characters, mix of upper/lower/numbers/symbols)
 4. Click **"Create"**
 5. Assign role (see Role Management)
 
@@ -46,10 +84,10 @@
 2. Click on user
 3. "Roles" section → **"Assign Role"**
 4. Select role:
-   - **Admin** - Full access
-   - **Operator** - Daily operations
-   - **Viewer** - Read-only
-   - **User** - Basic file access
+   - **Admin** - Full access
+   - **Operator** - Daily operations
+   - **Viewer** - Read-only
+   - **User** - Basic file access
 5. Optional: Set expiry date
 6. Click **"Assign"**
 
@@ -107,15 +145,15 @@
 1. Settings → Roles & Permissions
 2. Click **"Create Role"**
 3. Fill in:
-   - Name: `developer`
-   - Display Name: `Developer`
-   - Description: `Software development team with Docker access`
+   - Name: `developer`
+   - Display Name: `Developer`
+   - Description: `Software development team with Docker access`
 4. Click **"Save"**
 5. Click on new role
 6. Select permissions:
-   - ✅ docker:read, docker:write, docker:logs, docker:exec
-   - ✅ files:read, files:write
-   - ✅ system:read
+   - ✅ docker:read, docker:write, docker:logs, docker:exec
+   - ✅ files:read, files:write
+   - ✅ system:read
 7. Click **"Save Permissions"**
 
 **Use case:** Developers can manage containers and files, but not system settings or users.
@@ -249,11 +287,17 @@ sudo crontab -e
 4. Ports: `8080:80`
 5. Volumes: `/mnt/tank/data/nextcloud:/var/www/html`
 6. Environment:
-   - `MYSQL_HOST=db`
-   - `MYSQL_DATABASE=nextcloud`
+   - `MYSQL_HOST=db`
+   - `MYSQL_DATABASE=nextcloud`
 7. Click **"Deploy"**
 
-### Managing Containers
+### Managing Containers (v2.1.0+ Features)
+
+**ZFS-Atomic Updates:**
+Navigate to any container and click **"Safe Update"**. D-PlaneOS will:
+1. Create a ZFS snapshot of the data volume.
+2. Pull the new image and restart the container.
+3. Perform a health check. If it fails, it instantly rolls back to the snapshot.
 
 **Start/Stop:**
 - Click on container → **"Start"** / **"Stop"**
@@ -320,10 +364,10 @@ sudo crontab -e
 
 1. Monitoring → Settings
 2. Configure thresholds:
-   - CPU: 80%
-   - RAM: 90%
-   - Disk: 85%
-   - I/O Wait: 20%
+   - CPU: 80%
+   - RAM: 90%
+   - Disk: 85%
+   - I/O Wait: 20%
 3. Click **"Save"**
 
 **Alerts trigger:**
@@ -366,7 +410,7 @@ sudo apt install zfs-auto-snapshot
 # - Monthly (keep 12)
 ```
 
-### Database Backup
+### Database Backup (v2.2.0 Atomic Vacuum)
 
 ```bash
 # Backup RBAC database
@@ -412,8 +456,8 @@ sudo zpool import tank
 sudo nano /etc/nginx/sites-available/dplaneos
 # Add:
 server {
-    listen 80;
-    return 301 https://$host$request_uri;
+    listen 80;
+    return 301 https://$host$request_uri;
 }
 ```
 
@@ -423,13 +467,13 @@ server {
 - Bans IP after 5 failed logins
 - 1 hour ban duration
 
-### 4. Regular Updates
+### 4. Regular Updates (OS-Agnostic)
 
 ```bash
 # Update D-PlaneOS
 sudo /usr/bin/dplaneos-update
 
-# Update system
+# Update system (Non-NixOS)
 sudo apt update && sudo apt upgrade -y
 ```
 
@@ -437,9 +481,9 @@ sudo apt update && sudo apt upgrade -y
 
 - Review monthly: Settings → Audit Log
 - Look for:
-  - Failed login attempts
-  - Unexpected role changes
-  - After-hours access
+  - Failed login attempts
+  - Unexpected role changes
+  - After-hours access
 
 ### 6. Least Privilege
 
@@ -501,7 +545,7 @@ sudo zpool status -v
 arc_summary
 
 # Limit ARC (in /etc/modprobe.d/zfs.conf)
-options zfs zfs_arc_max=17179869184  # 16GB in bytes
+options zfs zfs_arc_max=17179869184  # 16GB in bytes
 
 # Reload
 sudo modprobe -r zfs
@@ -544,10 +588,10 @@ EOF
 
 # Import script (create this)
 while IFS=, read -r username email role; do
-    # Use API to create users
-    curl -X POST http://localhost/api/v1/users \
-        -H "X-Session-Token: $ADMIN_TOKEN" \
-        -d "{\"username\":\"$username\",\"email\":\"$email\"}"
+    # Use API to create users
+    curl -X POST http://localhost/api/v1/users \
+        -H "X-Session-Token: $ADMIN_TOKEN" \
+        -d "{\"username\":\"$username\",\"email\":\"$email\"}"
 done < users.csv
 ```
 
@@ -559,8 +603,8 @@ done < users.csv
 echo "options zfs zfs_arc_max=17179869184" | sudo tee -a /etc/modprobe.d/zfs.conf
 
 # Tune recordsize for workload
-zfs set recordsize=1M tank/media  # Large files
-zfs set recordsize=8K tank/database  # Small files
+zfs set recordsize=1M tank/media  # Large files
+zfs set recordsize=8K tank/database  # Small files
 ```
 
 **System:**
@@ -573,8 +617,8 @@ zfs set recordsize=8K tank/database  # Small files
 
 ---
 
-**For RBAC details, see:** `RBAC-COMPLETE-README.md`  
-**For API reference, see:** `API-REFERENCE.md`  
+**For RBAC details, see:** `RBAC-COMPLETE-README.md`  
+**For API reference, see:** `API-REFERENCE.md`  
 **For troubleshooting, see:** `TROUBLESHOOTING.md`
 
 ---
@@ -591,10 +635,10 @@ D-PlaneOS supports centralized authentication through LDAP and Active Directory.
 
 1. Navigate to **Identity → Directory Service**
 2. Select a preset:
-   - **Active Directory** — Windows Server AD DS (port 636, TLS)
-   - **OpenLDAP** — Standard OpenLDAP (port 389, TLS)
-   - **FreeIPA** — Red Hat IdM / FreeIPA (port 636, TLS)
-   - **Custom** — Manual configuration
+   - **Active Directory** — Windows Server AD DS (port 636, TLS)
+   - **OpenLDAP** — Standard OpenLDAP (port 389, TLS)
+   - **FreeIPA** — Red Hat IdM / FreeIPA (port 636, TLS)
+   - **Custom** — Manual configuration
 3. Enter your server address, Bind DN, Bind Password, and Base DN
 4. Click **Test Connection** to verify
 5. Click **Save Configuration**
@@ -652,14 +696,14 @@ When enabled (default), users who authenticate via LDAP are automatically create
 All LDAP endpoints require authentication (session token).
 
 ```
-GET    /api/ldap/config       → Get configuration (password masked)
-POST   /api/ldap/config       → Save configuration
-POST   /api/ldap/test         → Test connection
-GET    /api/ldap/status       → Connection & sync status
-POST   /api/ldap/sync         → Trigger manual sync
-POST   /api/ldap/search-user  → Search directory for user
-GET    /api/ldap/mappings     → List group→role mappings
-POST   /api/ldap/mappings     → Add mapping
+GET    /api/ldap/config       → Get configuration (password masked)
+POST   /api/ldap/config       → Save configuration
+POST   /api/ldap/test         → Test connection
+GET    /api/ldap/status       → Connection & sync status
+POST   /api/ldap/sync         → Trigger manual sync
+POST   /api/ldap/search-user  → Search directory for user
+GET    /api/ldap/mappings     → List group→role mappings
+POST   /api/ldap/mappings     → Add mapping
 DELETE /api/ldap/mappings?id=N → Remove mapping
-GET    /api/ldap/sync-log     → Sync history (default: last 20)
+GET    /api/ldap/sync-log     → Sync history (default: last 20)
 ```
