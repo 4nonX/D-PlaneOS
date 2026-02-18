@@ -1,101 +1,82 @@
-# D-PlaneOS v2.1.0 — Enterprise NAS Operating System
+# D-PlaneOS v2.2.0 — Declarative GitOps Storage Appliance
 
-Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
+A high-performance, OS-agnostic NAS management engine built in **Go**. Featuring native **NixOS Flake** integration, **Bidirectional Git-Sync**, and **ZFS-native** data protection.
+
+## ⚡ The v2.2.0 Shift: State as Code
+Version 2.2.0 introduces **Deterministic Storage Management**. By decoupling the system logic from the host OS, D-PlaneOS ensures your NAS configuration is reproducible, version-controlled, and hardware-independent.
+
+---
 
 ## Quick Start
 
+### NixOS (Recommended)
+Add D-PlaneOS to your `flake.nix`:
+
+```nix
+inputs.dplaneos.url = "github:your-repo/dplaneos/v2.2.0";
+```
+
+Then include the module in your system configuration:
+
+```nix
+outputs = { self, nixpkgs, dplaneos }: {
+  nixosConfigurations.nas = nixpkgs.lib.nixosSystem {
+    modules = [ dplaneos.nixosModules.dplaneos ];
+  };
+};
+```
+
 ### Debian/Ubuntu
+
 ```bash
-tar xzf dplaneos-v2.1.0-production-vendored.tar.gz
+# Download the v2.2.0 production binary
+tar xzf dplaneos-v2.2.0.tar.gz
 cd dplaneos
-sudo make install   # Pre-built binary, no compiler needed
+sudo make install
 sudo systemctl start dplaned
 ```
 
-### NixOS
-```bash
-cd nixos
-sudo bash setup-nixos.sh
-sudo nixos-rebuild switch --flake .#dplaneos
-```
+Web UI: `http://your-server` (Default: `admin` / `admin`)
 
-See [nixos/README.md](nixos/README.md) for the full NixOS guide.
+---
 
-Web UI: `http://your-server` (nginx reverse proxy on port 80 → daemon on 9000)
+## Core Features
 
-**Default login:** `admin` / `admin` (change immediately after first login)
+### 🔄 Bidirectional Git-Sync (New)
+Never lose a configuration again. D-PlaneOS automatically mirrors your system state—including Docker stacks, ZFS datasets, and permissions—to a private Git repository. Your NAS is now managed as "Cattle, not Pets."
 
-> **Rebuilding from source?** You need Go 1.22+ and gcc: `make build` compiles fresh.
+### ❄️ Native NixOS Integration
+A first-class Nix ecosystem citizen. Deploy your entire NAS infrastructure via Flakes. v2.2.0 includes the **NixOS Generation Manager**, allowing you to audit and rollback system generations directly from the web UI.
 
-### Off-Pool Database Backup (recommended for large pools)
+### 🛡️ ZFS-Powered Compute
+- **Safe Container Updates:** Automatic ZFS snapshot → pull → health check. Instant rollback on failure.
+- **Ephemeral Sandboxing:** Test containers on zero-cost ZFS clones.
+- **Time Machine:** Browse snapshots as directories and restore single files without a full pool rollback.
 
-Edit `/etc/systemd/system/dplaned.service` and add `-backup-path`:
-```
-ExecStart=/opt/dplaneos/daemon/dplaned -db /var/lib/dplaneos/dplaneos.db -backup-path /mnt/usb/dplaneos.db.backup
-```
-Creates a VACUUM INTO backup on startup + every 24 hours.
+### 🔍 Technical Excellence
+- **OS-Agnostic Core:** Runs on NixOS, Debian, or Ubuntu with zero host contamination.
+- **Hard Boot-Gate:** Systemd integration ensures the daemon only starts once ZFS pools are verified and writable.
+- **Adaptive ARC Limiter:** Intelligent cache management optimized for both ECC and high-capacity non-ECC hardware.
+- **Health Predictor:** Real-time S.M.A.R.T. integration and ZFS event tracking to catch disk failures before they happen.
 
-## Features
-
-- **Storage:** ZFS pools, snapshots, replication, encryption, quotas, file explorer
-- **Compute:** Docker container management, app modules, **Docker Compose** (v2.1.0)
-- **Network:** Interface config, routing, DNS
-- **Identity:** User management, groups, **LDAP/Active Directory** (v2.0.0)
-- **Security:** RBAC (4 roles), audit logging, API tokens, firewall
-- **System:** Settings, logs, UPS management, hardware detection
-- **UI:** Material Design 3, dark theme, responsive, keyboard shortcuts
-
-## New in v2.1.0: ZFS-Powered Features
-
-### Safe Container Updates
-`POST /api/docker/update` — ZFS snapshot → pull → restart → health check. On failure: instant rollback. No other NAS OS does this.
-
-### ZFS Time Machine
-Browse any snapshot like a folder. Find a deleted file from yesterday, restore just that one file — no full rollback needed.
-
-### Ephemeral Docker Sandbox
-Test any container on a ZFS clone (zero disk cost). Stop the container, the clone disappears. No residue.
-
-### ZFS Health Predictor
-Deep pool health monitoring: per-disk error tracking, checksum error detection, risk levels (low/medium/high/critical), S.M.A.R.T. integration. Warns you before a disk dies, not after.
-
-### NixOS Config Guard
-On NixOS systems: validate `configuration.nix` before applying, list/rollback generations, dry-activate checks. Cannot brick your system.
-
-### ZFS Replication (Remote)
-Native `zfs send | ssh remote zfs recv` — block-level replication that's 100x faster than rsync and preserves all snapshots on the remote.
-
-## LDAP / Active Directory (v2.0.0)
-
-Navigate to **Identity → Directory Service** to configure. Supports:
-
-- Active Directory, OpenLDAP, FreeIPA (one-click presets)
-- Group → Role mapping (auto-assign permissions)
-- Just-In-Time user provisioning
-- Background sync with audit trail
-- TLS 1.2+ enforced
+---
 
 ## Architecture
 
-- **Frontend:** HTML5 + Material Design 3, flyout navigation, no framework dependencies
-- **Backend:** Go daemon (`dplaned`, 8MB) on port 9000, 171 API routes
-- **Database:** SQLite with WAL mode, `synchronous=FULL`, daily `.backup` (WAL-safe)
-- **Web Server:** nginx reverse proxy (TLS termination)
-- **Storage:** ZFS (native kernel module) + ZED hook for real-time disk failure alerts
-- **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 34 permissions), injection-hardened, OOM-protected (1 GB limit)
-- **NixOS:** Full support via Flake — entire NAS defined in a single `configuration.nix`
+- **Engine:** Statistically typed Go daemon (`dplaned`), single ~7.2MB binary.
+- **State:** SQLite with WAL mode + Bidirectional Git-Sync.
+- **Front-end:** Material Design 3, vanilla JS (no framework bloat), hybrid SPA router.
+- **Security:** Strict regex-based input validation for all system commands, RBAC with 4 roles, and OOM-protection.
+- **Storage:** Native ZFS kernel module integration with ZED (ZFS Event Daemon) alerting.
 
 ## Documentation
 
-- `RELEASE-NOTES-v2.1.0.md` — What's new in v2.1.0
-- `CHANGELOG.md` — Full version history
-- `ADMIN-GUIDE.md` — Full administration guide
-- `ERROR-REFERENCE.md` — API error codes and diagnostics
-- `TROUBLESHOOTING.md` — Build issues, ZED setup, common fixes
-- `nixos/README.md` — NixOS installation and configuration
-- `LDAP-REFERENCE.md` — LDAP technical reference
-- `INSTALLATION-GUIDE.md` — Detailed installation steps
+- `CHANGELOG.md` — Full version history and technical fixes.
+- `ARCHITECTURE.md` — Deep dive into the Go/NixOS design philosophy.
+- `ADMIN-GUIDE.md` — Comprehensive administration and setup guide.
+- `nixos/README.md` — Detailed NixOS Flake configuration reference.
+- `ERROR-REFERENCE.md` — API diagnostics and troubleshooting.
 
 ## License
 
-Open source. See LICENSE file.
+Open source. See the LICENSE file for details.
