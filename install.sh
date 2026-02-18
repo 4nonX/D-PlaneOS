@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# D-PlaneOS v2.1.0 - ONE-CLICK Installation
+# D-PlaneOS v2.2.0 - ONE-CLICK Installation
 # 
 # This installer does EVERYTHING in one go:
 # 1. Install dependencies (ZFS, nginx, etc.)
