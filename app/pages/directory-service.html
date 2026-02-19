@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><style>html{background:#0a0a0a}</style>
+<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Directory Service - D-PlaneOS</title>
-  <link rel="stylesheet" href="/assets/css/design-tokens.css">
+    <link rel="stylesheet" href="/assets/css/design-tokens.css">
+    <link rel="stylesheet" href="/assets/css/dplaneos-ui-complete.css">
   <link rel="stylesheet" href="/assets/css/m3-tokens.css">
   <link rel="stylesheet" href="/assets/css/m3-components.css">
   <link rel="stylesheet" href="/assets/css/m3-icons.css">
@@ -23,9 +24,6 @@
   <script src="/assets/js/form-validator.js"></script>
   <script src="/assets/js/daemon-api.js"></script>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #0a0a0a; color: #fff; overflow-x: hidden; }
-
 .main { max-width: 1600px; margin: 140px auto 60px; padding: 0 40px; }
 .page-header { margin-bottom: 48px; }
 .page-title { font-size: 32px; font-weight: 700; letter-spacing: -1.5px; margin-bottom: 12px; }
@@ -55,12 +53,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .form-group { margin-bottom: 16px; }
 .form-label { display: block; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-.form-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px 16px; color: #fff; font-size: 14px; transition: border-color 0.3s, box-shadow 0.3s; outline: none; }
+.form-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px 16px; color: var(--text); font-size: 14px; transition: border-color 0.3s, box-shadow 0.3s; outline: none; }
 .form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(138,156,255,0.15); }
 .form-input::placeholder { color: rgba(255,255,255,0.3); }
 .form-hint { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 4px; }
 select.form-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='rgba(255,255,255,0.5)' viewBox='0 0 16 16'%3E%3Cpath d='M8 12L2 6h12z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; padding-right: 40px; }
-select.form-input option { background: #1a1a1a; color: #fff; }
+select.form-input option { background: var(--bg-elevated); color: var(--text); }
 
 /* Password field with toggle */
 .password-wrap { position: relative; }
@@ -70,9 +68,9 @@ select.form-input option { background: #1a1a1a; color: #fff; }
 
 /* Buttons matching demo.html */
 .btn { padding: 10px 20px; border-radius: 12px; border: none; cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 14px; }
-.btn-primary { background: var(--primary); color: #000; }
+.btn-primary { background: var(--primary); color: var(--text-on-primary); }
 .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(138,156,255,0.3); }
-.btn-ghost { background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
+.btn-ghost { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid rgba(255,255,255,0.1); }
 .btn-ghost:hover { background: rgba(255,255,255,0.08); }
 .btn-danger { background: rgba(255,82,82,0.15); color: var(--error); border: 1px solid rgba(255,82,82,0.3); }
 .btn-danger:hover { background: rgba(255,82,82,0.25); }
@@ -145,140 +143,7 @@ select.form-input option { background: #1a1a1a; color: #fff; }
 </head>
 <body>
 <!-- D-PlaneOS v3.0.0 - Hierarchical Navigation -->
-<nav class="nav-container">
-  <div class="nav-main">
-    <div style="display: flex; align-items: center; gap: 16px;">
-      <div class="logo">
-        D-PlaneOS
-        <span class="version-badge">v3.0.0</span>
-      </div>
-    </div>
-    <div class="nav-links">
-      <button class="nav-link" onclick="navigateToSection('dashboard')" data-section="dashboard">Dashboard</button>
-      <button class="nav-link" onclick="toggleSubNav('storage', this)" data-section="storage">Storage</button>
-      <button class="nav-link" onclick="toggleSubNav('compute', this)" data-section="compute">Compute</button>
-      <button class="nav-link" onclick="toggleSubNav('network', this)" data-section="network">Network</button>
-      <button class="nav-link" onclick="toggleSubNav('identity', this)" data-section="identity">Identity</button>
-      <button class="nav-link" onclick="toggleSubNav('security', this)" data-section="security">Security</button>
-      <button class="nav-link" onclick="toggleSubNav('system', this)" data-section="system">System</button>
-    </div>
-    <div class="nav-actions">
-      <button class="nav-action-btn" onclick="showKeyboardHelp()" title="Keyboard Shortcuts (?)">
-        <span class="material-symbols-rounded">keyboard</span>
-      </button>
-      <div class="connection-status online" id="navConnectionStatus">
-        <span class="status-dot"></span>
-        <span>Connected</span>
-      </div>
-    </div>
-  </div>
-
-  <div id="sub-storage" class="nav-sub"><div class="nav-sub-inner">
-    <a href="pools.html" class="sub-link" data-page="pools"><span class="material-symbols-rounded">database</span> ZFS Pools</a>
-    <a href="pools-advanced.html" class="sub-link" data-page="pools-advanced"><span class="material-symbols-rounded">photo_camera</span> Snapshots</a>
-    <a href="shares.html" class="sub-link" data-page="shares"><span class="material-symbols-rounded">folder_shared</span> Shares</a>
-    <a href="replication.html" class="sub-link" data-page="replication"><span class="material-symbols-rounded">sync</span> Replication</a>
-    <a href="files.html" class="sub-link" data-page="files"><span class="material-symbols-rounded">folder_open</span> File Explorer</a>
-    <a href="quotas.html" class="sub-link" data-page="quotas"><span class="material-symbols-rounded">pie_chart</span> Quotas</a>
-      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
-        <span class="material-symbols-rounded">schedule</span>
-        Snapshot Scheduler
-      </a>
-      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
-        <span class="material-symbols-rounded">admin_panel_settings</span>
-        ACL Manager
-      </a>
-      <a href="zfs-encryption.html" class="sub-link" data-page="zfs-encryption">
-        <span class="material-symbols-rounded">enhanced_encryption</span>
-        Encryption
-      </a>
-      <a href="files-enhanced.html" class="sub-link" data-page="files-enhanced">
-        <span class="material-symbols-rounded">upload_file</span>
-        File Upload
-      </a>
-      <a href="cloud-sync.html" class="sub-link" data-page="cloud-sync">
-        <span class="material-symbols-rounded">cloud_sync</span>
-        Cloud Sync
-      </a>
-  </div></div>
-  <div id="sub-compute" class="nav-sub"><div class="nav-sub-inner">
-    <a href="docker.html" class="sub-link" data-page="docker"><span class="material-symbols-rounded">dns</span> Docker Containers</a>
-      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
-        <span class="material-symbols-rounded">schedule</span>
-        Snapshot Scheduler
-      </a>
-      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
-        <span class="material-symbols-rounded">admin_panel_settings</span>
-        ACL Manager
-      </a>
-    <a href="modules.html" class="sub-link" data-page="modules"><span class="material-symbols-rounded">extension</span> App Modules</a>
-  </div></div>
-  <div id="sub-network" class="nav-sub"><div class="nav-sub-inner">
-    <a href="network.html" class="sub-link" data-page="network"><span class="material-symbols-rounded">lan</span> Network Settings</a>
-    <a href="network-interfaces.html" class="sub-link" data-page="network-interfaces"><span class="material-symbols-rounded">settings_ethernet</span> Interfaces</a>
-    <a href="network-dns.html" class="sub-link" data-page="network-dns"><span class="material-symbols-rounded">dns</span> DNS</a>
-    <a href="network-routing.html" class="sub-link" data-page="network-routing"><span class="material-symbols-rounded">route</span> Routing</a>
-  </div></div>
-  <div id="sub-identity" class="nav-sub"><div class="nav-sub-inner">
-    <a href="users.html" class="sub-link" data-page="users"><span class="material-symbols-rounded">person</span> Users</a>
-    <a href="groups.html" class="sub-link" data-page="groups"><span class="material-symbols-rounded">group</span> Groups</a>
-    <a href="directory-service.html" class="sub-link" data-page="directory-service"><span class="material-symbols-rounded">domain</span> Directory Service</a>
-    <a href="rbac-management.html" class="sub-link" data-page="rbac-management"><span class="material-symbols-rounded">admin_panel_settings</span> Roles &amp; Permissions</a>
-  </div></div>
-  <div id="sub-security" class="nav-sub"><div class="nav-sub-inner">
-    <a href="security.html" class="sub-link" data-page="security"><span class="material-symbols-rounded">shield</span> Security Settings</a>
-    <a href="audit.html" class="sub-link" data-page="audit"><span class="material-symbols-rounded">fact_check</span> Audit Logs</a>
-      <a href="firewall.html" class="sub-link" data-page="firewall">
-        <span class="material-symbols-rounded">local_fire_department</span>
-        Firewall
-      </a>
-      <a href="certificates.html" class="sub-link" data-page="certificates">
-        <span class="material-symbols-rounded">verified_user</span>
-        Certificates
-      </a>
-  </div></div>
-  <div id="sub-system" class="nav-sub"><div class="nav-sub-inner">
-    <a href="settings.html" class="sub-link" data-page="settings"><span class="material-symbols-rounded">tune</span> General Settings</a>
-      <a href="firewall.html" class="sub-link" data-page="firewall">
-        <span class="material-symbols-rounded">local_fire_department</span>
-        Firewall
-      </a>
-      <a href="certificates.html" class="sub-link" data-page="certificates">
-        <span class="material-symbols-rounded">verified_user</span>
-        Certificates
-      </a>
-    <a href="logs.html" class="sub-link" data-page="logs"><span class="material-symbols-rounded">description</span> System Logs</a>
-    <a href="ups.html" class="sub-link" data-page="ups"><span class="material-symbols-rounded">battery_charging_full</span> UPS Management</a>
-      <a href="reporting.html" class="sub-link" data-page="reporting">
-        <span class="material-symbols-rounded">monitoring</span>
-        Reporting
-      </a>
-      <a href="power-management.html" class="sub-link" data-page="power-management">
-        <span class="material-symbols-rounded">power_settings_new</span>
-        Power Management
-      </a>
-      <a href="system-settings.html" class="sub-link" data-page="system-settings">
-        <span class="material-symbols-rounded">settings_suggest</span>
-        System Settings
-      </a>
-      <a href="system-monitoring.html" class="sub-link" data-page="system-monitoring">
-        <span class="material-symbols-rounded">monitor_heart</span>
-        Monitoring
-      </a>
-      <a href="hardware.html" class="sub-link" data-page="hardware">
-        <span class="material-symbols-rounded">developer_board</span>
-        Hardware
-      </a>
-      <a href="ipmi.html" class="sub-link" data-page="ipmi">
-        <span class="material-symbols-rounded">memory</span>
-        IPMI
-      </a>
-      <a href="removable-media-ui.html" class="sub-link" data-page="removable-media-ui">
-        <span class="material-symbols-rounded">usb</span>
-        Removable Media
-      </a>
-  </div></div>
-</nav>
+<div id="nav-root"></div>
 
 <script>
 function navigateToSection(s){if(s==='dashboard')window.location.href='index.html';}
@@ -592,28 +457,6 @@ function showKeyboardHelp(){if(window.EnhancedUI)EnhancedUI.toast('g+d Dashboard
               Sync Now
             </button>
           </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== GROUP-ROLE MAPPINGS ===== -->
-  <div class="section">
-    <div class="card">
-      <div class="card-header collapse-trigger" onclick="toggleCollapse('mappingsBody', this)">
-        <div class="card-title">
-          <span class="material-symbols-rounded" style="color: var(--primary);">account_tree</span>
-          Group → Role Mappings
-        </div>
-        <span class="material-symbols-rounded expand-icon" style="color: rgba(255,255,255,0.5);">expand_more</span>
-      </div>
-      <div class="collapse-body" id="mappingsBody">
-        <div style="padding-top: 16px;">
-          <p style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px;">Map LDAP groups to D-PlaneOS roles. Users in the LDAP group will automatically be assigned the corresponding role.</p>
-          <div id="mappingsList"></div>
-          <button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="addLDAPMapping()">
-            <span class="material-symbols-rounded" style="font-size:16px;">add</span> Add Mapping
-          </button>
         </div>
       </div>
     </div>
@@ -949,7 +792,7 @@ document.head.appendChild(style);
 document.addEventListener('DOMContentLoaded', loadAll);
 </script>
 <script src="/assets/js/realtime-client.js"></script>
-<!-- v2.1.0: LDAP Circuit Breaker + Full LDAP Management -->
+<!-- v3.0.0: LDAP Circuit Breaker + Full LDAP Management -->
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const main = document.querySelector('.main');
@@ -1086,60 +929,8 @@ async function loadSyncLog() {
     el.innerHTML = d.logs.map(l => '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">'+l.timestamp+' — '+(l.success?'✓':'✗')+' '+(l.message||l.users_synced+' users')+'</div>').join('');
   } catch(e) {}
 }
-
-async function loadMappings() {
-  try {
-    const r = await csrfFetch('/api/ldap/mappings');
-    const d = await r.json();
-    const el = document.getElementById('mappingsList');
-    if (!d.mappings || !d.mappings.length) {
-      el.innerHTML = '<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);">No group mappings configured</div>';
-      return;
-    }
-    el.innerHTML = d.mappings.map(m => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:8px;">
-        <div>
-          <span style="font-weight:600;color:#fff;">${esc(m.ldap_group)}</span>
-          <span style="color:rgba(255,255,255,0.4);margin:0 8px;">→</span>
-          <span style="color:var(--primary);font-weight:500;">${esc(m.role_name)}</span>
-        </div>
-        <button class="btn btn-sm" onclick="deleteLDAPMapping(${m.id})" style="color:var(--error);padding:4px 8px;">
-          <span class="material-symbols-rounded" style="font-size:16px;">delete</span>
-        </button>
-      </div>
-    `).join('');
-  } catch(e) { console.error('Failed to load mappings', e); }
-}
-
-async function addLDAPMapping() {
-  const result = await ui.form('Add Group → Role Mapping', [
-    { name: 'ldap_group', label: 'LDAP Group DN', type: 'text', required: true, placeholder: 'CN=Admins,OU=Groups,DC=example,DC=com' },
-    { name: 'role_name', label: 'D-PlaneOS Role', type: 'select', options: [
-      { value: 'admin', label: 'Admin' },
-      { value: 'operator', label: 'Operator' },
-      { value: 'user', label: 'User' },
-      { value: 'readonly', label: 'Read-Only' }
-    ]}
-  ], 'Add Mapping');
-  if (!result) return;
-  try {
-    const r = await csrfFetch('/api/ldap/mappings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(result) });
-    const d = await r.json();
-    d.success ? (ui.toast('Mapping added', 'success'), loadMappings()) : ui.toast(d.error || 'Failed', 'error');
-  } catch(e) { ui.toast('Failed', 'error'); }
-}
-
-async function deleteLDAPMapping(id) {
-  if (!confirm('Remove this group mapping?')) return;
-  try {
-    const r = await csrfFetch('/api/ldap/mappings', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: id }) });
-    const d = await r.json();
-    d.success ? (ui.toast('Removed', 'success'), loadMappings()) : ui.toast(d.error || 'Failed', 'error');
-  } catch(e) { ui.toast('Failed', 'error'); }
-}
-
-// Load mappings on init
-document.addEventListener('DOMContentLoaded', () => { loadMappings(); });
 </script>
+    <script src="/assets/js/nav-flyout.js"></script>
+    <script src="/assets/js/nav-shared.js"></script>
 </body>
 </html>

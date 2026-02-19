@@ -4,7 +4,7 @@
   "description": "Share folders over SMB/CIFS protocol (Windows file sharing)",
   "version": "1.0.0",
   "author": "D-PlaneOS Team",
-  "license": "PolyForm-Shield-1.0.0",
+  "license": "GPL-3.0",
   "category": "storage-protocols",
   "icon": "folder_shared",
   

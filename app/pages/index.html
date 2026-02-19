@@ -1,21 +1,17 @@
 <!DOCTYPE html>
 <!-- saved from url=(0139)index.html -->
-<html lang="en"><head><style>html{background:#0a0a0a}</style><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard - D-PlaneOS</title>
-  <link rel="stylesheet" href="/assets/css/design-tokens.css">
+    <link rel="stylesheet" href="/assets/css/design-tokens.css">
+    <link rel="stylesheet" href="/assets/css/dplaneos-ui-complete.css">
   <link rel="stylesheet" href="/assets/css/m3-tokens.css">
   <link rel="stylesheet" href="/assets/css/m3-components.css">
   <link rel="stylesheet" href="/assets/css/m3-icons.css">
   <link rel="stylesheet" href="/assets/css/enhanced-ui.css">
   <link rel="stylesheet" href="/assets/css/m3-animations.css">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #0a0a0a; color: #fff; overflow-x: hidden; cursor: default; }
-    
-    
-    
     .logo { 
       font-size: 20px; 
       font-weight: 800; 
@@ -90,7 +86,7 @@
     .alert-icon { font-size: 24px; color: var(--error); }
     .alert-text { flex: 1; font-size: 14px; }
     
-    .fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: #fff; }
+    .fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: var(--text); }
     .fab:hover { transform: translateY(-4px) scale(1.05); box-shadow: 0 12px 48px rgba(102, 126, 234, 0.6); }
     .fab:active { transform: translateY(-2px) scale(1); }
     
@@ -124,230 +120,7 @@
   <!-- D-PlaneOS v3.0.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
-<nav class="nav-container">
-  <div class="nav-main">
-    <div style="display: flex; align-items: center; gap: 16px;">
-      <div class="logo">
-        D-PlaneOS
-        <span class="version-badge">v3.0.0</span>
-      </div>
-    </div>
-    
-    <div class="nav-links">
-      <button class="nav-link" onclick="navigateToSection('dashboard')" data-section="dashboard">
-        Dashboard
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('storage', this)" data-section="storage">
-        Storage
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('compute', this)" data-section="compute">
-        Compute
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('network', this)" data-section="network">
-        Network
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('identity', this)" data-section="identity">
-        Identity
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('security', this)" data-section="security">
-        Security
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('system', this)" data-section="system">
-        System
-      </button>
-    </div>
-    
-    <div class="nav-actions">
-      <button class="nav-action-btn" onclick="showKeyboardHelp()" title="Keyboard Shortcuts (?)">
-        <span class="material-symbols-rounded">keyboard</span>
-      </button>
-      <div class="connection-status online" id="navConnectionStatus">
-        <span class="status-dot"></span>
-        <span>Connected</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Storage Sub-Navigation -->
-  <div id="sub-storage" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="pools.html" class="sub-link" data-page="pools">
-        <span class="material-symbols-rounded">database</span>
-        ZFS Pools
-      </a>
-      <a href="pools-advanced.html" class="sub-link" data-page="pools-advanced">
-        <span class="material-symbols-rounded">photo_camera</span>
-        Snapshots
-      </a>
-      <a href="shares.html" class="sub-link" data-page="shares">
-        <span class="material-symbols-rounded">folder_shared</span>
-        Shares
-      </a>
-      <a href="replication.html" class="sub-link" data-page="replication">
-        <span class="material-symbols-rounded">sync</span>
-        Replication
-      </a>
-      <a href="files.html" class="sub-link" data-page="files">
-        <span class="material-symbols-rounded">folder_open</span>
-        File Explorer
-      </a>
-      <a href="quotas.html" class="sub-link" data-page="quotas">
-        <span class="material-symbols-rounded">pie_chart</span>
-        Quotas
-      </a>
-      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
-        <span class="material-symbols-rounded">schedule</span>
-        Snapshot Scheduler
-      </a>
-      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
-        <span class="material-symbols-rounded">admin_panel_settings</span>
-        ACL Manager
-      </a>
-      <a href="zfs-encryption.html" class="sub-link" data-page="zfs-encryption">
-        <span class="material-symbols-rounded">enhanced_encryption</span>
-        Encryption
-      </a>
-      <a href="files-enhanced.html" class="sub-link" data-page="files-enhanced">
-        <span class="material-symbols-rounded">upload_file</span>
-        File Upload
-      </a>
-      <a href="cloud-sync.html" class="sub-link" data-page="cloud-sync">
-        <span class="material-symbols-rounded">cloud_sync</span>
-        Cloud Sync
-      </a>
-    </div>
-  </div>
-
-  <!-- Compute Sub-Navigation -->
-  <div id="sub-compute" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="docker.html" class="sub-link" data-page="docker">
-        <span class="material-symbols-rounded">dns</span>
-        Docker Containers
-      </a>
-      <a href="git-sync.html" class="sub-link" data-page="git-sync">
-        <span class="material-symbols-rounded">sync</span>
-        Git Sync
-      </a>
-      <a href="modules.html" class="sub-link" data-page="modules">
-        <span class="material-symbols-rounded">extension</span>
-        App Modules
-      </a>
-    </div>
-  </div>
-
-  <!-- Network Sub-Navigation -->
-  <div id="sub-network" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="network.html" class="sub-link" data-page="network">
-        <span class="material-symbols-rounded">lan</span>
-        Network Settings
-      </a>
-      <a href="network-interfaces.html" class="sub-link" data-page="network-interfaces">
-        <span class="material-symbols-rounded">settings_ethernet</span>
-        Interfaces
-      </a>
-      <a href="network-dns.html" class="sub-link" data-page="network-dns">
-        <span class="material-symbols-rounded">dns</span>
-        DNS
-      </a>
-      <a href="network-routing.html" class="sub-link" data-page="network-routing">
-        <span class="material-symbols-rounded">route</span>
-        Routing
-      </a>
-    </div>
-  </div>
-
-  <!-- Identity Sub-Navigation -->
-  <div id="sub-identity" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="users.html" class="sub-link" data-page="users">
-        <span class="material-symbols-rounded">person</span>
-        Users
-      </a>
-      <a href="groups.html" class="sub-link" data-page="groups">
-        <span class="material-symbols-rounded">group</span>
-        Groups
-      </a>
-      <a href="directory-service.html" class="sub-link" data-page="directory-service">
-        <span class="material-symbols-rounded">domain</span>
-        Directory Service
-      </a>
-      <a href="rbac-management.html" class="sub-link" data-page="rbac-management">
-        <span class="material-symbols-rounded">admin_panel_settings</span>
-        Roles & Permissions
-      </a>
-    </div>
-  </div>
-
-  <!-- Security Sub-Navigation -->
-  <div id="sub-security" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="security.html" class="sub-link" data-page="security">
-        <span class="material-symbols-rounded">shield</span>
-        Security Settings
-      </a>
-      <a href="audit.html" class="sub-link" data-page="audit">
-        <span class="material-symbols-rounded">fact_check</span>
-        Audit Logs
-      </a>
-      <a href="firewall.html" class="sub-link" data-page="firewall">
-        <span class="material-symbols-rounded">local_fire_department</span>
-        Firewall
-      </a>
-      <a href="certificates.html" class="sub-link" data-page="certificates">
-        <span class="material-symbols-rounded">verified_user</span>
-        Certificates
-      </a>
-    </div>
-  </div>
-
-  <!-- System Sub-Navigation -->
-  <div id="sub-system" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="settings.html" class="sub-link" data-page="settings">
-        <span class="material-symbols-rounded">tune</span>
-        General Settings
-      </a>
-      <a href="logs.html" class="sub-link" data-page="logs">
-        <span class="material-symbols-rounded">description</span>
-        System Logs
-      </a>
-      <a href="ups.html" class="sub-link" data-page="ups">
-        <span class="material-symbols-rounded">battery_charging_full</span>
-        UPS Management
-      </a>
-      <a href="reporting.html" class="sub-link" data-page="reporting">
-        <span class="material-symbols-rounded">monitoring</span>
-        Reporting
-      </a>
-      <a href="power-management.html" class="sub-link" data-page="power-management">
-        <span class="material-symbols-rounded">power_settings_new</span>
-        Power Management
-      </a>
-      <a href="system-settings.html" class="sub-link" data-page="system-settings">
-        <span class="material-symbols-rounded">settings_suggest</span>
-        System Settings
-      </a>
-      <a href="system-monitoring.html" class="sub-link" data-page="system-monitoring">
-        <span class="material-symbols-rounded">monitor_heart</span>
-        Monitoring
-      </a>
-      <a href="hardware.html" class="sub-link" data-page="hardware">
-        <span class="material-symbols-rounded">developer_board</span>
-        Hardware
-      </a>
-      <a href="ipmi.html" class="sub-link" data-page="ipmi">
-        <span class="material-symbols-rounded">memory</span>
-        IPMI
-      </a>
-      <a href="removable-media-ui.html" class="sub-link" data-page="removable-media-ui">
-        <span class="material-symbols-rounded">usb</span>
-        Removable Media
-      </a>
-    </div>
-  </div>
-</nav>
+<div id="nav-root"></div>
 
 <script>
 // Navigation behavior
@@ -725,21 +498,6 @@ if (window.ConnectionMonitor) {
         const pools = await poolsRes.json();
         if (pools.success) updatePools(pools.pools);
         
-        // Load ZFS health, capacity & latency
-        try {
-          const [healthRes, capRes, latRes, gateRes, locksRes] = await Promise.allSettled([
-            csrfFetch('/api/zfs/health'),
-            csrfFetch('/api/zfs/capacity'),
-            csrfFetch('/api/zfs/disk-latency'),
-            csrfFetch('/api/system/zfs-gate-status'),
-            csrfFetch('/api/system/stale-locks')
-          ]);
-          // Store for potential future display; errors are non-fatal
-          if (healthRes.status === 'fulfilled') { const h = await healthRes.value.json(); window._zfsHealth = h; }
-          if (gateRes.status === 'fulfilled') { const g = await gateRes.value.json(); if (!g.ready) console.warn('ZFS gate not ready'); }
-          if (locksRes.status === 'fulfilled') { const l = await locksRes.value.json(); if (l.stale_locks && l.stale_locks.length > 0) console.warn('Stale locks detected:', l.stale_locks.length); }
-        } catch(e) { /* non-critical */ }
-        
         // Load recent activity
         const logsRes = await csrfFetch('/api/system/logs?limit=3');
         const logs = await logsRes.json();
@@ -947,28 +705,8 @@ if (window.ConnectionMonitor) {
     
     // Load dashboard on page load
     window.addEventListener('DOMContentLoaded', () => {
-      // Check for first-run: redirect to setup wizard if not completed
-      if (!localStorage.getItem('dplaneos_setup_completed')) {
-        // Double-check: if the system already has pools, setup was done before localStorage existed
-        (async () => {
-          try {
-            const r = await csrfFetch('/api/zfs/pools');
-            const d = await r.json();
-            if (!d.success || !d.pools || d.pools.length === 0) {
-              // No pools and no setup flag — likely first run
-              window.location.href = '/pages/setup-wizard.html';
-              return;
-            }
-            // Has pools — setup was done, just missing the flag
-            localStorage.setItem('dplaneos_setup_completed', 'true');
-          } catch(e) { /* can't check — continue */ }
-          loadDashboard();
-          initWebSocketHandlers();
-        })();
-      } else {
-        loadDashboard();
-        initWebSocketHandlers();
-      }
+      loadDashboard();
+      initWebSocketHandlers();
     });
     
     // Initialize WebSocket event handlers
@@ -1147,4 +885,6 @@ if (window.ConnectionMonitor) {
 
 <script src="/assets/js/ui-components.js"></script>
   <script src="/assets/js/realtime-client.js"></script>
+    <script src="/assets/js/nav-flyout.js"></script>
+    <script src="/assets/js/nav-shared.js"></script>
 </body></html>

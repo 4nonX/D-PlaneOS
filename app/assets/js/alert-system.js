@@ -387,7 +387,6 @@ class AlertSystem {
         
         // Create modal with all critical alerts
         // (Implementation depends on your modal system)
-        console.log('Show all critical alerts:', criticalAlerts);
     }
 }
 

@@ -1,6 +1,6 @@
-# D-PlaneOS v3.0.0 Installation Guide
+# D-PlaneOS v2.1.1 Installation Guide
 
-**ZFS-based NAS with web UI, role-based access control, and Docker management**
+**Complete enterprise NAS with RBAC - Production Ready**
 
 ---
 
@@ -30,7 +30,7 @@
   - Home use / media library: acceptable risk with regular scrubs and backups
   - Business / critical data / databases: not recommended
 
-  **D-PlaneOS v3.0.0 behaviour:**
+  **D-PlaneOS v2.1.1 behaviour:**
   - Detects ECC presence via `dmidecode` on startup
   - Shows a persistent advisory notice in the dashboard if non-ECC RAM is found
   - **Never blocks installation or operation** — ECC is your choice, not ours
@@ -64,31 +64,35 @@
 
 ```bash
 # Download latest release
-wget https://github.com/your-repo/dplaneos/releases/download/v3.0.0/dplaneos-v3.0.0.tar.gz
+wget https://github.com/your-repo/dplaneos/releases/download/v5.8.0/dplaneos-v5.8.0-RBAC-HARDENED.tar.gz
+
+# Verify SHA256
+sha256sum dplaneos-v5.8.0-RBAC-HARDENED.tar.gz
+# Should match: 72d3f07f053a787f439d29c9ae65c4a449e3f49a883d574747b5d34b782b8c7c
 ```
 
-### **Step 2: Extract and Install**
+### **Step 2: Extract**
 
 ```bash
-tar -xzf dplaneos-v3.0.0.tar.gz
-cd dplaneos
-sudo make install
+tar -xzf dplaneos-v5.8.0-RBAC-HARDENED.tar.gz
+cd dplaneos-v5.2.1
+```
+
+### **Step 3: Run Installer**
+
+```bash
+sudo ./install-v5.2.3.sh
 ```
 
 **What happens:**
-1. Pre-built `dplaned` binary installed to `/opt/dplaneos/`
-2. Database initialized with RBAC schema (auto-migration)
-3. Default admin user created (username: `admin`, password: `dplaneos`)
-4. systemd service created and enabled
+1. System dependencies installed (ZFS, Docker, SQLite, Go)
+2. D-PlaneOS daemon compiled
+3. Database initialized with RBAC schema
+4. systemd service created
 5. nginx reverse proxy configured
+6. First admin user setup prompt
 
-**Installation time:** ~1-2 minutes (no compilation needed with pre-built binary)
-
-### **Step 3: Start the Service**
-
-```bash
-sudo systemctl start dplaned
-```
+**Installation time:** ~5-10 minutes (depending on internet speed)
 
 ### **Step 4: Access Web Interface**
 
@@ -219,19 +223,11 @@ sudo systemctl restart fail2ban
 
 ---
 
-## Upgrading from v2.x
+## Upgrading from v5.7.1
 
-Drop-in replacement. Database auto-migrates. Users must re-login once (session mechanism changed from sessionStorage to HttpOnly cookies).
+**Note:** v5.8.0 is a clean architecture. Fresh install recommended.
 
-```bash
-tar xzf dplaneos-v3.0.0.tar.gz
-cd dplaneos && sudo make install
-sudo systemctl restart dplaned
-```
-
-## Upgrading from v1.x
-
-**Not an in-place upgrade.** v2.0.0+ is a complete rewrite.
+**If you have data in v5.7.1:**
 
 1. Backup your data:
    ```bash
@@ -239,7 +235,7 @@ sudo systemctl restart dplaned
    zfs send tank@pre-upgrade > /backup/tank-pre-upgrade.zfs
    ```
 
-2. Fresh install v3.0.0
+2. Fresh install v5.8.0
 
 3. Import existing pool:
    ```bash
@@ -301,18 +297,13 @@ ls -lh /var/lib/dplaneos/dplaneos.db
 ## Uninstall
 
 ```bash
-cd dplaneos
-sudo make uninstall
-
-# Or manually:
-sudo systemctl stop dplaned
-sudo systemctl disable dplaned
-sudo rm -f /usr/local/bin/dplaned
-sudo rm -f /etc/systemd/system/dplaned.service
+cd dplaneos-v5.2.1
+sudo ./uninstall.sh
 
 # Remove all data (WARNING: destroys everything)
 sudo zpool destroy tank  # if you want to delete pool
 sudo rm -rf /var/lib/dplaneos
+sudo rm -rf /etc/dplaneos
 ```
 
 ---
@@ -345,4 +336,33 @@ After installation:
 
 ---
 
-**Installation complete! Your NAS is ready.**
+**Installation complete! Your enterprise NAS is ready.**
+
+
+---
+
+## NixOS Installation
+
+For the full NixOS installation guide, see **INSTALLATION-GUIDE-NIXOS.md** (in the release archive or at the repository root).
+
+**Quick note on PolyForm licensing and `nixpkgs.config.allowUnfreePredicate`:**
+
+NixOS classifies packages by license. D-PlaneOS uses the PolyForm Shield 1.0.0 license — source-available but not OSI-approved, so NixOS marks it as `unfree`. This means a plain `nixos-rebuild switch` will fail with:
+
+```
+error: Package 'dplaneos-daemon' has an unfree license 'PolyForm Shield 1.0.0',
+refusing to evaluate.
+```
+
+The `configuration-standalone.nix` provided in `nixos/` already handles this with a **targeted allowlist** — it permits only the D-PlaneOS daemon, not all unfree packages globally:
+
+```nix
+nixpkgs.config.allowUnfreePredicate = pkg:
+  builtins.elem (lib.getName pkg) [
+    "dplaneos-daemon"
+  ];
+```
+
+This is already present in the config file. You do not need to add it manually.
+
+If you prefer to audit it yourself before building, open `/etc/nixos/configuration.nix` and verify this block is present before running `nixos-rebuild switch`.

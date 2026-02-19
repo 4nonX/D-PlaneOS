@@ -52,20 +52,11 @@ type FilePropertiesResponse struct {
 func (h *FilesExtendedHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
-		path = "/mnt"
+		path = "/"
 	}
 
-	// Validate path against allowed base paths
-	safePath, ok := validateFilePath(path)
-	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(FileListResponse{
-			Success: false,
-			Error:   "Path not allowed",
-		})
-		return
-	}
-	path = safePath
+	// Sanitize path
+	path = filepath.Clean(path)
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
@@ -120,16 +111,7 @@ func (h *FilesExtendedHandler) GetFileProperties(w http.ResponseWriter, r *http.
 		return
 	}
 
-	safePath, ok := validateFilePath(path)
-	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(FilePropertiesResponse{
-			Success: false,
-			Error:   "Path not allowed",
-		})
-		return
-	}
-	path = safePath
+	path = filepath.Clean(path)
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -176,20 +158,6 @@ func (h *FilesExtendedHandler) RenameFile(w http.ResponseWriter, r *http.Request
 	req.OldPath = filepath.Clean(req.OldPath)
 	req.NewPath = filepath.Clean(req.NewPath)
 
-	// Validate both paths against allowed base paths
-	safeOld, okOld := validateFilePath(req.OldPath)
-	safeNew, okNew := validateFilePath(req.NewPath)
-	if !okOld || !okNew {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"error":   "Path not allowed",
-		})
-		return
-	}
-	req.OldPath = safeOld
-	req.NewPath = safeNew
-
 	if err := os.Rename(req.OldPath, req.NewPath); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -217,20 +185,6 @@ func (h *FilesExtendedHandler) CopyFile(w http.ResponseWriter, r *http.Request) 
 
 	req.Source = filepath.Clean(req.Source)
 	req.Destination = filepath.Clean(req.Destination)
-
-	// Validate both paths against allowed base paths
-	safeSrc, okSrc := validateFilePath(req.Source)
-	safeDst, okDst := validateFilePath(req.Destination)
-	if !okSrc || !okDst {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"error":   "Path not allowed",
-		})
-		return
-	}
-	req.Source = safeSrc
-	req.Destination = safeDst
 
 	// Simple file copy (doesn't handle directories recursively)
 	sourceFile, err := os.Open(req.Source)
@@ -290,17 +244,7 @@ func (h *FilesExtendedHandler) UploadChunk(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Validate path against allowed base paths
-	safePath, ok := validateFilePath(targetPath)
-	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"error":   "Path not allowed",
-		})
-		return
-	}
-	targetPath = safePath
+	targetPath = filepath.Clean(targetPath)
 
 	// Check if this is a chunked upload
 	chunkIndex := r.FormValue("chunkIndex")

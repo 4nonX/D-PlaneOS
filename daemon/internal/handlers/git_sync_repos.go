@@ -48,10 +48,7 @@ func (h *GitReposHandler) ListCredentials(w http.ResponseWriter, r *http.Request
 		var id int
 		var name, host, authType, notes, createdAt string
 		var hasToken, hasSSH int
-		if err := rows.Scan(&id, &name, &host, &authType, &notes, &createdAt, &hasToken, &hasSSH); err != nil {
-			log.Printf("GIT-REPOS: credential scan error: %v", err)
-			continue
-		}
+		rows.Scan(&id, &name, &host, &authType, &notes, &createdAt, &hasToken, &hasSSH)
 		creds = append(creds, map[string]interface{}{
 			"id": id, "name": name, "host": host, "auth_type": authType,
 			"notes": notes, "created_at": createdAt,
@@ -248,14 +245,11 @@ func (h *GitReposHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		var id, autoSync, syncInterval, enabled, credID int
 		var name, repoURL, branch, localPath, composePath,
 			commitName, commitEmail, lastSyncAt, lastCommit, lastError, credName string
-		if err := rows.Scan(&id, &name, &repoURL, &branch, &localPath,
+		rows.Scan(&id, &name, &repoURL, &branch, &localPath,
 			&composePath, &autoSync, &syncInterval,
 			&commitName, &commitEmail,
 			&lastSyncAt, &lastCommit, &lastError,
-			&enabled, &credName, &credID); err != nil {
-			log.Printf("GIT-REPOS: repo scan error: %v", err)
-			continue
-		}
+			&enabled, &credName, &credID)
 
 		repos = append(repos, map[string]interface{}{
 			"id": id, "name": name, "repo_url": repoURL, "branch": branch,
@@ -656,8 +650,7 @@ func buildCredentialEnv(cred *gitCredential) []string {
 		return nil
 	}
 	if cred.AuthType == "token" && cred.Token != "" {
-		// Always use /tmp so cleanupAskpass glob can find them
-		tokenFile, err := os.CreateTemp("/tmp", ".dplaneos-token-*")
+		tokenFile, err := os.CreateTemp("", ".dplaneos-token-*")
 		if err != nil {
 			return nil
 		}
@@ -665,7 +658,7 @@ func buildCredentialEnv(cred *gitCredential) []string {
 		tokenFile.Chmod(0600)
 		tokenFile.Close()
 
-		askpassFile, err := os.CreateTemp("/tmp", ".dplaneos-askpass-*")
+		askpassFile, err := os.CreateTemp("", ".dplaneos-askpass-*")
 		if err != nil {
 			os.Remove(tokenFile.Name())
 			return nil

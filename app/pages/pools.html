@@ -1,20 +1,17 @@
 <!DOCTYPE html>
 <!-- saved from url=(0139)pools.html -->
-<html lang="en"><head><style>html{background:#0a0a0a}</style><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Storage - D-PlaneOS</title>
-  <link rel="stylesheet" href="/assets/css/design-tokens.css">
+    <link rel="stylesheet" href="/assets/css/design-tokens.css">
+    <link rel="stylesheet" href="/assets/css/dplaneos-ui-complete.css">
 <link rel="stylesheet" href="/assets/css/m3-tokens.css">
 <link rel="stylesheet" href="/assets/css/m3-components.css">
 <link rel="stylesheet" href="/assets/css/m3-icons.css">
   <link rel="stylesheet" href="/assets/css/enhanced-ui.css">
 <link rel="stylesheet" href="/assets/css/m3-animations.css">
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #0a0a0a; color: #fff; overflow-x: hidden; }
-
-
 .logo { font-size: 20px; font-weight: 800; color: var(--primary); letter-spacing: -0.5px; cursor: pointer; }
 
 
@@ -33,12 +30,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
 .capacity-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--primary)); border-radius: 24px; transition: width 0.5s; }
 /* Badge styles are in m3-components.css */
 .icon-btn { width: 40px; height: 40px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.8); cursor: pointer; transition: all 0.3s; border: none; }
-.icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-.btn { background: rgba(255,255,255,0.1); color: #fff; padding: 12px 24px; border-radius: 10px; font-weight: 500; font-size: 14px; border: none; cursor: pointer; transition: all 0.3s; }
+.icon-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.btn { background: rgba(255,255,255,0.1); color: var(--text); padding: 12px 24px; border-radius: 10px; font-weight: 500; font-size: 14px; border: none; cursor: pointer; transition: all 0.3s; }
 .btn:hover { background: rgba(255,255,255,0.15); }
 .btn-primary { background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); }
 .btn-primary:hover { box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4); }
-.fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: #fff; }
+.fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: var(--text); }
 .fab:hover { transform: translateY(-4px); box-shadow: 0 12px 48px rgba(102, 126, 234, 0.6); }
 </style>
 <style type="text/css" id="operaUserStyle"></style><link rel="stylesheet" href="/assets/css/ui-components.css">
@@ -58,230 +55,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
 <!-- D-PlaneOS v3.0.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
-<nav class="nav-container">
-  <div class="nav-main">
-    <div style="display: flex; align-items: center; gap: 16px;">
-      <div class="logo">
-        D-PlaneOS
-        <span class="version-badge">v3.0.0</span>
-      </div>
-    </div>
-    
-    <div class="nav-links">
-      <button class="nav-link" onclick="navigateToSection('dashboard')" data-section="dashboard">
-        Dashboard
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('storage', this)" data-section="storage">
-        Storage
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('compute', this)" data-section="compute">
-        Compute
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('network', this)" data-section="network">
-        Network
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('identity', this)" data-section="identity">
-        Identity
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('security', this)" data-section="security">
-        Security
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('system', this)" data-section="system">
-        System
-      </button>
-    </div>
-    
-    <div class="nav-actions">
-      <button class="nav-action-btn" onclick="showKeyboardHelp()" title="Keyboard Shortcuts (?)">
-        <span class="material-symbols-rounded">keyboard</span>
-      </button>
-      <div class="connection-status online" id="navConnectionStatus">
-        <span class="status-dot"></span>
-        <span>Connected</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Storage Sub-Navigation -->
-  <div id="sub-storage" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="pools.html" class="sub-link" data-page="pools">
-        <span class="material-symbols-rounded">database</span>
-        ZFS Pools
-      </a>
-      <a href="pools-advanced.html" class="sub-link" data-page="pools-advanced">
-        <span class="material-symbols-rounded">photo_camera</span>
-        Snapshots
-      </a>
-      <a href="shares.html" class="sub-link" data-page="shares">
-        <span class="material-symbols-rounded">folder_shared</span>
-        Shares
-      </a>
-      <a href="replication.html" class="sub-link" data-page="replication">
-        <span class="material-symbols-rounded">sync</span>
-        Replication
-      </a>
-      <a href="files.html" class="sub-link" data-page="files">
-        <span class="material-symbols-rounded">folder_open</span>
-        File Explorer
-      </a>
-      <a href="quotas.html" class="sub-link" data-page="quotas">
-        <span class="material-symbols-rounded">pie_chart</span>
-        Quotas
-      </a>
-      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
-        <span class="material-symbols-rounded">schedule</span>
-        Snapshot Scheduler
-      </a>
-      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
-        <span class="material-symbols-rounded">admin_panel_settings</span>
-        ACL Manager
-      </a>
-      <a href="zfs-encryption.html" class="sub-link" data-page="zfs-encryption">
-        <span class="material-symbols-rounded">enhanced_encryption</span>
-        Encryption
-      </a>
-      <a href="files-enhanced.html" class="sub-link" data-page="files-enhanced">
-        <span class="material-symbols-rounded">upload_file</span>
-        File Upload
-      </a>
-      <a href="cloud-sync.html" class="sub-link" data-page="cloud-sync">
-        <span class="material-symbols-rounded">cloud_sync</span>
-        Cloud Sync
-      </a>
-    </div>
-  </div>
-
-  <!-- Compute Sub-Navigation -->
-  <div id="sub-compute" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="docker.html" class="sub-link" data-page="docker">
-        <span class="material-symbols-rounded">dns</span>
-        Docker Containers
-      </a>
-      <a href="git-sync.html" class="sub-link" data-page="git-sync">
-        <span class="material-symbols-rounded">sync</span>
-        Git Sync
-      </a>
-      <a href="modules.html" class="sub-link" data-page="modules">
-        <span class="material-symbols-rounded">extension</span>
-        App Modules
-      </a>
-    </div>
-  </div>
-
-  <!-- Network Sub-Navigation -->
-  <div id="sub-network" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="network.html" class="sub-link" data-page="network">
-        <span class="material-symbols-rounded">lan</span>
-        Network Settings
-      </a>
-      <a href="network-interfaces.html" class="sub-link" data-page="network-interfaces">
-        <span class="material-symbols-rounded">settings_ethernet</span>
-        Interfaces
-      </a>
-      <a href="network-dns.html" class="sub-link" data-page="network-dns">
-        <span class="material-symbols-rounded">dns</span>
-        DNS
-      </a>
-      <a href="network-routing.html" class="sub-link" data-page="network-routing">
-        <span class="material-symbols-rounded">route</span>
-        Routing
-      </a>
-    </div>
-  </div>
-
-  <!-- Identity Sub-Navigation -->
-  <div id="sub-identity" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="users.html" class="sub-link" data-page="users">
-        <span class="material-symbols-rounded">person</span>
-        Users
-      </a>
-      <a href="groups.html" class="sub-link" data-page="groups">
-        <span class="material-symbols-rounded">group</span>
-        Groups
-      </a>
-      <a href="directory-service.html" class="sub-link" data-page="directory-service">
-        <span class="material-symbols-rounded">domain</span>
-        Directory Service
-      </a>
-      <a href="rbac-management.html" class="sub-link" data-page="rbac-management">
-        <span class="material-symbols-rounded">admin_panel_settings</span>
-        Roles & Permissions
-      </a>
-    </div>
-  </div>
-
-  <!-- Security Sub-Navigation -->
-  <div id="sub-security" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="security.html" class="sub-link" data-page="security">
-        <span class="material-symbols-rounded">shield</span>
-        Security Settings
-      </a>
-      <a href="audit.html" class="sub-link" data-page="audit">
-        <span class="material-symbols-rounded">fact_check</span>
-        Audit Logs
-      </a>
-      <a href="firewall.html" class="sub-link" data-page="firewall">
-        <span class="material-symbols-rounded">local_fire_department</span>
-        Firewall
-      </a>
-      <a href="certificates.html" class="sub-link" data-page="certificates">
-        <span class="material-symbols-rounded">verified_user</span>
-        Certificates
-      </a>
-    </div>
-  </div>
-
-  <!-- System Sub-Navigation -->
-  <div id="sub-system" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="settings.html" class="sub-link" data-page="settings">
-        <span class="material-symbols-rounded">tune</span>
-        General Settings
-      </a>
-      <a href="logs.html" class="sub-link" data-page="logs">
-        <span class="material-symbols-rounded">description</span>
-        System Logs
-      </a>
-      <a href="ups.html" class="sub-link" data-page="ups">
-        <span class="material-symbols-rounded">battery_charging_full</span>
-        UPS Management
-      </a>
-      <a href="reporting.html" class="sub-link" data-page="reporting">
-        <span class="material-symbols-rounded">monitoring</span>
-        Reporting
-      </a>
-      <a href="power-management.html" class="sub-link" data-page="power-management">
-        <span class="material-symbols-rounded">power_settings_new</span>
-        Power Management
-      </a>
-      <a href="system-settings.html" class="sub-link" data-page="system-settings">
-        <span class="material-symbols-rounded">settings_suggest</span>
-        System Settings
-      </a>
-      <a href="system-monitoring.html" class="sub-link" data-page="system-monitoring">
-        <span class="material-symbols-rounded">monitor_heart</span>
-        Monitoring
-      </a>
-      <a href="hardware.html" class="sub-link" data-page="hardware">
-        <span class="material-symbols-rounded">developer_board</span>
-        Hardware
-      </a>
-      <a href="ipmi.html" class="sub-link" data-page="ipmi">
-        <span class="material-symbols-rounded">memory</span>
-        IPMI
-      </a>
-      <a href="removable-media-ui.html" class="sub-link" data-page="removable-media-ui">
-        <span class="material-symbols-rounded">usb</span>
-        Removable Media
-      </a>
-    </div>
-  </div>
-</nav>
+<div id="nav-root"></div>
 
 <script src="/assets/js/nav-shared.js"></script>
 
@@ -302,7 +76,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
 
 <div class="page-header">
 <h1 class="page-title">ZFS Storage</h1>
-<p class="page-subtitle">Redundancy • Snapshots • Compression • Data integrity</p>
+<p class="page-subtitle">Enterprise redundancy • Snapshots • Compression • Data integrity</p>
 </div>
 <div id="poolList" style="padding:40px;text-align:center;color:rgba(255,255,255,0.5);">
   Loading ZFS pools...
@@ -322,6 +96,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
 </div>
 
 <script>
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
 function showPoolMenu() {
   const menu = document.getElementById('poolQuickMenu');
   const fab = document.querySelector('.fab');
@@ -364,7 +143,6 @@ document.addEventListener('click', (e) => {
                 <button class="tab" onclick="switchTab('cache')">Cache & Log</button>
                 <button class="tab" onclick="switchTab('compression')">Compression</button>
                 <button class="tab" onclick="switchTab('snapshots')">Snapshots</button>
-                <button class="tab" onclick="switchTab('sandboxes')">Sandboxes</button>
             </div>
 
             <!-- Encryption Tab -->
@@ -479,20 +257,6 @@ document.addEventListener('click', (e) => {
                     <div id="snapshot-schedules" style="margin-top: 16px;"></div>
                 </div>
             </div>
-
-            <!-- Sandboxes Tab -->
-            <div id="sandboxes-tab" class="tab-content">
-                <div class="card">
-                    <h2>ZFS Sandboxes</h2>
-                    <p style="color:rgba(255,255,255,0.5);font-size:14px;margin-bottom:16px;">Sandboxes are lightweight ZFS clones for testing. Create, use, and destroy without affecting production data.</p>
-                    <div style="display:flex;gap:8px;margin-bottom:20px;">
-                        <button class="btn btn-primary" onclick="createSandbox()">+ Create Sandbox</button>
-                        <button class="btn" onclick="loadSandboxes()">Refresh</button>
-                        <button class="btn" style="color:#FBBF24;" onclick="cleanupSandboxes()">Cleanup Orphans</button>
-                    </div>
-                    <div id="sandbox-list"><div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);">Click Refresh to load sandboxes</div></div>
-                </div>
-            </div>
     </div>
 
     	    <script src="/assets/js/core.js"></script>
@@ -500,10 +264,8 @@ document.addEventListener('click', (e) => {
     function switchTab(tab) {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        event.target.classList.add('active');
+        document.querySelector(`button[onclick="switchTab('"+JSON.stringify(tab)+"')"]`).classList.add('active');
         document.getElementById(`${tab}-tab`).classList.add('active');
-        // Load data for specific tabs
-        if (tab === 'snapshots') loadSnapshotSchedules();
     }
 
     async function createEncryptedDataset() {
@@ -523,18 +285,18 @@ document.addEventListener('click', (e) => {
 
         try {
             showLoading('Creating encrypted dataset...');
-            const response = await csrfFetch('/api/zfs/encryption/create', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    name: dataset,
+                    action: 'create_encrypted_dataset',
+                    dataset,
                     encryption: algorithm,
-                    key: passphrase
+                    key_format: 'passphrase',
+                    passphrase
                 })
             });
 
             const data = await response.json();
-            hideLoading();
             if (data.success) {
                 showToast('Encrypted dataset created successfully!', 'success');
                 document.getElementById('enc-dataset').value = '';
@@ -543,8 +305,9 @@ document.addEventListener('click', (e) => {
                 showToast(data.error || 'Failed to create dataset', 'error');
             }
         } catch (error) {
+            showToast('Error creating dataset', 'error');
+        } finally {
             hideLoading();
-            showToast('Error creating dataset: ' + error.message, 'error');
         }
     }
 
@@ -557,26 +320,23 @@ document.addEventListener('click', (e) => {
             return;
         }
 
-        if (!confirm(`Add ${device} as L2ARC read cache to ${pool}? This will erase data on the device.`)) return;
-
         try {
             showLoading('Adding L2ARC...');
-            const response = await csrfFetch('/api/zfs/pool/add-vdev', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pool: pool, vdev_type: 'cache', disks: [device] })
+                body: JSON.stringify({ action: 'add_l2arc', pool, device })
             });
 
             const data = await response.json();
-            hideLoading();
             if (data.success) {
-                showToast('L2ARC cache device added!', 'success');
+                showToast('L2ARC added successfully!', 'success');
             } else {
-                showToast(data.error || 'Failed to add L2ARC', 'error');
+                showToast(data.error, 'error');
             }
         } catch (error) {
+            showToast('Error adding L2ARC', 'error');
+        } finally {
             hideLoading();
-            showToast('Error adding L2ARC: ' + error.message, 'error');
         }
     }
 
@@ -590,27 +350,23 @@ document.addEventListener('click', (e) => {
             return;
         }
 
-        if (!confirm(`Add ${device} as ZIL write log to ${pool}? This will erase data on the device.`)) return;
-
         try {
             showLoading('Adding ZIL...');
-            // ZIL added as single log device (mirror requires two devices, added via CLI)
-            const response = await csrfFetch('/api/zfs/pool/add-vdev', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pool: pool, vdev_type: 'log', disks: [device] })
+                body: JSON.stringify({ action: 'add_zil', pool, device, mirror })
             });
 
             const data = await response.json();
-            hideLoading();
             if (data.success) {
-                showToast('ZIL write log device added!', 'success');
+                showToast('ZIL added successfully!', 'success');
             } else {
-                showToast(data.error || 'Failed to add ZIL', 'error');
+                showToast(data.error, 'error');
             }
         } catch (error) {
+            showToast('Error adding ZIL', 'error');
+        } finally {
             hideLoading();
-            showToast('Error adding ZIL: ' + error.message, 'error');
         }
     }
 
@@ -618,26 +374,23 @@ document.addEventListener('click', (e) => {
         const dataset = document.getElementById('comp-dataset').value;
         const compression = document.getElementById('comp-algorithm').value;
 
-        if (!dataset) { showToast('Please select a dataset', 'error'); return; }
-
         try {
             showLoading('Setting compression...');
-            const response = await csrfFetch('/api/zfs/dataset/property', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dataset: dataset, property: 'compression', value: compression })
+                body: JSON.stringify({ action: 'set_compression', dataset, compression })
             });
 
             const data = await response.json();
-            hideLoading();
             if (data.success) {
-                showToast(`Compression set to ${compression} on ${dataset}`, 'success');
+                showToast('Compression updated!', 'success');
             } else {
-                showToast(data.error || 'Failed to set compression', 'error');
+                showToast(data.error, 'error');
             }
         } catch (error) {
+            showToast('Error setting compression', 'error');
+        } finally {
             hideLoading();
-            showToast('Error: ' + error.message, 'error');
         }
     }
 
@@ -645,75 +398,67 @@ document.addEventListener('click', (e) => {
         const dataset = document.getElementById('dedup-dataset').value;
         const dedup = document.getElementById('dedup-setting').value;
 
-        if (!dataset) { showToast('Please select a dataset', 'error'); return; }
-
         if (dedup !== 'off') {
-            if (!confirm('WARNING: Deduplication requires ~5GB RAM per 1TB of data. This can severely impact performance if insufficient RAM is available. Continue?')) {
+            if (!await ui.confirmWithCheckbox(
+                'Enable Deduplication', 
+                'Deduplication requires significant RAM (~5GB per 1TB of data). This can impact system performance if insufficient RAM is available.',
+                'I understand the RAM requirements and want to proceed'
+            )) {
                 return;
             }
         }
 
         try {
             showLoading('Setting deduplication...');
-            const response = await csrfFetch('/api/zfs/dataset/property', {
+            const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dataset: dataset, property: 'dedup', value: dedup })
+                body: JSON.stringify({ action: 'set_dedup', dataset, dedup })
             });
 
             const data = await response.json();
-            hideLoading();
             if (data.success) {
-                showToast(`Deduplication set to ${dedup} on ${dataset}`, 'success');
+                showToast('Deduplication updated!', 'success');
             } else {
-                showToast(data.error || 'Failed to set dedup', 'error');
+                showToast(data.error, 'error');
             }
         } catch (error) {
+            showToast('Error setting dedup', 'error');
+        } finally {
             hideLoading();
-            showToast('Error: ' + error.message, 'error');
         }
     }
 
     async function createSnapshotSchedule() {
-        const result = await ui.form('Create Snapshot Schedule', [
-            { name: 'dataset', label: 'Dataset', type: 'text', required: true, placeholder: 'pool/dataset' },
-            { name: 'schedule', label: 'Schedule', type: 'select', options: [
-                { value: 'hourly', label: 'Hourly' },
-                { value: 'daily', label: 'Daily' },
-                { value: 'weekly', label: 'Weekly' },
-                { value: 'monthly', label: 'Monthly' }
-            ]},
-            { name: 'retention', label: 'Keep last N snapshots', type: 'text', value: '7', placeholder: '7' }
-        ], 'Create');
+        const dataset = await ui.prompt('Create Snapshot Schedule', 'Enter dataset name:', '', 'pool/dataset');
+        if (!dataset) return;
 
-        if (!result) return;
+        const schedule = await ui.prompt('Snapshot Schedule', 'Enter schedule (hourly/daily/weekly/monthly):', '', 'daily');
+        if (!schedule) return;
 
         try {
             showLoading('Creating schedule...');
             const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    schedules: [{
-                        dataset: result.dataset,
-                        schedule: result.schedule,
-                        retention_count: parseInt(result.retention) || 7,
-                        enabled: true
-                    }]
+                    action: 'create_snapshot_schedule',
+                    dataset,
+                    schedule,
+                    retention_count: 7,
+                    retention_days: 30
                 })
             });
 
             const data = await response.json();
-            hideLoading();
             if (data.success) {
                 showToast('Schedule created!', 'success');
                 loadSnapshotSchedules();
             } else {
-                showToast(data.error || 'Failed to create schedule', 'error');
+                showToast(data.error, 'error');
             }
         } catch (error) {
+            showToast('Error creating schedule', 'error');
+        } finally {
             hideLoading();
-            showToast('Error: ' + error.message, 'error');
         }
     }
 
@@ -721,188 +466,64 @@ document.addEventListener('click', (e) => {
         try {
             const response = await csrfFetch('/api/snapshots/schedules');
             const data = await response.json();
-
-            const container = document.getElementById('snapshot-schedules');
-            if (!container) return;
-
-            if (data.success && data.schedules && data.schedules.length > 0) {
+            
+            if (data.success) {
+                const container = document.getElementById('snapshot-schedules');
                 container.innerHTML = data.schedules.map(s => `
-                    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:8px;">
-                        <div>
-                            <strong style="color:#fff;">${s.dataset}</strong>
-                            <span style="color:rgba(255,255,255,0.5);margin-left:8px;">${s.schedule} · keep ${s.retention_count || '?'}</span>
-                        </div>
-                        <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="deleteSchedule(${s.id})">
-                            <span class="material-symbols-rounded" style="font-size:16px;">delete</span>
-                        </button>
+                    <div class="schedule-item">
+                        <strong>${s.dataset}</strong> - ${s.schedule}
+                        <button onclick="deleteSchedule(${s.id})" class="btn btn-sm">Delete</button>
                     </div>
                 `).join('');
-            } else {
-                container.innerHTML = '<div style="text-align:center;padding:32px;color:rgba(255,255,255,0.4);">No snapshot schedules yet</div>';
             }
         } catch (error) {
-            console.error('Failed to load schedules:', error);
+            console.error('Failed to load schedules', error);
         }
     }
 
     async function deleteSchedule(id) {
-        if (!confirm('Delete this snapshot schedule? Existing snapshots will be kept.')) return;
-
+        if (!await ui.confirm('Delete Schedule', 'Delete this snapshot schedule? Existing snapshots will be kept.')) return;
+        
         try {
             const response = await csrfFetch('/api/snapshots/schedules', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'delete', schedule_id: id })
+                body: JSON.stringify({ action: 'delete_snapshot_schedule', schedule_id: id })
             });
 
             const data = await response.json();
             if (data.success) {
                 showToast('Schedule deleted', 'success');
                 loadSnapshotSchedules();
-            } else {
-                showToast(data.error || 'Failed to delete', 'error');
             }
         } catch (error) {
-            showToast('Error: ' + error.message, 'error');
-        }
-    }
-
-    // Populate pool/device selectors for Cache & Log tab
-    async function initCacheLogTab() {
-        try {
-            const [poolsRes, disksRes] = await Promise.all([
-                csrfFetch('/api/zfs/pools').then(r => r.json()),
-                csrfFetch('/api/system/disks').then(r => r.json())
-            ]);
-
-            const poolNames = [];
-            if (poolsRes.success && poolsRes.pools) {
-                poolsRes.pools.forEach(p => {
-                    const name = p.name || p.Name || '';
-                    if (name) poolNames.push(name);
-                });
-            }
-
-            const availableDisks = (disksRes.disks || []).filter(d => !d.in_use);
-
-            ['l2arc-pool', 'zil-pool'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.innerHTML = poolNames.map(n => `<option value="${n}">${n}</option>`).join('') || '<option>No pools</option>';
-            });
-
-            ['l2arc-device', 'zil-device'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.innerHTML = availableDisks.map(d => `<option value="${d.name}">${d.name} (${d.size} ${d.type || ''})</option>`).join('') || '<option>No available devices</option>';
-            });
-        } catch (e) {
-            console.error('Failed to init cache/log tab:', e);
-        }
-    }
-
-    // Populate dataset selectors for Compression tab
-    async function initCompressionTab() {
-        try {
-            const res = await csrfFetch('/api/zfs/datasets').then(r => r.json());
-            const datasets = res.datasets || [];
-            ['comp-dataset', 'dedup-dataset'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.innerHTML = datasets.map(d => `<option value="${d.pool}/${d.name}">${d.pool}/${d.name}</option>`).join('') || '<option>No datasets</option>';
-            });
-        } catch (e) {
-            console.error('Failed to init compression tab:', e);
+            showToast('Error deleting schedule', 'error');
         }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
         loadSnapshotSchedules();
-        initCacheLogTab();
-        initCompressionTab();
     });
-
-    // ── Sandbox Management ────────────────────────────────────
-    async function loadSandboxes() {
-        try {
-            const r = await csrfFetch('/api/sandbox/list');
-            const d = await r.json();
-            const el = document.getElementById('sandbox-list');
-            if (!d.success || !d.sandboxes || !d.sandboxes.length) {
-                el.innerHTML = '<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);">No sandboxes</div>';
-                return;
-            }
-            el.innerHTML = d.sandboxes.map(s => `
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:8px;">
-                    <div>
-                        <div style="font-weight:600;">${s.name || s.dataset || s}</div>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.4);">${s.created || ''} ${s.origin ? '· from ' + s.origin : ''}</div>
-                    </div>
-                    <button class="btn btn-sm" onclick="destroySandbox('${s.name || s.dataset || s}')" style="color:var(--error);">
-                        <span class="material-symbols-rounded" style="font-size:16px;">delete</span> Destroy
-                    </button>
-                </div>
-            `).join('');
-        } catch(e) { showToast('Failed to load sandboxes', 'error'); }
-    }
-
-    async function createSandbox() {
-        const result = await ui.form('Create Sandbox', [
-            { name: 'dataset', label: 'Source Dataset', type: 'text', required: true, placeholder: 'tank/data' },
-            { name: 'name', label: 'Sandbox Name (optional)', type: 'text', placeholder: 'auto-generated if empty' }
-        ], 'Create');
-        if (!result) return;
-        try {
-            showLoading('Creating sandbox...');
-            const r = await csrfFetch('/api/sandbox/create', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ dataset: result.dataset, name: result.name || '' }) });
-            const d = await r.json();
-            hideLoading();
-            d.success ? (showToast('Sandbox created', 'success'), loadSandboxes()) : showToast(d.error || 'Failed', 'error');
-        } catch(e) { hideLoading(); showToast('Failed', 'error'); }
-    }
-
-    async function destroySandbox(name) {
-        if (!confirm(`Destroy sandbox "${name}"? All data in it will be lost.`)) return;
-        try {
-            const r = await csrfFetch('/api/sandbox/destroy', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ name: name }) });
-            const d = await r.json();
-            d.success ? (showToast('Sandbox destroyed', 'success'), loadSandboxes()) : showToast(d.error || 'Failed', 'error');
-        } catch(e) { showToast('Failed', 'error'); }
-    }
-
-    async function cleanupSandboxes() {
-        if (!confirm('Clean up orphaned sandbox volumes? This removes sandboxes with no active containers.')) return;
-        try {
-            const r = await csrfFetch('/api/sandbox/cleanup', { method:'POST' });
-            const d = await r.json();
-            d.success ? (showToast('Cleanup complete: ' + (d.removed || 0) + ' removed', 'success'), loadSandboxes()) : showToast(d.error || 'Failed', 'error');
-        } catch(e) { showToast('Failed', 'error'); }
-    }
     </script>
 
     <style>
-    .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .tab { padding: 12px 24px; background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; color: rgba(255,255,255,0.6); font-size: 14px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+    .tab { padding: 12px 24px; background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; }
     .tab.active { border-bottom-color: var(--primary); color: var(--primary); font-weight: 600; }
-    .tab:hover { color: rgba(255,255,255,0.8); }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
-    .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px; margin-bottom: 20px; }
-    .card h2 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
-    .card p { color: rgba(255,255,255,0.5); font-size: 14px; margin-bottom: 16px; }
-    .warning-box { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #fbbf24; padding: 12px 16px; border-radius: 10px; margin: 16px 0; font-size: 14px; }
+    .warning-box { background: var(--warning-bg); border: 1px solid var(--warning-border); padding: 12px; border-radius: 4px; margin: 16px 0; color: var(--text); }
+    .schedule-item { padding: 12px; background: var(--surface); margin-top: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
     </style>
   <script src="/assets/js/realtime-client.js"></script>
 
-<!-- v2.1.0: Scrub, VDEV, Disk Replace, Capacity Guardian -->
+<!-- v3.0.0: Scrub, VDEV, Disk Replace, Capacity Guardian -->
 </div>
 <div id="tab-quotas" class="consolidation-content">
 
 
 
 <div class="nav-glass"><div class="nav-inner"><div class="logo" onclick="window.location.href='index.html'">D-PlaneOS</div><div class="nav-links"><a href="index.html" class="nav-link">Dashboard</a><a href="files.html" class="nav-link">Files</a><a href="pools.html" class="nav-link">Storage</a><a href="quotas.html" class="nav-link active">Quotas</a><a href="users.html" class="nav-link">Users</a><a href="settings.html" class="nav-link">Settings</a></div><div class="nav-user"><span class="nav-username" id="currentUser">Loading...</span><button class="btn btn-sm btn-logout" onclick="handleLogout()"><span class="material-symbols-rounded" style="font-size:18px;">logout</span>Logout</button></div></div></div>
-<div class="main"><div class="page-header"><div><h1 class="page-title">Quota Management</h1><p class="page-meta">Manage dataset quotas and usage limits</p></div><div style="display:flex;gap:8px;"><button class="btn btn-primary" onclick="showSetQuotaModal()"><span class="material-symbols-rounded">data_usage</span>Set Quota</button><button class="btn" onclick="showUserGroupQuotaModal()"><span class="material-symbols-rounded">group</span>User/Group Quota</button><button class="btn" onclick="showDatasetPropertiesModal()"><span class="material-symbols-rounded">tune</span>Properties</button></div></div><div id="quotaList"></div>
-
-<!-- User/Group Quotas Section -->
-<div style="margin-top:32px;"><h2 style="font-size:18px;font-weight:600;margin-bottom:16px;">User & Group Quotas</h2><div id="userGroupQuotaList"><div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);">Select a dataset above to view per-user and per-group quotas</div></div></div>
-</div>
+<div class="main"><div class="page-header"><div><h1 class="page-title">Quota Management</h1><p class="page-meta">Manage dataset quotas and usage limits</p></div><button class="btn btn-primary" onclick="showSetQuotaModal()"><span class="material-symbols-rounded">data_usage</span>Set Quota</button></div><div id="quotaList"></div></div>
 </div>
 <div id="tab-encryption" class="consolidation-content">
 <h1>ZFS Encryption Management</h1>
@@ -963,228 +584,53 @@ function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-cont
 const ui = new DPlaneUI();
 
 async function createPool() {
-  ui.showLoading('Scanning for available disks...');
-
-  try {
-    const response = await csrfFetch('/api/system/disks');
-    const data = await response.json();
-    ui.hideLoading();
-
-    const disks = data.disks || [];
-    const availableDisks = disks.filter(d => !d.in_use);
-
-    if (availableDisks.length === 0) {
-      ui.toast('No available disks found. All disks are in use.', 'warning');
-      return;
+  const result = await ui.form('Create ZFS Pool', [
+    { name: 'name', label: 'Pool Name', type: 'text', required: true },
+    { name: 'type', label: 'Pool Type', type: 'select', options: [
+      { value: 'stripe', label: 'Stripe (No redundancy)' },
+      { value: 'mirror', label: 'Mirror (2-way redundancy)' },
+      { value: 'raidz1', label: 'RAID-Z1 (Single parity)' },
+      { value: 'raidz2', label: 'RAID-Z2 (Double parity)' }
+    ], required: true },
+    { name: 'disks', label: 'Disks (comma-separated)', type: 'text', required: true }
+  ], 'Create Pool');
+  
+  if (result) {
+    ui.showLoading('Creating pool...');
+    
+    try {
+      const response = await csrfFetch('/api/zfs/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', ...result })
+      });
+      
+      const data = await response.json();
+      ui.hideLoading();
+      
+      if (data.success) {
+        ui.toast('Pool created successfully', 'success');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        ui.toast(data.error || 'Failed to create pool', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Network error: ' + error.message, 'error');
     }
-
-    // Build disk-picker HTML matching M3 design
-    const diskListHTML = availableDisks.map(d => `
-      <label class="disk-select-row" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;cursor:pointer;transition:all 0.2s;margin-bottom:8px;">
-        <input type="checkbox" name="disk" value="${d.name}" style="accent-color:var(--primary);width:18px;height:18px;">
-        <span class="material-symbols-rounded" style="font-size:24px;color:var(--primary);">${d.type === 'NVMe' ? 'flash_on' : d.type === 'SSD' ? 'memory' : 'storage'}</span>
-        <div style="flex:1;">
-          <div style="font-weight:600;font-size:14px;">/dev/${d.name}</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.5);">${d.model || 'Unknown'} · ${d.size} · ${d.type || 'HDD'}</div>
-        </div>
-      </label>
-    `).join('');
-
-    const suggestions = data.suggestions || [];
-    const suggestHTML = suggestions.length > 0 ? `
-      <div style="margin-top:16px;padding:12px;background:rgba(138,156,255,0.08);border-radius:12px;">
-        <div style="font-size:13px;font-weight:600;color:var(--primary);margin-bottom:8px;">
-          <span class="material-symbols-rounded" style="font-size:16px;vertical-align:middle;">auto_awesome</span>
-          Recommended configurations
-        </div>
-        ${suggestions.map((s, i) => `
-          <button class="suggest-btn" data-idx="${i}"
-            style="display:block;width:100%;text-align:left;padding:10px 12px;margin-bottom:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;cursor:pointer;font-size:13px;transition:all 0.2s;"
-            onmouseover="this.style.borderColor='var(--primary)'"
-            onmouseout="this.style.borderColor='rgba(255,255,255,0.1)'"
-            onclick="applySuggestion(${i})">
-            <strong>${s.type}</strong> · ${s.disks.length} disks · Usable: ${s.usable_size} · ${s.redundancy}
-          </button>
-        `).join('')}
-      </div>
-    ` : '';
-
-    const html = `
-      <div id="pool-create-form">
-        <div class="form-group" style="margin-bottom:16px;">
-          <label class="form-label">Pool Name <span style="color:#EF4444;">*</span></label>
-          <input type="text" id="pc-name" class="form-input" value="tank" placeholder="e.g., tank, storage, data" required
-            style="width:100%;padding:12px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#fff;font-size:14px;">
-          <small class="form-help" style="color:rgba(255,255,255,0.4);font-size:12px;">Alphanumeric, hyphens, and underscores only</small>
-        </div>
-
-        <div class="form-group" style="margin-bottom:16px;">
-          <label class="form-label">Pool Type <span style="color:#EF4444;">*</span></label>
-          <select id="pc-type" class="form-input" style="width:100%;padding:12px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#fff;font-size:14px;appearance:none;">
-            <option value="Single">Single (no redundancy)</option>
-            <option value="Mirror">Mirror (2-way copy)</option>
-            <option value="RAID-Z1" selected>RAID-Z1 (1 parity disk)</option>
-            <option value="RAID-Z2">RAID-Z2 (2 parity disks)</option>
-            <option value="RAID-Z3">RAID-Z3 (3 parity disks)</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Select Disks <span style="color:#EF4444;">*</span></label>
-          <div id="pc-disk-list" style="max-height:240px;overflow-y:auto;padding-right:4px;">
-            ${diskListHTML}
-          </div>
-          <div id="pc-disk-count" style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:8px;">0 disks selected</div>
-        </div>
-
-        ${suggestHTML}
-      </div>
-    `;
-
-    // Store suggestions globally for applySuggestion()
-    window._poolSuggestions = suggestions;
-    window._availableDisks = availableDisks;
-
-    const result = await ui.modal('Create ZFS Pool', html, [
-      { text: 'Cancel' },
-      { text: 'Create Pool', primary: true, icon: 'add', callback: () => {
-        const name = document.getElementById('pc-name').value.trim();
-        const type = document.getElementById('pc-type').value;
-        const checked = document.querySelectorAll('#pc-disk-list input[name="disk"]:checked');
-        const selectedDisks = Array.from(checked).map(cb => cb.value);
-
-        if (!name) { ui.toast('Pool name is required', 'error'); return false; }
-        if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)) { ui.toast('Invalid pool name. Use letters, numbers, hyphens, underscores.', 'error'); return false; }
-        if (selectedDisks.length === 0) { ui.toast('Select at least one disk', 'error'); return false; }
-
-        // Validate disk count for type
-        const minDisks = { Single: 1, Mirror: 2, 'RAID-Z1': 3, 'RAID-Z2': 4, 'RAID-Z3': 5 };
-        if (selectedDisks.length < (minDisks[type] || 1)) {
-          ui.toast(`${type} requires at least ${minDisks[type]} disks`, 'error');
-          return false;
-        }
-
-        return { name, type, disks: selectedDisks };
-      }}
-    ], { large: true });
-
-    if (!result || result === 1) return;
-
-    // Create the pool
-    ui.showLoading(`Creating ${result.type} pool "${result.name}" with ${result.disks.length} disks...`);
-
-    const createRes = await csrfFetch('/api/system/pool/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: result.name,
-        type: result.type,
-        disks: result.disks
-      })
-    });
-
-    const createData = await createRes.json();
-    ui.hideLoading();
-
-    if (createRes.ok) {
-      ui.toast(`Pool "${result.name}" created successfully`, 'success');
-      setTimeout(() => location.reload(), 1500);
-    } else {
-      ui.toast(createData.error || 'Failed to create pool', 'error');
-    }
-
-  } catch (error) {
-    ui.hideLoading();
-    ui.toast('Failed to scan disks: ' + error.message, 'error');
   }
-}
-
-// Called by suggestion buttons in the create pool dialog
-function applySuggestion(idx) {
-  const s = window._poolSuggestions[idx];
-  if (!s) return;
-
-  // Set pool type
-  const typeMap = { 'Single': 'Single', 'Mirror': 'Mirror', 'RAID-Z1': 'RAID-Z1', 'RAID-Z2': 'RAID-Z2', 'RAID-Z3': 'RAID-Z3' };
-  const typeSelect = document.getElementById('pc-type');
-  if (typeMap[s.type]) typeSelect.value = typeMap[s.type];
-
-  // Set pool name
-  document.getElementById('pc-name').value = s.name || 'tank';
-
-  // Check the suggested disks
-  document.querySelectorAll('#pc-disk-list input[name="disk"]').forEach(cb => {
-    cb.checked = s.disks.includes(cb.value);
-    const row = cb.closest('.disk-select-row');
-    if (row) row.style.borderColor = cb.checked ? 'var(--primary)' : 'rgba(255,255,255,0.08)';
-  });
-
-  // Update count
-  updateDiskCount();
-
-  // Highlight selected suggestion
-  document.querySelectorAll('.suggest-btn').forEach((btn, i) => {
-    btn.style.borderColor = i === idx ? 'var(--primary)' : 'rgba(255,255,255,0.1)';
-    btn.style.background = i === idx ? 'rgba(138,156,255,0.12)' : 'rgba(255,255,255,0.04)';
-  });
-}
-
-// Live disk count update
-document.addEventListener('change', function(e) {
-  if (e.target.name === 'disk') {
-    const row = e.target.closest('.disk-select-row');
-    if (row) row.style.borderColor = e.target.checked ? 'var(--primary)' : 'rgba(255,255,255,0.08)';
-    updateDiskCount();
-  }
-});
-
-function updateDiskCount() {
-  const count = document.querySelectorAll('#pc-disk-list input[name="disk"]:checked').length;
-  const el = document.getElementById('pc-disk-count');
-  if (el) el.textContent = `${count} disk${count !== 1 ? 's' : ''} selected`;
 }
 
 async function managePool(name) {
-  const html = `
-    <div style="display:flex;flex-direction:column;gap:8px;">
-
-      <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;">Datasets</div>
-      <button class="btn btn-primary" onclick="createDataset(${JSON.stringify(name)});document.querySelector('.modal-backdrop')?.click();">
-        <span class="material-symbols-rounded" style="font-size:18px;vertical-align:middle;margin-right:6px;">add</span> Create Dataset
-      </button>
-      <button class="btn" onclick="listDatasets(${JSON.stringify(name)});document.querySelector('.modal-backdrop')?.click();">
-        <span class="material-symbols-rounded" style="font-size:18px;vertical-align:middle;margin-right:6px;">folder</span> View Datasets
-      </button>
-
-      <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;padding:12px 0 4px;">Maintenance</div>
-      <button class="btn" onclick="scrubPool(${JSON.stringify(name)});document.querySelector('.modal-backdrop')?.click();">
-        <span class="material-symbols-rounded" style="font-size:18px;vertical-align:middle;margin-right:6px;">healing</span> Scrub Pool
-      </button>
-      <button class="btn" onclick="viewProperties(${JSON.stringify(name)});document.querySelector('.modal-backdrop')?.click();">
-        <span class="material-symbols-rounded" style="font-size:18px;vertical-align:middle;margin-right:6px;">info</span> View Properties
-      </button>
-
-      <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;padding:12px 0 4px;">Disks &amp; Expansion</div>
-      <button class="btn" onclick="addVdev();document.querySelector('.modal-backdrop')?.click();">
-        <span class="material-symbols-rounded" style="font-size:18px;vertical-align:middle;margin-right:6px;">add_circle</span> Add Vdev (Expand)
-      </button>
-      <button class="btn" onclick="replaceDisk();document.querySelector('.modal-backdrop')?.click();">
-        <span class="material-symbols-rounded" style="font-size:18px;vertical-align:middle;margin-right:6px;">swap_horiz</span> Replace Disk
-      </button>
-      <button class="btn" onclick="removePoolDevice();document.querySelector('.modal-backdrop')?.click();">
-        <span class="material-symbols-rounded" style="font-size:18px;vertical-align:middle;margin-right:6px;">remove_circle</span> Remove Cache/Log Device
-      </button>
-
-      <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;padding:12px 0 4px;">Pool Lifecycle</div>
-      <button class="btn" onclick="exportPool(${JSON.stringify(name)});document.querySelector('.modal-backdrop')?.click();">
-        <span class="material-symbols-rounded" style="font-size:18px;vertical-align:middle;margin-right:6px;">eject</span> Export Pool
-      </button>
-      <button class="btn" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);" onclick="destroyPool(${JSON.stringify(name)});document.querySelector('.modal-backdrop')?.click();">
-        <span class="material-symbols-rounded" style="font-size:18px;vertical-align:middle;margin-right:6px;">delete_forever</span> Destroy Pool
-      </button>
+  const action = await ui.modal(`Manage: ${name}`, `
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <button class="btn btn-primary" onclick="createDataset('"+JSON.stringify(name)+"')">+ Create Dataset</button>
+      <button class="btn" onclick="listDatasets('"+JSON.stringify(name)+"')">View Datasets</button>
+      <button class="btn" onclick="exportPool('"+JSON.stringify(name)+"')">Export Pool</button>
+      <button class="btn" onclick="viewProperties('"+JSON.stringify(name)+"')">View Properties</button>
+      <button class="btn" style="background:rgba(239,68,68,0.2);color:#ef4444;" onclick="destroyPool('"+JSON.stringify(name)+"')">Destroy Pool</button>
     </div>
-  `;
-  await ui.modal(`Manage: ${name}`, html, [{ text: 'Close', primary: true }]);
+  `, [{ text: 'Close', primary: true }]);
 }
 
 async function createDataset(poolName) {
@@ -1269,28 +715,28 @@ async function listDatasets(poolName) {
 }
 
 async function exportPool(name) {
-  if (await ui.confirm('Export Pool?', `Export "${name}"? The pool will be unmounted and can be imported later or moved to another system.`)) {
-    ui.showLoading(`Exporting "${name}"...`);
+  if (await ui.confirm('Export Pool?', `Export ${name}? The pool will be unmounted and can be imported later.`)) {
+    ui.showLoading(`Exporting ${name}...`);
     
     try {
-      const response = await csrfFetch('/api/system/pool/export', {
+      const response = await csrfFetch('/api/zfs/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name })
+        body: JSON.stringify({ action: 'export', pool: name })
       });
       
       const result = await response.json();
       ui.hideLoading();
       
-      if (response.ok) {
-        ui.toast(`Pool "${name}" exported successfully`, 'success');
-        setTimeout(() => location.reload(), 1500);
+      if (result.success) {
+        ui.toast(`${name} exported`, 'success');
+        setTimeout(() => location.reload(), 1000);
       } else {
         ui.toast(result.error || 'Export failed', 'error');
       }
     } catch (error) {
       ui.hideLoading();
-      ui.toast('Export failed: ' + error.message, 'error');
+      ui.toast('Network error: ' + error.message, 'error');
     }
   }
 }
@@ -1319,140 +765,123 @@ async function viewProperties(name) {
 }
 
 async function destroyPool(name) {
-  // Two-step confirmation: first a warning, then type the pool name
-  const firstConfirm = await ui.confirm(
-    'Destroy Pool?',
-    `WARNING: This will permanently destroy "${name}" and ALL data in it. This cannot be undone.`,
-    'Continue',
-    'Cancel'
-  );
-
-  if (!firstConfirm) return;
-
-  const confirmResult = await ui.form('Type pool name to confirm destruction', [
-    {
-      name: 'confirm',
-      label: `Type "${name}" to confirm`,
-      type: 'text',
-      required: true,
-      placeholder: name
-    }
-  ], 'Destroy Forever');
-
-  if (!confirmResult || confirmResult.confirm !== name) {
-    if (confirmResult) ui.toast('Pool name did not match. Destruction cancelled.', 'info');
-    return;
-  }
-
-  ui.showLoading(`Destroying "${name}"...`);
-
-  try {
-    const response = await csrfFetch('/api/system/pool/destroy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, confirm: name })
-    });
-
-    const result = await response.json();
-    ui.hideLoading();
-
-    if (response.ok) {
-      ui.toast(`Pool "${name}" has been destroyed`, 'success');
-      setTimeout(() => location.reload(), 1500);
-    } else {
-      ui.toast(result.error || 'Destroy failed', 'error');
-    }
-  } catch (error) {
-    ui.hideLoading();
-    ui.toast('Destroy failed: ' + error.message, 'error');
-  }
-}
-
-async function importPool() {
-  ui.showLoading('Scanning for importable pools...');
-
-  try {
-    const scanRes = await csrfFetch('/api/system/pool/import-scan');
-    const scan = await scanRes.json();
-    ui.hideLoading();
-
-    const pools = scan.pools || [];
-
-    if (pools.length === 0) {
-      ui.toast('No importable pools found. Pools must be exported or from a disconnected system.', 'info', 5000);
-      return;
-    }
-
-    const selectedPool = await ui.form('Import Existing Pool', [
-      {
-        name: 'pool',
-        label: 'Select Pool',
-        type: 'select',
-        required: true,
-        options: pools.map(p => ({
-          value: p.name,
-          label: `${p.name} (${p.state || 'unknown'})`
-        }))
-      },
-      {
-        name: 'force',
-        label: 'Force import (use if pool was not cleanly exported)',
-        type: 'checkbox'
-      }
-    ], 'Import');
-
-    if (!selectedPool) return;
-
-    ui.showLoading(`Importing pool "${selectedPool.pool}"...`);
-
-    const importRes = await csrfFetch('/api/system/pool/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: selectedPool.pool,
-        force: selectedPool.force || false
-      })
-    });
-
-    const result = await importRes.json();
-    ui.hideLoading();
-
-    if (importRes.ok) {
-      ui.toast(`Pool "${selectedPool.pool}" imported successfully`, 'success');
-      setTimeout(() => location.reload(), 1500);
-    } else {
-      ui.toast(result.error || 'Import failed', 'error');
-    }
-
-  } catch (error) {
-    ui.hideLoading();
-    ui.toast('Failed to scan for pools: ' + error.message, 'error');
-  }
-}
-
-
-async function scrubPool(name) {
-  if (await ui.confirm('Scrub Pool?', `Scrub "${name}"? This will verify data integrity across all disks. It may take a while for large pools.`)) {
-    ui.showLoading('Starting scrub...');
+  if (await ui.confirm('Destroy Pool?', `WARNING: This will permanently destroy ${name} and ALL data in it. This cannot be undone!`, 'Destroy', 'Cancel')) {
+    ui.showLoading(`Destroying ${name}...`);
     
     try {
-      const response = await csrfFetch('/api/zfs/scrub/start', {
+      const response = await csrfFetch('/api/zfs/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pool: name })
+        body: JSON.stringify({ action: 'destroy', pool: name })
       });
       
       const result = await response.json();
       ui.hideLoading();
       
-      if (response.ok) {
-        ui.toast(`Scrub started on "${name}"`, 'success');
+      if (result.success) {
+        ui.toast(`${name} destroyed`, 'success');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        ui.toast(result.error || 'Destroy failed', 'error');
+      }
+    } catch (error) {
+      ui.hideLoading();
+      ui.toast('Network error: ' + error.message, 'error');
+    }
+  }
+}
+
+async function importPool() {
+  ui.showLoading('Scanning for importable pools...');
+  
+  try {
+    // Step 1: Scan for importable pools
+    const scanRes = await csrfFetch('/api/zfs/pools');
+    const scan = await scanRes.json();
+    ui.hideLoading();
+    
+    if (!scan.success || !scan.pools || scan.pools.length === 0) {
+      ui.toast('No importable pools found', 'info');
+      return;
+    }
+    
+    // Step 2: Show list of pools
+    const poolNames = scan.pools.map(p => p.name);
+    const selectedPool = await ui.form('Import Existing Pool', [
+      {
+        name: 'pool',
+        label: 'Select Pool to Import',
+        type: 'select',
+        required: true,
+        options: poolNames.map(name => {
+          const pool = scan.pools.find(p => p.name === name);
+          return {
+            value: name,
+            label: `${name} (${pool.state})`
+          };
+        })
+      },
+      {
+        name: 'force',
+        label: 'Force import (if pool was not cleanly exported)',
+        type: 'checkbox'
+      }
+    ], 'Import');
+    
+    if (!selectedPool) return;
+    
+    // Step 3: Import selected pool
+    ui.showLoading(`Importing pool ${selectedPool.pool}...`);
+    
+    const importRes = await csrfFetch('/api/zfs/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'import',
+        name: selectedPool.pool,
+        force: selectedPool.force || false
+      })
+    });
+    
+    const result = await importRes.json();
+    ui.hideLoading();
+    
+    if (result.success) {
+      ui.toast(`✓ Pool ${selectedPool.pool} imported successfully`, 'success', 5000);
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      ui.toast(result.error || 'Import failed', 'error');
+    }
+    
+  } catch (error) {
+    ui.hideLoading();
+    ui.toast('Failed to import pool: ' + error.message, 'error');
+  }
+}
+
+
+async function scrubPool(name) {
+  if (await ui.confirm('Scrub Pool?', `Scrub ${name}? This will verify data integrity across all disks.`)) {
+    ui.showLoading('Starting scrub...');
+    
+    try {
+      const response = await csrfFetch('/api/zfs/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'scrub', pool: name })
+      });
+      
+      const result = await response.json();
+      ui.hideLoading();
+      
+      if (result.success) {
+        ui.toast('Scrub started', 'success');
       } else {
         ui.toast(result.error || 'Scrub failed to start', 'error');
       }
     } catch (error) {
       ui.hideLoading();
-      ui.toast('Failed to start scrub: ' + error.message, 'error');
+      ui.toast('Network error: ' + error.message, 'error');
     }
   }
 }
@@ -1920,89 +1349,7 @@ async function setQuota(dataset,bytes){try{const r=await csrfFetch('/api/zfs/dat
 async function removeQuota(dataset){const ok=await ui.confirm('Remove Quota',`Remove limit from ${dataset}?`);if(ok){try{const r=await csrfFetch('/api/zfs/datasets',{method:'POST',body:JSON.stringify({action:'set_quota',dataset:dataset,quota:0})});const d=await r.json();if(d.success){ui.toast('Removed','success');loadQuotas();}else ui.toast(d.error||'Failed','error');}catch(e){ui.toast('Failed','error');}}}
 async function handleLogout(){if(!await ui.confirm('Logout','Sure?'))return;try{const r=await csrfFetch('/api/auth/logout',{method:'POST'});if(r.ok){window.location.href='/login';return;}ui.toast('Logout failed','error');}catch(e){ui.toast('Logout failed','error');}}
 async function loadCurrentUser(){try{const r=await csrfFetch('/api/auth/session');const d=await r.json();if(d.success&&d.user)document.getElementById('currentUser').textContent=d.user.username;}catch(e){}}
-document.addEventListener('DOMContentLoaded',()=>{loadQuotas();loadCurrentUser();});
-
-async function showUserGroupQuotaModal() {
-  const dsr = await csrfFetch('/api/zfs/datasets'); const dsd = await dsr.json();
-  if (!dsd.success || !dsd.datasets || !dsd.datasets.length) { ui.toast('No datasets','warning'); return; }
-  const opts = dsd.datasets.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
-  const html = `<div class="form-group"><label class="form-label">Dataset</label><select id="ugq-dataset" class="form-input">${opts}</select></div>
-    <button class="btn btn-sm" onclick="loadUserGroupQuotas()" style="margin-bottom:16px;">Load Quotas</button>
-    <div id="ugq-results"></div>
-    <div style="margin-top:16px;border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;">
-      <h3 style="font-size:14px;margin-bottom:12px;">Set User/Group Quota</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
-        <select id="ugq-type" class="form-input"><option value="user">User</option><option value="group">Group</option></select>
-        <input id="ugq-name" class="form-input" placeholder="alice" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 12px;color:#fff;">
-        <input id="ugq-quota" class="form-input" placeholder="50G" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 12px;color:#fff;">
-        <button class="btn btn-primary btn-sm" onclick="setUserGroupQuota()">Set</button>
-      </div>
-    </div>`;
-  ui.modal('User & Group Quotas', html, [{text:'Close',primary:true}]);
-}
-
-async function loadUserGroupQuotas() {
-  const ds = document.getElementById('ugq-dataset').value;
-  if (!ds) return;
-  try {
-    const r = await csrfFetch('/api/zfs/quota/usergroup?dataset=' + encodeURIComponent(ds));
-    const d = await r.json();
-    const el = document.getElementById('ugq-results');
-    if (!d.success) { el.innerHTML = '<div style="color:var(--error);">'+d.error+'</div>'; return; }
-    const renderList = (items, label) => {
-      if (!items || !items.length) return `<div style="color:rgba(255,255,255,0.4);padding:8px;">No ${label} quotas</div>`;
-      return items.map(i => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><span>${i.name}</span><span>Used: ${i.used} / Quota: ${i.quota === 'none' ? 'unlimited' : i.quota}</span></div>`).join('');
-    };
-    el.innerHTML = `<div style="margin-bottom:12px;"><strong>Users</strong>${renderList(d.users,'user')}</div><div><strong>Groups</strong>${renderList(d.groups,'group')}</div>`;
-  } catch(e) { ui.toast('Failed','error'); }
-}
-
-async function setUserGroupQuota() {
-  const ds = document.getElementById('ugq-dataset').value;
-  const type = document.getElementById('ugq-type').value;
-  const name = document.getElementById('ugq-name').value.trim();
-  const quota = document.getElementById('ugq-quota').value.trim();
-  if (!ds || !name || !quota) { ui.toast('All fields required','warning'); return; }
-  try {
-    const r = await csrfFetch('/api/zfs/quota/usergroup', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ dataset:ds, type:type, name:name, quota:quota }) });
-    const d = await r.json();
-    d.success ? (ui.toast('Quota set','success'), loadUserGroupQuotas()) : ui.toast(d.error||'Failed','error');
-  } catch(e) { ui.toast('Failed','error'); }
-}
-
-async function showDatasetPropertiesModal() {
-  const dsr = await csrfFetch('/api/zfs/datasets'); const dsd = await dsr.json();
-  if (!dsd.success || !dsd.datasets || !dsd.datasets.length) { ui.toast('No datasets','warning'); return; }
-  const opts = dsd.datasets.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
-  const html = `<div class="form-group"><label class="form-label">Dataset</label><select id="dp-dataset" class="form-input" onchange="loadDatasetProps()">${opts}</select></div>
-    <div id="dp-results" style="margin-top:16px;"></div>`;
-  ui.modal('Dataset Properties', html, [{text:'Close',primary:true}]);
-  setTimeout(() => loadDatasetProps(), 100);
-}
-
-async function loadDatasetProps() {
-  const ds = document.getElementById('dp-dataset').value;
-  if (!ds) return;
-  try {
-    const r = await csrfFetch('/api/zfs/dataset/properties?dataset=' + encodeURIComponent(ds));
-    const d = await r.json();
-    const el = document.getElementById('dp-results');
-    if (!d.success) { el.innerHTML = '<div style="color:var(--error);">'+d.error+'</div>'; return; }
-    const props = d.properties || {};
-    el.innerHTML = Object.entries(props).map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:rgba(255,255,255,0.6);">${k}</span><span style="font-family:monospace;">${v}</span></div>`).join('');
-  } catch(e) { ui.toast('Failed','error'); }
-}
-
-async function showDatasetQuotaDetail(dataset) {
-  try {
-    const r = await csrfFetch('/api/zfs/dataset/quota?dataset=' + encodeURIComponent(dataset));
-    const d = await r.json();
-    if (!d.success) { ui.toast(d.error||'Failed','error'); return; }
-    const html = Object.entries(d).filter(([k]) => k !== 'success' && k !== 'dataset').map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><span>${k}</span><span style="font-family:monospace;">${v}</span></div>`).join('');
-    ui.modal(`Quota Details: ${dataset}`, html, [{text:'Close',primary:true}]);
-  } catch(e) { ui.toast('Failed','error'); }
-}
-}
+document.addEventListener('DOMContentLoaded',()=>{loadQuotas();loadCurrentUser();});}
 var __encryption_init=false;function init_encryption(){if(__encryption_init)return;__encryption_init=true;async function loadDatasets() {
   const status = document.getElementById('status');
   const datasetsDiv = document.getElementById('datasets');
@@ -2043,7 +1390,7 @@ var __encryption_init=false;function init_encryption(){if(__encryption_init)retu
       item.innerHTML = `
         <div class="dataset-header">
           <div>
-            <div class="dataset-name">${dataset.name}</div>
+            <div class="dataset-name">${escapeHtml(dataset.name)}</div>
             ${statusBadge}
           </div>
           <div class="dataset-actions">

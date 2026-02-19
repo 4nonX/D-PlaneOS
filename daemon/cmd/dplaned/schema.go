@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"log"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 // initSchema creates all required tables if they don't exist.
@@ -165,12 +163,6 @@ func initSchema(db *sql.DB) error {
 
 		// Migration: Add last_activity if missing (idempotent)
 		`ALTER TABLE sessions ADD COLUMN last_activity INTEGER NOT NULL DEFAULT 0`,
-
-		// Migration: Add must_change_password if missing (used by auth.go login/session)
-		`ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`,
-
-		// Migration: Add role column if missing (used by auth.go session endpoint)
-		`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`,
 
 		// ── Git Sync ──
 		`CREATE TABLE IF NOT EXISTS git_sync_config (
@@ -373,14 +365,8 @@ func seedDefaults(db *sql.DB) error {
 	var userCount int
 	db.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount)
 	if userCount == 0 {
-		// Default password "dplaneos" — must be changed on first login
-		defaultHash, err := bcrypt.GenerateFromPassword([]byte("dplaneos"), bcrypt.DefaultCost)
-		if err != nil {
-			return fmt.Errorf("admin password hash: %w", err)
-		}
 		if _, err := db.Exec(
-			"INSERT INTO users (username, password_hash, display_name, email, active, must_change_password, role) VALUES ('admin', ?, 'Administrator', 'admin@localhost', 1, 1, 'admin')",
-			string(defaultHash),
+			"INSERT INTO users (username, display_name, email, active) VALUES ('admin', 'Administrator', 'admin@localhost', 1)",
 		); err != nil {
 			return fmt.Errorf("admin user seed: %w", err)
 		}

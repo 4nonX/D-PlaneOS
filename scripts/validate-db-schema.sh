@@ -2,7 +2,7 @@
 #
 # D-PlaneOS Database Schema Validator
 # 
-# Validates and fixes common database issues for large-scale production systems:
+# Validates and fixes common database issues for 52TB+ production systems:
 # 1. Missing indexes
 # 2. Missing foreign keys
 # 3. Suboptimal data types
@@ -263,7 +263,7 @@ echo ""
 
 if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
     echo -e "${GREEN}✓ All checks passed!${NC}"
-    echo "  Database schema is optimal for large storage pools."
+    echo "  Database schema is optimal for 52TB+ systems."
 elif [ "$ERRORS" -eq 0 ]; then
     echo -e "${YELLOW}⚠ $WARNINGS warning(s) found${NC}"
     echo "  Database is functional but could be optimized."
@@ -276,11 +276,11 @@ else
 fi
 
 echo ""
-echo "For optimal performance on large storage pools:"
+echo "For optimal performance on 52TB+ systems:"
 echo "  1. Ensure database is on NVMe/SSD (not HDD)"
 echo "  2. Run VACUUM periodically to reclaim space"
 echo "  3. Monitor query performance with .timer ON"
-echo "  4. Consider increasing cache_size for systems with ample RAM"
+echo "  4. Consider increasing cache_size for systems >32GB RAM"
 echo ""
 
 # Exit code based on results

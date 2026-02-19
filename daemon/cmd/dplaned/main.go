@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	Version = "3.0.0"
+	Version = "2.1.0"
 )
 
 func main() {
@@ -163,11 +163,6 @@ func main() {
 
 	log.Printf("D-PlaneOS Daemon v%s starting...", Version)
 
-	// Ensure stacks directory exists for Docker stack management
-	if err := handlers.EnsureStacksDir(); err != nil {
-		log.Printf("WARNING: %v", err)
-	}
-
 	// Initialize WebSocket Hub for real-time monitoring
 	wsHub := websocket.NewMonitorHub()
 	go wsHub.Run()
@@ -208,30 +203,6 @@ func main() {
 		}
 	}()
 
-	// Rate limiter cleanup goroutine (prevents memory leak from stale IPs)
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			rateLimitMu.Lock()
-			now := time.Now()
-			for ip, timestamps := range requestCounts {
-				var recent []time.Time
-				for _, t := range timestamps {
-					if now.Sub(t) < timeWindow {
-						recent = append(recent, t)
-					}
-				}
-				if len(recent) == 0 {
-					delete(requestCounts, ip)
-				} else {
-					requestCounts[ip] = recent
-				}
-			}
-			rateLimitMu.Unlock()
-		}
-	}()
-
 	r.HandleFunc("/health", healthCheckHandler).Methods("GET")
 
 	// ZFS handlers
@@ -239,7 +210,6 @@ func main() {
 	r.HandleFunc("/api/zfs/command", zfsHandler.HandleCommand).Methods("POST")
 	r.HandleFunc("/api/zfs/pools", zfsHandler.ListPools).Methods("GET")
 	r.HandleFunc("/api/zfs/datasets", zfsHandler.ListDatasets).Methods("GET")
-	r.HandleFunc("/api/zfs/datasets", zfsHandler.ManageDatasets).Methods("POST")
 	
 	// ZFS Encryption handlers
 	zfsEncryptionHandler := handlers.NewZFSEncryptionHandler()
@@ -268,15 +238,6 @@ func main() {
 	r.HandleFunc("/api/docker/compose/up", dockerHandler.ComposeUp).Methods("POST")
 	r.HandleFunc("/api/docker/compose/down", dockerHandler.ComposeDown).Methods("POST")
 	r.HandleFunc("/api/docker/compose/status", dockerHandler.ComposeStatus).Methods("GET")
-	// v3.0.0: Stack management (Dockge-like YAML → Deploy workflow)
-	stackHandler := handlers.NewStackHandler()
-	r.HandleFunc("/api/docker/stacks", stackHandler.ListStacks).Methods("GET")
-	r.HandleFunc("/api/docker/stacks/deploy", stackHandler.DeployStack).Methods("POST")
-	r.HandleFunc("/api/docker/stacks/yaml", stackHandler.GetStackYAML).Methods("GET")
-	r.HandleFunc("/api/docker/stacks/yaml", stackHandler.UpdateStackYAML).Methods("PUT")
-	r.HandleFunc("/api/docker/stacks", stackHandler.DeleteStack).Methods("DELETE")
-	r.HandleFunc("/api/docker/stacks/action", stackHandler.StackAction).Methods("POST")
-	r.HandleFunc("/api/docker/convert-run", stackHandler.ConvertDockerRun).Methods("POST")
 
 	// v2.1.0: ZFS Snapshots CRUD
 	snapshotCRUDHandler := handlers.NewZFSSnapshotHandler()
@@ -341,7 +302,14 @@ func main() {
 
 	// ── Git Sync ──
 	gitSyncHandler := handlers.NewGitSyncHandler(db)
+	r.HandleFunc("/api/git-sync/config", gitSyncHandler.GetConfig).Methods("GET")
+	r.HandleFunc("/api/git-sync/config", gitSyncHandler.SaveConfig).Methods("POST")
+	r.HandleFunc("/api/git-sync/pull", gitSyncHandler.Pull).Methods("POST")
 	r.HandleFunc("/api/git-sync/status", gitSyncHandler.Status).Methods("GET")
+	r.HandleFunc("/api/git-sync/stacks", gitSyncHandler.ListStacks).Methods("GET")
+	r.HandleFunc("/api/git-sync/deploy", gitSyncHandler.Deploy).Methods("POST")
+	r.HandleFunc("/api/git-sync/export", gitSyncHandler.ExportContainers).Methods("POST")
+	r.HandleFunc("/api/git-sync/push", gitSyncHandler.Push).Methods("POST")
 
 	// Git-Sync: Multi-Repo + Credentials (v2.1.1)
 	gitReposHandler := handlers.NewGitReposHandler(db)
@@ -384,8 +352,6 @@ func main() {
 	// v2.1.0: Dataset quotas
 	r.HandleFunc("/api/zfs/dataset/quota", handlers.SetDatasetQuota).Methods("POST")
 	r.HandleFunc("/api/zfs/dataset/quota", handlers.GetDatasetQuota).Methods("GET")
-	r.HandleFunc("/api/zfs/dataset/property", handlers.SetZFSProperty).Methods("POST")
-	r.HandleFunc("/api/zfs/dataset/properties", handlers.GetZFSProperties).Methods("GET")
 
 	// v3.0.0: Per-user and per-group quotas (ZFS userquota/groupquota)
 	r.HandleFunc("/api/zfs/quota/usergroup", handlers.GetUserGroupQuotas).Methods("GET")
@@ -454,10 +420,6 @@ func main() {
 	// Disk discovery (setup wizard)
 	r.HandleFunc("/api/system/disks", handlers.HandleDiskDiscovery).Methods("GET")
 	r.HandleFunc("/api/system/pool/create", handlers.HandlePoolCreate).Methods("POST")
-	r.HandleFunc("/api/system/pool/import-scan", handlers.HandlePoolImportScan).Methods("GET")
-	r.HandleFunc("/api/system/pool/import", handlers.HandlePoolImport).Methods("POST")
-	r.HandleFunc("/api/system/pool/export", handlers.HandlePoolExport).Methods("POST")
-	r.HandleFunc("/api/system/pool/destroy", handlers.HandlePoolDestroy).Methods("POST")
 	
 	// Files handlers
 	filesHandler := handlers.NewFilesExtendedHandler()
@@ -681,14 +643,9 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 			// Check rate limit
 			if len(recent) >= maxRequests {
 				rateLimitMu.Unlock()
-				// Read user from cookie for audit log
-				auditUser := ""
-				if cookie, err := r.Cookie("dplaneos_user"); err == nil {
-					auditUser = cookie.Value
-				}
 				audit.LogSecurityEvent(
 					fmt.Sprintf("Rate limit exceeded: %d requests in %v", len(recent), timeWindow),
-					auditUser,
+					r.Header.Get("X-User"),
 					ip,
 				)
 				http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
@@ -715,16 +672,11 @@ func sessionMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Read session from cookie (primary) or header (legacy/API fallback)
-		sessionID := ""
-		if cookie, err := r.Cookie("dplaneos_session"); err == nil && cookie.Value != "" {
-			sessionID = cookie.Value
-		} else {
-			sessionID = r.Header.Get("X-Session-ID")
-		}
+		sessionID := r.Header.Get("X-Session-ID")
+		user := r.Header.Get("X-User")
 
-		if sessionID == "" {
-			audit.LogSecurityEvent("Missing session", "", r.RemoteAddr)
+		if sessionID == "" || user == "" {
+			audit.LogSecurityEvent("Missing session or user header", user, r.RemoteAddr)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -734,12 +686,19 @@ func sessionMiddleware(next http.Handler) http.Handler {
 		if err != nil {
 			// Fall back to format validation only
 			if !security.IsValidSessionToken(sessionID) {
-				audit.LogSecurityEvent("Invalid session format", "", r.RemoteAddr)
+				audit.LogSecurityEvent("Invalid session format", user, r.RemoteAddr)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 			// Token format OK but DB lookup failed — proceed without context user
 			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Verify header user matches session user
+		if sessionUser.Username != user {
+			audit.LogSecurityEvent("Session user mismatch", user, r.RemoteAddr)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 

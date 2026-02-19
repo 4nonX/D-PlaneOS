@@ -4,7 +4,7 @@
   "description": "Real-time system monitoring with Prometheus + Grafana",
   "version": "1.0.0",
   "author": "D-PlaneOS Team",
-  "license": "PolyForm-Shield-1.0.0",
+  "license": "GPL-3.0",
   "category": "monitoring",
   "icon": "monitoring",
   

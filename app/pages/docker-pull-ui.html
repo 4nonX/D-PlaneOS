@@ -11,8 +11,8 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #0f1419;
-            color: #e6edf3;
+            background: var(--bg);
+            color: var(--text);
             padding: 20px;
         }
         
@@ -48,22 +48,22 @@
         input {
             width: 100%;
             padding: 8px 12px;
-            background: #0a0a0a;
+            background: var(--bg);
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 6px;
-            color: #e6edf3;
+            color: var(--text);
             font-size: 14px;
         }
         
         input:focus {
             outline: none;
-            border-color: var(--primary, #8a9cff);
+            border-color: var(--primary, var(--primary));
         }
         
         button {
             padding: 8px 16px;
-            background: #238636;
-            border: 1px solid #2ea043;
+            background: var(--success);
+            border: 1px solid var(--success);
             border-radius: 6px;
             color: white;
             font-weight: 600;
@@ -72,7 +72,7 @@
         }
         
         button:hover {
-            background: #2ea043;
+            background: var(--success);
         }
         
         button:disabled {
@@ -81,12 +81,12 @@
         }
         
         button.danger {
-            background: #da3633;
-            border-color: #f85149;
+            background: var(--error);
+            border-color: var(--error);
         }
         
         button.danger:hover {
-            background: #f85149;
+            background: var(--error);
         }
         
         .pull-status {
@@ -114,7 +114,7 @@
             gap: 24px;
             margin-bottom: 16px;
             font-size: 14px;
-            color: #8b949e;
+            color: var(--text-dim);
         }
         
         .stat {
@@ -123,7 +123,7 @@
         }
         
         .stat-value {
-            color: #e6edf3;
+            color: var(--text);
             font-weight: 600;
         }
         
@@ -133,7 +133,7 @@
         
         .progress-bar {
             height: 8px;
-            background: #21262d;
+            background: var(--bg-elevated);
             border-radius: 4px;
             overflow: hidden;
             margin-top: 8px;
@@ -141,7 +141,7 @@
         
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #238636 0%, #2ea043 100%);
+            background: linear-gradient(90deg, var(--success) 0%, var(--success) 100%);
             transition: width 0.3s ease;
         }
         
@@ -163,8 +163,8 @@
         }
         
         .layer {
-            background: #0a0a0a;
-            border: 1px solid #21262d;
+            background: var(--bg);
+            border: 1px solid var(--bg-elevated);
             border-radius: 6px;
             padding: 12px;
             margin-bottom: 8px;
@@ -180,7 +180,7 @@
         
         .layer-id {
             font-family: 'Courier New', monospace;
-            color: #8b949e;
+            color: var(--text-dim);
         }
         
         .layer-status {
@@ -191,33 +191,33 @@
         }
         
         .layer-status.waiting {
-            background: #21262d;
-            color: #8b949e;
+            background: var(--bg-elevated);
+            color: var(--text-dim);
         }
         
         .layer-status.downloading {
-            background: #1f6feb;
+            background: var(--info);
             color: white;
         }
         
         .layer-status.extracting {
-            background: #a371f7;
+            background: var(--primary);
             color: white;
         }
         
         .layer-status.complete {
-            background: #238636;
+            background: var(--success);
             color: white;
         }
         
         .layer-status.cached {
-            background: #6e7681;
+            background: var(--text-dimmer);
             color: white;
         }
         
         .layer-progress {
             height: 4px;
-            background: #21262d;
+            background: var(--bg-elevated);
             border-radius: 2px;
             overflow: hidden;
         }
@@ -228,15 +228,15 @@
         }
         
         .layer-progress-fill.downloading {
-            background: #1f6feb;
+            background: var(--info);
         }
         
         .layer-progress-fill.extracting {
-            background: #a371f7;
+            background: var(--primary);
         }
         
         .layer-progress-fill.complete {
-            background: #238636;
+            background: var(--success);
         }
         
         .status-badge {
@@ -250,15 +250,15 @@
         }
         
         .status-badge.pulling {
-            background: #1f6feb;
+            background: var(--info);
         }
         
         .status-badge.completed {
-            background: #238636;
+            background: var(--success);
         }
         
         .status-badge.failed {
-            background: #da3633;
+            background: var(--error);
         }
         
         .spinner {
@@ -280,11 +280,11 @@
         }
         
         .error-message {
-            background: #2d0f0f;
-            border: 1px solid #da3633;
+            background: var(--error-bg);
+            border: 1px solid var(--error);
             border-radius: 6px;
             padding: 12px;
-            color: #f85149;
+            color: var(--error);
             margin-top: 16px;
         }
     </style>

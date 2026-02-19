@@ -2,8 +2,8 @@
  * D-PlaneOS Nav Flyout Enhancement
  * 
  * Adds hover-intent flyout behavior to the existing top-nav.
- * Also serves as the single source of truth for sub-nav link definitions,
- * dynamically injecting canonical sub-nav content on every page.
+ * This is a NON-DESTRUCTIVE overlay — the existing click handlers
+ * remain intact as fallback for touch devices and accessibility.
  *
  * Behavior:
  *   Desktop (pointer:fine) → hover opens sub-nav after 120ms intent delay
@@ -11,122 +11,8 @@
  *   Keyboard               → existing keyboard shortcuts (unchanged)
  *
  * No HTML changes required. No CSS changes required.
- * Drop-in enhancement for all pages.
+ * Drop-in enhancement for all 25 pages.
  */
-
-// ─── Canonical Sub-Nav Link Definitions ──────────────────────
-// THE single source of truth. Order = display order.
-var NAV_LINKS = {
-  storage: [
-    { page: 'pools',              href: 'pools.html',              icon: 'database',             label: 'ZFS Pools' },
-    { page: 'pools-advanced',     href: 'pools.html#advanced',     icon: 'build',                label: 'Advanced ZFS' },
-    { page: 'snapshot-scheduler', href: 'snapshot-scheduler.html', icon: 'schedule',             label: 'Scheduler' },
-    { page: 'shares',             href: 'shares.html',             icon: 'folder_shared',        label: 'Shares' },
-    { page: 'replication',        href: 'replication.html',        icon: 'sync',                 label: 'Replication' },
-    { page: 'files',              href: 'files.html',              icon: 'folder_open',          label: 'Explorer' },
-    { page: 'quotas',             href: 'pools.html#quotas',       icon: 'data_usage',           label: 'Quotas' },
-    { page: 'acl-manager',        href: 'acl-manager.html',        icon: 'admin_panel_settings', label: 'ACLs' },
-    { page: 'zfs-encryption',     href: 'pools.html#encryption',   icon: 'enhanced_encryption',  label: 'Encryption' },
-    { page: 'cloud-sync',         href: 'cloud-sync.html',         icon: 'cloud_sync',           label: 'Cloud Sync' }
-  ],
-  compute: [
-    { page: 'docker',   href: 'docker.html',    icon: 'dns',       label: 'Docker Stacks' },
-    { page: 'git-sync', href: 'git-sync.html',   icon: 'sync',      label: 'Git Sync' }
-  ],
-  network: [
-    { page: 'network',            href: 'network.html',             icon: 'lan',               label: 'Overview' },
-    { page: 'network-interfaces', href: 'network.html#interfaces',  icon: 'settings_ethernet', label: 'Interfaces' },
-    { page: 'network-routing',    href: 'network.html#routing',     icon: 'alt_route',         label: 'Routing' },
-    { page: 'network-dns',        href: 'network.html#dns',         icon: 'dns',               label: 'DNS' }
-  ],
-  identity: [
-    { page: 'users',             href: 'users.html',              icon: 'group',         label: 'Users' },
-    { page: 'groups',            href: 'users.html#groups',       icon: 'groups',        label: 'Groups' },
-    { page: 'rbac-management',   href: 'users.html#rbac',         icon: 'verified_user', label: 'RBAC' },
-    { page: 'directory-service', href: 'directory-service.html',  icon: 'domain',        label: 'Directory' }
-  ],
-  security: [
-    { page: 'security',     href: 'security.html',              icon: 'shield',                label: 'Overview' },
-    { page: 'audit',        href: 'audit.html',                 icon: 'history',               label: 'Audit Log' },
-    { page: 'firewall',     href: 'security.html#firewall',     icon: 'local_fire_department', label: 'Firewall' },
-    { page: 'certificates', href: 'security.html#certificates', icon: 'verified',              label: 'Certificates' }
-  ],
-  system: [
-    { page: 'settings',           href: 'settings.html',              icon: 'settings',               label: 'General' },
-    { page: 'system-settings',    href: 'settings.html#config',       icon: 'tune',                   label: 'Configuration' },
-    { page: 'reporting',          href: 'reporting.html',             icon: 'monitoring',             label: 'Metrics' },
-    { page: 'system-monitoring',  href: 'reporting.html#monitoring',  icon: 'analytics',              label: 'Live Health' },
-    { page: 'logs',               href: 'reporting.html#logs',        icon: 'description',            label: 'Logs' },
-    { page: 'hardware',           href: 'reporting.html#hardware',    icon: 'memory',                 label: 'Hardware' },
-    { page: 'ipmi',               href: 'ipmi.html',                  icon: 'developer_board',        label: 'IPMI' },
-    { page: 'ups',                href: 'ups.html',                   icon: 'battery_charging_full',  label: 'UPS' },
-    { page: 'power-management',   href: 'settings.html#power',        icon: 'power_settings_new',     label: 'Power' },
-    { page: 'removable-media-ui', href: 'removable-media-ui.html',   icon: 'usb',                    label: 'Media' }
-  ]
-};
-
-// ─── Derived page→section map ────────────────────────────────
-// Maps both 'page.html' and 'page.html#hash' to their section/page info.
-var PAGE_MAP = { 'index.html': { section: 'dashboard', page: null } };
-Object.keys(NAV_LINKS).forEach(function(section) {
-  NAV_LINKS[section].forEach(function(link) {
-    PAGE_MAP[link.href] = { section: section, page: link.page };
-    // Also map the base page (without hash) to this section
-    var basePage = link.href.split('#')[0];
-    if (!PAGE_MAP[basePage]) {
-      PAGE_MAP[basePage] = { section: section, page: link.page };
-    }
-  });
-});
-
-// ─── Dynamic Sub-Nav Injection ───────────────────────────────
-// Replaces whatever sub-nav HTML exists with the canonical links.
-// Wrapped in ready-check because script loads in <head> before nav DOM.
-function _doInjectSubNavs() {
-  var currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  var currentHash = window.location.hash || '';
-  var currentFull = currentPage + currentHash;
-
-  // Try full match (page.html#hash) first, then base page
-  var current = PAGE_MAP[currentFull] || PAGE_MAP[currentPage];
-
-  Object.keys(NAV_LINKS).forEach(function(section) {
-    var container = document.getElementById('sub-' + section);
-    if (!container) return;
-
-    var inner = container.querySelector('.nav-sub-inner');
-    if (!inner) {
-      inner = document.createElement('div');
-      inner.className = 'nav-sub-inner';
-      container.innerHTML = '';
-      container.appendChild(inner);
-    }
-
-    inner.innerHTML = NAV_LINKS[section].map(function(link) {
-      var isActive = (current && current.page === link.page) ? ' active' : '';
-      return '<a href="' + link.href + '" class="sub-link' + isActive + '" data-page="' + link.page + '">' +
-        '<span class="material-symbols-rounded">' + link.icon + '</span>' +
-        link.label + '</a>';
-    }).join('');
-  });
-
-  // Activate current section
-  if (current && current.section !== 'dashboard') {
-    var subNav = document.getElementById('sub-' + current.section);
-    if (subNav) {
-      subNav.classList.add('active');
-      subNav.style.display = 'flex';
-      document.body.classList.add('has-subnav');
-    }
-  }
-}
-
-// Run when DOM is ready (script may load in <head>)
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', _doInjectSubNavs);
-} else {
-  _doInjectSubNavs();
-}
 
 (function () {
   'use strict';
@@ -206,11 +92,47 @@ if (document.readyState === 'loading') {
    */
   function restoreCurrentPage() {
     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
-    var currentFull = currentPage + (window.location.hash || '');
 
-    // Use canonical PAGE_MAP (defined above in this file)
-    var entry = PAGE_MAP[currentFull] || PAGE_MAP[currentPage];
-    var section = entry ? entry.section : 'dashboard';
+    var pageMap = {
+      'acl-manager.html': 'storage',
+      'audit.html': 'security',
+      'certificates.html': 'security',
+      'cloud-sync.html': 'storage',
+      'directory-service.html': 'identity',
+      'docker.html': 'compute',
+      'files-enhanced.html': 'storage',
+      'files.html': 'storage',
+      'firewall.html': 'security',
+      'groups.html': 'identity',
+      'hardware.html': 'system',
+      'index.html': 'dashboard',
+      'ipmi.html': 'system',
+      'logs.html': 'system',
+      'modules.html': 'compute',
+      'network-dns.html': 'network',
+      'network-interfaces.html': 'network',
+      'network-routing.html': 'network',
+      'network.html': 'network',
+      'pools-advanced.html': 'storage',
+      'pools.html': 'storage',
+      'power-management.html': 'system',
+      'quotas.html': 'storage',
+      'rbac-management.html': 'identity',
+      'removable-media-ui.html': 'system',
+      'replication.html': 'storage',
+      'reporting.html': 'system',
+      'security.html': 'security',
+      'settings.html': 'system',
+      'shares.html': 'storage',
+      'snapshot-scheduler.html': 'storage',
+      'system-monitoring.html': 'system',
+      'system-settings.html': 'system',
+      'ups.html': 'system',
+      'users.html': 'identity',
+      'zfs-encryption.html': 'storage'
+    };
+
+    var section = pageMap[currentPage] || 'dashboard';
 
     // Restore active nav-link
     document.querySelectorAll('.nav-link').forEach(function (link) {
@@ -239,31 +161,6 @@ if (document.readyState === 'loading') {
    * Attach hover handlers to all nav-links with sub-navs
    */
   function init() {
-    // Load permission checker if not already present
-    if (!window.permissions && !document.querySelector('script[src*="permission-checker"]')) {
-      var s = document.createElement('script');
-      s.src = '/assets/js/permission-checker.js';
-      document.head.appendChild(s);
-    }
-
-    // Inject logout button into nav-actions if not present
-    var navActions = document.querySelector('.nav-actions');
-    if (navActions && !navActions.querySelector('.nav-logout-btn')) {
-      var logoutBtn = document.createElement('button');
-      logoutBtn.className = 'nav-action-btn nav-logout-btn';
-      logoutBtn.title = 'Logout';
-      logoutBtn.innerHTML = '<span class="material-symbols-rounded">logout</span>';
-      logoutBtn.onclick = async function() {
-        if (!confirm('Log out?')) return;
-        try {
-          var r = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
-          if (r.ok) { window.location.href = '/pages/login.html'; return; }
-        } catch(e) {}
-        window.location.href = '/pages/login.html';
-      };
-      navActions.appendChild(logoutBtn);
-    }
-
     var navLinks = document.querySelectorAll('.nav-link[data-section]');
 
     navLinks.forEach(function (link) {

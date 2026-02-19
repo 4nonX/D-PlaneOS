@@ -106,7 +106,7 @@ var SecurityActions = map[string]bool{
 
 // Log adds an event to the buffer.
 // Security events (auth, permission) bypass the buffer and are written directly
-// to SQLite so they are likely to survive a hard crash or SIGKILL.
+// to SQLite to guarantee they survive a hard crash or SIGKILL.
 //
 // Thread-safe: Can be called from multiple goroutines
 func (bl *BufferedLogger) Log(event AuditEvent) error {

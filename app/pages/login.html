@@ -5,18 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Login - D-PlaneOS</title>
 <style>
-:root { --primary:#8a9cff; --bg:#0a0a0a; --surface:rgba(255,255,255,0.05); --border:rgba(255,255,255,0.1); --dim:rgba(255,255,255,0.5); --error:#f87171; }
+/* colors from design-tokens.css */
 * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',system-ui,sans-serif; }
-body { background:var(--bg); color:#fff; min-height:100vh; display:flex; align-items:center; justify-content:center; }
+body { background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; }
 .login-box { width:100%; max-width:400px; padding:40px; }
 .logo { font-size:28px; font-weight:800; color:var(--primary); text-align:center; margin-bottom:8px; letter-spacing:-1px; }
-.subtitle { text-align:center; color:var(--dim); font-size:14px; margin-bottom:40px; }
+.subtitle { text-align:center; color:var(--text-dim); font-size:14px; margin-bottom:40px; }
 .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px; }
 .form-group { margin-bottom:20px; }
-.form-label { display:block; font-size:13px; color:var(--dim); margin-bottom:8px; font-weight:600; }
-.form-input { width:100%; padding:12px 16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:#fff; font-size:15px; outline:none; transition:border-color 0.15s; }
+.form-label { display:block; font-size:13px; color:var(--text-dim); margin-bottom:8px; font-weight:600; }
+.form-input { width:100%; padding:12px 16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:var(--text); font-size:15px; outline:none; transition:border-color 0.15s; }
 .form-input:focus { border-color:var(--primary); }
-.btn-login { width:100%; padding:14px; background:var(--primary); color:#000; border:none; border-radius:10px; font-size:15px; font-weight:700; cursor:pointer; transition:0.15s; }
+.btn-login { width:100%; padding:14px; background:var(--primary); color:var(--text-on-primary); border:none; border-radius:10px; font-size:15px; font-weight:700; cursor:pointer; transition:0.15s; }
 .btn-login:hover { opacity:0.9; }
 .btn-login:disabled { opacity:0.5; cursor:not-allowed; }
 .error-msg { color:var(--error); font-size:13px; text-align:center; margin-top:16px; display:none; }
@@ -77,7 +77,10 @@ async function doLogin() {
     const data = await resp.json();
 
     if (data.success) {
-      // Session cookie (dplaneos_session) is set by server as HttpOnly.
+      // Store session
+      sessionStorage.setItem('session_id', data.session_id);
+      sessionStorage.setItem('username', data.username);
+      
       // Redirect to dashboard
       window.location.href = '/pages/index.html';
     } else {

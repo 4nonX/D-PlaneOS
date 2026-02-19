@@ -88,7 +88,6 @@ class VirtualFileList {
         // Initial render
         this.render();
         
-        console.log(`Virtual list: ${files.length} files, rendering only ${this.visibleRows} at a time`);
     }
     
     /**
@@ -161,7 +160,6 @@ class VirtualFileList {
         
         // Performance tracking
         if (this.startIndex === 0 && this.endIndex < 50) {
-            console.log(`Rendered ${this.endIndex - this.startIndex} rows (${this.files.length} total)`);
         }
     }
     
@@ -334,6 +332,5 @@ fetch('/api/files?path=/massive-directory')
     .then(res => res.json())
     .then(data => {
         virtualList.setFiles(data.files); // Renders only ~30 rows
-        console.log('Loaded', data.files.length, 'files');
     });
 */

@@ -1,5 +1,5 @@
 /**
- * D-PlaneOS v3.0.0 - Progressive Web App Service Worker
+ * D-PlaneOS v5.0.0 - Progressive Web App Service Worker
  * 
  * Features:
  * - Cache-first strategy for static assets
@@ -8,7 +8,7 @@
  * - Cache versioning and cleanup
  */
 
-const CACHE_NAME = 'dplaneos-v3.0.0';
+const CACHE_NAME = 'dplaneos-v5.0.0';
 const CACHE_VERSION = '5.0.0';
 
 // Assets to cache on install

@@ -1,5 +1,5 @@
 /**
- * D-PlaneOS Real-time WebSocket Client v3.0.0
+ * D-PlaneOS Real-time WebSocket Client v2.9.0
  * Connects to event daemon for live system updates
  */
 
@@ -73,12 +73,9 @@
     }
     
     getSessionId() {
-      // WebSocket upgrade requests automatically include cookies.
-      // However, the WS protocol also requires explicit auth after connect.
-      // Read the non-HttpOnly user cookie as a signal that we're logged in,
-      // and send it for the WS auth handshake.
-      const match = document.cookie.match(/dplaneos_user=([^;]+)/);
-      return match ? decodeURIComponent(match[1]) : null;
+      // Get PHP session ID from cookie
+      const match = document.cookie.match(/PHPSESSID=([^;]+)/);
+      return match ? match[1] : null;
     }
     
     onMessage(event) {

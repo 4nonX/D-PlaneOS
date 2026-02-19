@@ -269,26 +269,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("AUTH OK: %q from %s", req.Username, r.RemoteAddr)
 
-	// Set session cookie (HttpOnly, SameSite=Strict — CSRF-resistant)
-	http.SetCookie(w, &http.Cookie{
-		Name:     "dplaneos_session",
-		Value:    sessionID,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-		MaxAge:   86400, // 24 hours
-	})
-
-	// Set username cookie (readable by JS for UI display, NOT HttpOnly)
-	http.SetCookie(w, &http.Cookie{
-		Name:     "dplaneos_user",
-		Value:    req.Username,
-		Path:     "/",
-		HttpOnly: false,
-		SameSite: http.SameSiteStrictMode,
-		MaxAge:   86400,
-	})
-
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success":              true,
 		"session_id":           sessionID,
@@ -301,33 +281,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 // --- POST /api/auth/logout ---
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	// Read session from cookie (primary) or header (legacy fallback)
-	sessionID := getSessionFromRequest(r)
-	username := getUserFromRequest(r)
+	sessionID := r.Header.Get("X-Session-ID")
+	username := r.Header.Get("X-User")
 
 	if sessionID != "" {
 		h.db.Exec(`DELETE FROM sessions WHERE session_id = ?`, sessionID)
 		h.auditLog(username, "logout", "Session destroyed", r.RemoteAddr)
 		log.Printf("LOGOUT: %q from %s", username, r.RemoteAddr)
 	}
-
-	// Clear cookies
-	http.SetCookie(w, &http.Cookie{
-		Name:     "dplaneos_session",
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-		MaxAge:   -1,
-	})
-	http.SetCookie(w, &http.Cookie{
-		Name:     "dplaneos_user",
-		Value:    "",
-		Path:     "/",
-		HttpOnly: false,
-		SameSite: http.SameSiteStrictMode,
-		MaxAge:   -1,
-	})
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -337,7 +298,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // --- GET /api/auth/check ---
 
 func (h *AuthHandler) Check(w http.ResponseWriter, r *http.Request) {
-	sessionID := getSessionFromRequest(r)
+	sessionID := r.Header.Get("X-Session-ID")
 
 	if sessionID == "" {
 		respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -372,7 +333,7 @@ func (h *AuthHandler) Check(w http.ResponseWriter, r *http.Request) {
 // --- GET /api/auth/session ---
 
 func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
-	sessionID := getSessionFromRequest(r)
+	sessionID := r.Header.Get("X-Session-ID")
 
 	if sessionID == "" {
 		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
@@ -423,7 +384,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionID := getSessionFromRequest(r)
+	sessionID := r.Header.Get("X-Session-ID")
 	if sessionID == "" {
 		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
 			"success": false, "error": "Not authenticated",
@@ -550,23 +511,5 @@ func (h *AuthHandler) CleanExpiredSessions() {
 	if count, _ := result.RowsAffected(); count > 0 {
 		log.Printf("Cleaned %d expired sessions", count)
 	}
-}
-
-// getSessionFromRequest reads session ID from cookie (primary) or header (legacy fallback).
-// Cookie: dplaneos_session — set by Login handler with HttpOnly; SameSite=Strict.
-// Header: X-Session-ID — legacy, kept for API clients / backward compat.
-func getSessionFromRequest(r *http.Request) string {
-	if cookie, err := r.Cookie("dplaneos_session"); err == nil && cookie.Value != "" {
-		return cookie.Value
-	}
-	return r.Header.Get("X-Session-ID")
-}
-
-// getUserFromRequest reads username from cookie (primary) or header (legacy fallback).
-func getUserFromRequest(r *http.Request) string {
-	if cookie, err := r.Cookie("dplaneos_user"); err == nil && cookie.Value != "" {
-		return cookie.Value
-	}
-	return r.Header.Get("X-User")
 }
 

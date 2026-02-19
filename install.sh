@@ -65,17 +65,18 @@ fi
 # Banner
 clear
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${BOLD}    D-PlaneOS v3.0.0 Installer${NC}"
+echo -e "${BOLD}    D-PlaneOS v3.0.0 - System Hardening Installer${NC}"
+echo "    Zero Config | Zero Debugging | Just Works"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "This installer will:"
-echo "  • Install all dependencies"
-echo "  • Configure services (nginx, samba, NFS, Docker)"
-echo "  • Create admin account with random password"
-echo "  • Deploy recovery CLI"
-echo "  • Validate the installation"
+echo "This installer guarantees:"
+echo "  ✓ All dependencies automatically installed"
+echo "  ✓ All services configured correctly"
+echo "  ✓ Login works out of the box"
+echo "  ✓ Recovery CLI for emergencies"
+echo "  ✓ Complete validation after install"
 echo ""
-echo "Target: Debian/Ubuntu with ZFS support"
+echo "Target: 52TB+ production systems"
 echo "Time: ~5-10 minutes"
 echo ""
 
@@ -105,7 +106,7 @@ echo ""
 # STEP 1: Install System Dependencies
 # ============================================================
 
-step "Step 1/13: Installing System Dependencies"
+step "Step 1/12: Installing System Dependencies"
 
 log "Updating package lists..."
 apt-get update -qq 2>&1 | tee -a "$LOG_FILE" >/dev/null || error "Failed to update package lists"
@@ -128,12 +129,6 @@ PACKAGES=(
     "hdparm"
     "git"
     "openssh-client"
-    "samba"
-    "samba-common-bin"
-    "nfs-kernel-server"
-    "dmidecode"
-    "ethtool"
-    "cron"
 )
 
 log "Installing required packages..."
@@ -148,57 +143,11 @@ done
 
 log "✓ All dependencies installed"
 
-# ── Enable Samba and NFS ──
-log "Enabling file sharing services..."
-
-# Samba: enable and create log directory
-if command -v smbd >/dev/null 2>&1; then
-    mkdir -p /var/log/samba
-    systemctl enable smbd nmbd 2>/dev/null || true
-    systemctl start smbd nmbd 2>/dev/null || true
-    log "✓ Samba (SMB) enabled"
-else
-    warn "Samba not available — SMB shares will not work"
-fi
-
-# NFS: enable kernel NFS server
-if command -v exportfs >/dev/null 2>&1; then
-    systemctl enable nfs-kernel-server 2>/dev/null || true
-    systemctl start nfs-kernel-server 2>/dev/null || true
-    log "✓ NFS server enabled"
-else
-    warn "NFS server not available — NFS shares will not work"
-fi
-
-# ── Docker: install if not present ──
-if ! command -v docker >/dev/null 2>&1; then
-    log ""
-    log "Docker is not installed. D-PlaneOS Docker management requires Docker."
-    log "Installing Docker from official repository..."
-
-    # Install Docker using the official convenience script
-    curl -fsSL https://get.docker.com | sh >> "$LOG_FILE" 2>&1 || {
-        warn "Automatic Docker install failed."
-        warn "Docker features will be unavailable until Docker is installed manually."
-        warn "See: https://docs.docker.com/engine/install/"
-    }
-
-    if command -v docker >/dev/null 2>&1; then
-        log "✓ Docker installed successfully"
-        # Install docker compose plugin if not bundled
-        if ! docker compose version >/dev/null 2>&1; then
-            apt-get install -y docker-compose-plugin >> "$LOG_FILE" 2>&1 || true
-        fi
-    fi
-else
-    log "✓ Docker already installed"
-fi
-
 # ============================================================
 # STEP 2: ZFS Kernel Module Setup
 # ============================================================
 
-step "Step 2/13: ZFS Kernel Module Setup"
+step "Step 2/12: ZFS Kernel Module Setup"
 
 if ! lsmod | grep -q "^zfs "; then
     log "Loading ZFS kernel module..."
@@ -224,7 +173,7 @@ fi
 # STEP 3: Configure ZFS ARC Memory Limits
 # ============================================================
 
-step "Step 3/13: Configuring ZFS ARC Memory Limits"
+step "Step 3/12: Configuring ZFS ARC Memory Limits"
 
 # Detect total RAM
 TOTAL_RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
@@ -269,7 +218,7 @@ fi
 # STEP 4: Create Installation Directory
 # ============================================================
 
-step "Step 4/13: Creating Installation Directory"
+step "Step 4/12: Creating Installation Directory"
 
 log "Creating directories..."
 mkdir -p "$INSTALL_DIR"
@@ -298,7 +247,7 @@ log "✓ Installation directory created"
 # STEP 4: sudoers Configuration (CRITICAL!)
 # ============================================================
 
-step "Step 5/13: Configuring sudoers (Daemon Permissions)"
+step "Step 5/12: Configuring sudoers (Daemon Permissions)"
 
 SUDOERS_FILE="/etc/sudoers.d/dplaneos"
 
@@ -337,7 +286,7 @@ fi
 # STEP 5: Database Setup with FTS5
 # ============================================================
 
-step "Step 6/13: Database Setup with FTS5 Search"
+step "Step 6/12: Database Setup with FTS5 Search"
 
 log "Creating database..."
 
@@ -582,7 +531,7 @@ log "✓ Database setup complete"
 # STEP 6: Web Server Configuration
 # ============================================================
 
-step "Step 7/13: Configuring Web Server"
+step "Step 7/12: Configuring Web Server"
 
 log "Creating nginx configuration (Go daemon proxy)..."
 
@@ -602,9 +551,6 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
-
-    # File upload limit (for file explorer)
-    client_max_body_size 10G;
     
     # Static files - serve directly from nginx
     location / {
@@ -636,9 +582,7 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host \\\$host;
         proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_read_timeout 7d;
-        proxy_send_timeout 7d;
-        proxy_connect_timeout 7d;
+        proxy_read_timeout 86400s;
     }
     
     # Health check
@@ -653,11 +597,6 @@ server {
     
     # Deny access to hidden files
     location ~ /\\. {
-        deny all;
-    }
-    
-    # Block internal directories
-    location ~ /(config|daemon|scripts|systemd)/ {
         deny all;
     }
 }
@@ -688,7 +627,7 @@ log "✓ Web server configured"
 # STEP 7: First-Run Redirect
 # ============================================================
 
-step "Step 8/13: Setting Up First-Run Experience"
+step "Step 8/12: Setting Up First-Run Experience"
 
 # Create index.html redirect (pure static — no PHP)
 if [ ! -f "$INSTALL_DIR/app/index.html" ]; then
@@ -705,7 +644,7 @@ log "✓ First-run redirect configured"
 # STEP 8: System Tuning (inotify limits for millions of files)
 # ============================================================
 
-step "Step 9/13: System Tuning for Large File Systems"
+step "Step 9/12: System Tuning for Large File Systems"
 
 log "Configuring inotify limits..."
 
@@ -715,10 +654,10 @@ CURRENT_INSTANCES=$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo 
 
 log "Current limits: watches=$CURRENT_WATCHES, instances=$CURRENT_INSTANCES"
 
-# Set new limits for large file systems
+# Set new limits for 52TB+ systems
 cat > /etc/sysctl.d/99-dplaneos.conf <<'EOSYSCTL'
 # D-PlaneOS System Tuning
-# Optimized for NAS workloads with millions of files
+# Optimized for 52TB+ NAS with millions of files
 
 # inotify limits (for real-time file monitoring)
 # Default: 8,192 watches - Too low for large file systems
@@ -751,7 +690,7 @@ log "  File monitoring now supports 10M+ files"
 # STEP 9: Docker Storage Driver Configuration
 # ============================================================
 
-step "Step 10/13: Configuring Docker for ZFS"
+step "Step 10/12: Configuring Docker for ZFS"
 
 if command -v docker >/dev/null 2>&1; then
     log "Docker detected, configuring ZFS storage driver..."
@@ -803,7 +742,7 @@ fi
 # STEP 10: Service Restart
 # ============================================================
 
-step "Step 11/13: Starting Services"
+step "Step 11/12: Starting Services"
 
 # Deploy Go daemon systemd service
 log "Installing Go daemon service..."
@@ -830,10 +769,6 @@ User=root
 StandardOutput=journal
 StandardError=journal
 LimitNOFILE=65536
-TasksMax=4096
-MemoryMax=1G
-MemoryHigh=768M
-OOMScoreAdjust=-900
 
 [Install]
 WantedBy=multi-user.target
@@ -872,10 +807,7 @@ if command -v go >/dev/null 2>&1 && [ -f "$INSTALL_DIR/daemon/cmd/dplaned/main.g
 elif [ -f "$INSTALL_DIR/daemon/dplaned" ]; then
     log "Pre-built Go daemon binary found"
 else
-    warn "No Go daemon binary found."
-    warn "If you cloned from Git, install Go 1.21+ and build:"
-    warn "  sudo apt install golang-go && cd $INSTALL_DIR/daemon && CGO_ENABLED=1 go build -o dplaned ./cmd/dplaned/"
-    warn "Or download a release tarball (includes pre-built binary) from GitHub."
+    warn "No Go daemon binary found. Build manually: cd $INSTALL_DIR/daemon && go mod tidy && CGO_ENABLED=1 go build -o dplaned ./cmd/dplaned/"
 fi
 
 # Start services
@@ -905,21 +837,11 @@ systemctl enable nginx 2>/dev/null
 
 log "✓ All services started"
 
-# ── Deploy udev rules for removable media detection ──
-if [ -f "$SCRIPT_DIR/udev/99-dplaneos-removable-media.rules" ]; then
-    cp "$SCRIPT_DIR/udev/99-dplaneos-removable-media.rules" /etc/udev/rules.d/
-    udevadm control --reload-rules 2>/dev/null || true
-    udevadm trigger 2>/dev/null || true
-    log "✓ Removable media udev rules installed"
-else
-    warn "udev rules file not found — USB auto-detection unavailable"
-fi
-
 # ============================================================
 # STEP 11: Install Recovery CLI
 # ============================================================
 
-step "Step 12/13: Installing Recovery CLI"
+step "Step 11/12: Installing Recovery CLI"
 
 log "Installing recovery CLI..."
 
@@ -938,7 +860,7 @@ log "✓ Recovery CLI available"
 # STEP 12: Post-Install Validation
 # ============================================================
 
-step "Step 13/13: Running Post-Install Validation"
+step "Step 12/12: Running Post-Install Validation"
 
 log "Validating installation..."
 
@@ -1018,5 +940,5 @@ echo "✅ Database writable and accessible"
 echo "✅ Recovery CLI available for emergencies"
 echo ""
 echo "Installation completed successfully!"
-echo "Installation complete."
+echo "Your 52TB NAS is production-ready! 🚀"
 echo ""

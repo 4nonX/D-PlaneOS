@@ -1,20 +1,12 @@
-# D-PlaneOS v3.0.0 — NAS Operating System
+# D-PlaneOS v3.0.0 — Enterprise NAS Operating System
 
-Open-source NAS OS built on ZFS, with a web UI, Docker container management, role-based access control, and LDAP/AD integration.
+Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
 
 ## Quick Start
 
-### NixOS ISO (easiest)
-```bash
-# Build the ISO or download from Releases
-nix build .#nixosConfigurations.dplaneos-iso.config.system.build.isoImage
-# Flash to USB, boot, open http://dplaneos.local
-# Type 'dplaneos-install' to install permanently
-```
-
 ### Debian/Ubuntu
 ```bash
-tar xzf dplaneos-v3.0.0.tar.gz
+tar xzf dplaneos-v3.0.0-final.tar.gz
 cd dplaneos
 sudo make install   # Pre-built binary, no compiler needed
 sudo systemctl start dplaned
@@ -31,7 +23,7 @@ See [nixos/README.md](nixos/README.md) for the full NixOS guide.
 
 Web UI: `http://your-server` (nginx reverse proxy on port 80 → daemon on 9000)
 
-**Default login:** `admin` / `dplaneos` (must be changed on first login)
+**Default login:** `admin` / `admin` (change immediately after first login)
 
 > **Rebuilding from source?** You need Go 1.22+ and gcc: `make build` compiles fresh.
 
@@ -45,54 +37,57 @@ Creates a VACUUM INTO backup on startup + every 24 hours.
 
 ## Features
 
-- **Storage:** ZFS pools, snapshots, replication, encryption, quotas, per-user/group quotas, file explorer
-- **Compute:** Docker container management, app modules, Docker Compose, safe container updates via ZFS snapshots
-- **Network:** Interface config, routing, DNS, VLAN, bond/LACP, NTP
-- **Identity:** User management, groups, LDAP/Active Directory, JIT provisioning
-- **Security:** RBAC (4 roles, 34 permissions), audit logging, API tokens, firewall, command whitelist with regex validation
-- **Monitoring:** Real-time metrics, IOStat, ZFS events, IPMI/BMC sensor data, disk health predictor
-- **System:** Settings, logs, UPS management, hardware detection, NixOS config guard
+- **Storage:** ZFS pools, snapshots, replication, encryption, quotas, file explorer
+- **Compute:** Docker container management, app modules, Docker Compose
+- **Network:** Interface config, routing, DNS
+- **Identity:** User management, groups, LDAP/Active Directory
+- **Security:** RBAC (4 roles), audit logging, API tokens, firewall
+- **System:** Settings, logs, UPS management, hardware detection
 - **UI:** Material Design 3, dark theme, responsive, keyboard shortcuts
 
-## What's New in v3.0.0
+## Features (v3.0.0)
 
-### Security Overhaul
-- **Go daemon architecture:** 12 of 17 APIs migrated to daemon-based handlers, 5 wrapped for compatibility
-- **Cookie-based session auth:** HttpOnly + SameSite=Strict cookies replace sessionStorage (persistent across tabs/restarts, CSRF-resistant)
-- **Path validation on all file operations:** Read and write operations restricted to allowed base paths
-- **Input validation on chown/chmod:** Owner, group, and permissions validated against strict regex patterns
-- **Rate limiter memory management:** Periodic cleanup prevents unbounded memory growth
+### Safe Container Updates
+`POST /api/docker/update` — ZFS snapshot → pull → restart → health check. On failure: instant rollback. No other NAS OS does this.
 
-### Database Migrations
-- Automatic schema migrations for `must_change_password` and `role` columns
-- Default admin user created with password `dplaneos` and forced password change on first login
+### ZFS Time Machine
+Browse any snapshot like a folder. Find a deleted file from yesterday, restore just that one file — no full rollback needed.
 
-### Per-User and Per-Group ZFS Quotas
-Native `zfs userquota` / `zfs groupquota` support via API.
+### Ephemeral Docker Sandbox
+Test any container on a ZFS clone (zero disk cost). Stop the container, the clone disappears. No residue.
 
-### IPMI/BMC Sensor Data
-Hardware monitoring via ipmitool (graceful no-op if unavailable).
+### ZFS Health Predictor
+Deep pool health monitoring: per-disk error tracking, checksum error detection, risk levels (low/medium/high/critical), S.M.A.R.T. integration. Warns you before a disk dies, not after.
 
-### Previous Features (v2.x)
-- ZFS Time Machine (browse snapshots as folders, single-file restore)
-- Ephemeral Docker Sandbox (ZFS clones, zero disk cost)
-- ZFS Health Predictor (per-disk error tracking, S.M.A.R.T. integration)
-- ZFS Replication (native `zfs send | ssh remote zfs recv`)
-- NixOS Config Guard (validate before apply, generation rollback)
-- LDAP/Active Directory (AD, OpenLDAP, FreeIPA presets, group→role mapping, TLS 1.2+)
+### NixOS Config Guard
+On NixOS systems: validate `configuration.nix` before applying, list/rollback generations, dry-activate checks. Cannot brick your system.
+
+### ZFS Replication (Remote)
+Native `zfs send | ssh remote zfs recv` — block-level replication that's 100x faster than rsync and preserves all snapshots on the remote.
+
+## LDAP / Active Directory
+
+Navigate to **Identity → Directory Service** to configure. Supports:
+
+- Active Directory, OpenLDAP, FreeIPA (one-click presets)
+- Group → Role mapping (auto-assign permissions)
+- Just-In-Time user provisioning
+- Background sync with audit trail
+- TLS 1.2+ enforced
 
 ## Architecture
 
 - **Frontend:** HTML5 + Material Design 3, flyout navigation, no framework dependencies
-- **Backend:** Go daemon (`dplaned`) on port 9000, 171+ API routes
-- **Database:** SQLite with WAL mode, `synchronous=FULL`, daily VACUUM INTO backup
-- **Web Server:** nginx reverse proxy (TLS termination, security headers)
+- **Backend:** Go daemon (`dplaned`, 8MB) on port 9000, 171 API routes
+- **Database:** SQLite with WAL mode, `synchronous=FULL`, daily `.backup` (WAL-safe)
+- **Web Server:** nginx reverse proxy (TLS termination)
 - **Storage:** ZFS (native kernel module) + ZED hook for real-time disk failure alerts
-- **Security:** Command whitelist (regex-validated), RBAC, bcrypt passwords, session expiry with idle timeout, audit logging
+- **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 34 permissions), injection-hardened, OOM-protected (1 GB limit)
 - **NixOS:** Full support via Flake — entire NAS defined in a single `configuration.nix`
 
 ## Documentation
 
+- `CHANGELOG.md` — Full version history including v3.0.0 changes
 - `CHANGELOG.md` — Full version history
 - `ADMIN-GUIDE.md` — Full administration guide
 - `ERROR-REFERENCE.md` — API error codes and diagnostics
@@ -103,4 +98,4 @@ Hardware monitoring via ipmitool (graceful no-op if unavailable).
 
 ## License
 
-[PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0/) — free to use, modify, and distribute, but not to compete with D-PlaneOS. See [LICENSE](LICENSE) for full terms.
+Open source. See LICENSE file.

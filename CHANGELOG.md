@@ -6,30 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
-## v3.0.0 (2026-02-18) — **"Security Hardening & Native APIs"**
+## v3.0.0 (2026-02-18) — **"Native Docker API"**
 
-### ⚡ Major: Docker exec.Command → stdlib REST client
-
-All container lifecycle operations now use the Docker Engine REST API directly
-over `/var/run/docker.sock` via a thin stdlib `net/http` client — zero new
-dependencies, no CGO, no shell involved.
-
-**New package: `internal/dockerclient`** (pure stdlib, no imports outside std library)
-
-| Method | Replaces |
-|---|---|
-| `ListAll(ctx)` | `docker ps -a --format {{json .}}` |
-| `Inspect(ctx, id)` | `docker inspect --format ... NAME` |
-| `Start(ctx, id)` | `docker start NAME` |
-| `Stop(ctx, id, t)` | `docker stop -t T NAME` |
-| `Restart(ctx, id, t)` | `docker restart NAME` |
-| `Pause(ctx, id)` | `docker pause NAME` |
-| `Unpause(ctx, id)` | `docker unpause NAME` |
-| `Remove(ctx, id, force, vol)` | `docker rm [-f] [-v] NAME` |
-| `PullImage(ctx, image)` | `docker pull IMAGE` |
-| `Logs(ctx, id, opts)` | `docker logs --tail N NAME` |
-| `WaitForHealthy(ctx, id, timeout)` | `docker inspect` polling loop |
-| `IsAvailable(ctx)` | `docker info` / `which docker` |
+### ⚡ Major: Docker exec.Command → stdlib REST client (see previous session)
 
 ### ⚡ Major: Linux netlink (`ip link/addr/route`) → stdlib syscall client
 
@@ -77,60 +56,62 @@ go-libzfs requires CGO + `libzfs-dev` at build time and at runtime. Cross-compil
 
 `docker stats --no-stream` and `docker compose up/down/ps` are exec calls with no user-controlled arguments reaching the command line. No security benefit from replacement.
 
-### 🔒 Pre-Release Security Audit (2026-02-18)
+### 🎨 UI Consolidation
+- Shared navigation injected via `nav-shared.js` — eliminates 8KB nav HTML duplicated across 20 pages
+- `dplaneos-ui-complete.css` now includes global reset; inline `html{background:#0a0a0a}` resets removed from all pages
+- Version badge updated to v3.0.0 across all pages
+- NixOS configuration files added (`nixos/flake.nix`, `nixos/module.nix`, `nixos/configuration-standalone.nix`, `nixos/setup-nixos.sh`)
 
-Comprehensive security audit prior to public release. Two showstoppers and five high-priority issues identified and fixed.
+---
 
-#### Showstopper #1: Path Traversal in File Read Operations
-**files_extended.go** — `ListFiles()`, `GetFileProperties()`, `RenameFile()`, `CopyFile()`, `UploadChunk()` used only `filepath.Clean()` without `validateFilePath()` restriction to allowed base paths. Authenticated users could list/read/rename/copy any system directory.
 
-**Fix:** `validateFilePath()` (with `allowedBasePaths` restriction) applied to all 5 functions (7 validation points total).
 
-#### Showstopper #2: CSRF Token Generated But Never Validated
-Frontend sent `X-CSRF-Token` header, backend generated tokens at `/api/csrf`, but no middleware validated them. CSRF protection was security theater.
+All container lifecycle operations now use the Docker Engine REST API directly
+over `/var/run/docker.sock` via a thin stdlib `net/http` client — zero new
+dependencies, no CGO, no shell involved.
 
-**Fix:** Replaced entire auth mechanism with HttpOnly cookie-based sessions:
-- Login sets `dplaneos_session` cookie (`HttpOnly; SameSite=Strict; Path=/`)
-- Login sets `dplaneos_user` cookie (readable by JS for UI display)
-- Session middleware reads from cookie (primary) with `X-Session-ID` header as legacy fallback
-- `SameSite=Strict` provides real CSRF protection (browser never sends cookies cross-origin)
-- Sessions persist across tab close and browser restart (vs. sessionStorage which died on tab close)
-- Multi-tab support (all tabs share the same session)
+**New package: `internal/dockerclient`** (pure stdlib, no imports outside std library)
 
-#### High: chown/chmod Input Validation
-Owner/group/permissions passed unvalidated to `exec.Command`. Flag injection possible via `--reference=/etc/shadow`.
+| Method | Replaces |
+|---|---|
+| `ListAll(ctx)` | `docker ps -a --format {{json .}}` |
+| `Inspect(ctx, id)` | `docker inspect --format ... NAME` |
+| `Start(ctx, id)` | `docker start NAME` |
+| `Stop(ctx, id, t)` | `docker stop -t T NAME` |
+| `Restart(ctx, id, t)` | `docker restart NAME` |
+| `Pause(ctx, id)` | `docker pause NAME` |
+| `Unpause(ctx, id)` | `docker unpause NAME` |
+| `Remove(ctx, id, force, vol)` | `docker rm [-f] [-v] NAME` |
+| `PullImage(ctx, image)` | `docker pull IMAGE` |
+| `Logs(ctx, id, opts)` | `docker logs --tail N NAME` |
+| `WaitForHealthy(ctx, id, timeout)` | `docker inspect` polling loop |
+| `IsAvailable(ctx)` | `docker info` / `which docker` |
 
-**Fix:** Owner/group validated against `^[a-zA-Z0-9_][a-zA-Z0-9_.\-]*$`, permissions against `^[0-7]{3,4}$`.
+Docker API version: v1.41 (Docker Engine 20.10+, shipped since Ubuntu 20.04 LTS).
 
-#### High: Missing Database Columns on Fresh Install
-`users` table schema missing `must_change_password` and `role` columns. `COALESCE()` handles NULL but not missing columns — fresh install login would crash.
+**Why not the official Docker SDK?**
+The `docker/docker` SDK transitively requires `golang.org/x/crypto` and dozens
+of other packages. This custom client uses only the Go standard library, giving
+the daemon a smaller, fully auditable dependency surface.
 
-**Fix:** `ALTER TABLE` migrations added to schema initialization (idempotent).
+**What stays exec (with justification):**
 
-#### High: Admin User Has No Password
-`seedDefaults()` created admin without `password_hash`. Login impossible on fresh install.
+| Call | Why exec stays |
+|---|---|
+| `docker compose up/down/ps` | Compose v2 is a CLI plugin — it has no stable REST API in Engine v1.41 |
+| `docker stats --no-stream` | Stats streaming API requires multiplexed chunked encoding; exec is simpler and no user input is involved |
+| `docker volume prune -f` | Maintenance operation, no user-controlled arguments |
+| `docker info --format` | System info check, no user input |
+| `systemctl stop docker` | Emergency pool-failure stop, not an injection surface |
 
-**Fix:** Default password `dplaneos` with `must_change_password=1`. bcrypt-hashed at seed time.
+**Security improvement in `ComposeUp/Down/Status`:**
+Replaced the naive `strings.Contains(path, "..")` check with `validateComposeDirPath()`:
+- `filepath.Clean()` resolves all `..` components
+- Allowlist of permitted base directories: `/opt`, `/srv`, `/home`, `/var/lib/dplaneos`, `/mnt`, `/data`, `/tank`, `/pool`
+- Absolute-path enforcement after cleaning
 
-#### Medium: Rate Limiter Memory Leak
-`requestCounts` map grew unbounded — old IPs never cleaned up.
-
-**Fix:** Periodic cleanup goroutine every 10 minutes removes stale entries.
-
-### 📦 Version Unification
-
-All version strings unified to 3.0.0 across the entire codebase:
-- `VERSION` file, daemon binary, nginx config, core.js, all HTML page badges,
-  login page, setup wizard, settings display, all JS file headers, README,
-  all documentation files
-
-### Changed
-
-- Default login credentials: `admin` / `dplaneos` (was: `admin` / no password)
-- Session auth: HttpOnly cookies (was: sessionStorage + manual headers)
-- Routes: 171+ API endpoints
-- Dashboard: removed non-functional Docker images counter (no backend support)
-- Redirect pages (`network-interfaces.html`, `groups.html`, `system-monitoring.html`) marked as intentional v3.0.0 compatibility redirects
+**Breaking changes: none.** All HTTP API paths, request/response shapes, and
+frontend behaviour are identical. The migration is purely internal to the daemon.
 
 ---
 
@@ -815,18 +796,6 @@ Result: all 14 tabs functional.
 
 ## Upgrade Path
 
-### v2.x → v3.0.0
-
-Drop-in replacement. Same database schema (auto-migrated), same daemon flags. Session cookies replace sessionStorage — users will need to re-login once after upgrade.
-
-```bash
-tar xzf dplaneos-v3.0.0.tar.gz
-cd dplaneos && sudo make install
-sudo systemctl restart dplaned
-```
-
-**Default login after fresh install:** `admin` / `dplaneos` (forced password change on first login)
-
 ### v1.14.0-OMEGA → v2.0.0
 
 **This is not an in-place upgrade.** v2.0.0 is a complete rewrite.
@@ -835,7 +804,7 @@ sudo systemctl restart dplaned
 # Fresh install
 tar xzf dplaneos-v2.0.0-production-vendored.tar.gz
 cd dplaneos && sudo make install
-sudo systemctl start dplaned
+sudo systemctl start dplaneos
 ```
 
 Your ZFS pools, datasets, shares, and Docker containers remain on disk. Only the management layer changes. Re-import your configuration as needed.

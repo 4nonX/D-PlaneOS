@@ -1,23 +1,38 @@
 /**
- * D-PlaneOS v3.0.0 Core - API Bridge
+ * D-PlaneOS v2.5 Core - API Bridge
  * Connects M3 Frontend with Backend
  */
 
 (function() {
     'use strict';
 
-    // Session auth uses HttpOnly cookies (dplaneos_session) set by the server.
-    // SameSite=Strict provides CSRF protection — browser never sends cookies
-    // on cross-origin requests. No manual token management needed.
+    // CSRF Token Storage
+    let csrfToken = null;
 
-    // Helper: read username from cookie (set by server, NOT HttpOnly)
-    function getUsername() {
-        const match = document.cookie.match(/(?:^|;\s*)dplaneos_user=([^;]*)/);
-        return match ? decodeURIComponent(match[1]) : '';
+    // Fetch CSRF token from server
+    async function fetchCSRFToken() {
+        try {
+            const response = await fetch('/api/csrf');
+            const data = await response.json();
+            if (data.success && data.csrf_token) {
+                csrfToken = data.csrf_token;
+                return csrfToken;
+            }
+        } catch (error) {
+            console.error('Failed to fetch CSRF token:', error);
+        }
+        return null;
     }
 
-    // Enhanced fetch with loading states and error handling
-    // Session cookie is sent automatically by the browser — no manual headers.
+    // Get CSRF token (fetch if not cached)
+    async function getCSRFToken() {
+        if (!csrfToken) {
+            await fetchCSRFToken();
+        }
+        return csrfToken;
+    }
+
+    // Enhanced fetch with CSRF protection, loading states, and error handling
     window.csrfFetch = async function(url, options = {}) {
         const showLoading = options.showLoading !== false;
         const showError = options.showError !== false;
@@ -26,7 +41,12 @@
             EnhancedUI.showLoading(options.loadingText || 'Loading...');
         }
         
+        const token = await getCSRFToken();
+        
         options.headers = {
+            'X-CSRF-Token': token || '',
+        'X-Session-ID': sessionStorage.getItem('session_id') || '',
+        'X-User': sessionStorage.getItem('username') || '',
             ...options.headers
         };
 
@@ -91,11 +111,10 @@
             }
             const response = await csrfFetch(endpoint, options);
             return await response.json();
-        },
-        getUsername: getUsername
+        }
     };
 
-    // Authentication check — cookie is sent automatically
+    // Authentication check
     async function checkAuth() {
         const page = window.location.pathname;
         if (page.includes('login.html') || page.includes('setup-wizard.html') || page.includes('reset-password')) {
@@ -103,7 +122,12 @@
         }
 
         try {
-            const response = await fetch('/api/auth/check');
+            const response = await fetch('/api/auth/check', {
+                headers: {
+                    'X-Session-ID': sessionStorage.getItem('session_id') || '',
+                    'X-User': sessionStorage.getItem('username') || ''
+                }
+            });
             const data = await response.json();
             
             if (!data.authenticated) {
@@ -152,6 +176,7 @@
                 e.preventDefault();
                 try {
                     await csrfFetch('/api/auth/logout', { method: 'POST' });
+                    sessionStorage.clear();
                 } catch (error) {
                     console.error('Logout error:', error);
                 }
@@ -171,12 +196,18 @@
     // Initialize on load
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', async () => {
+            // Fetch CSRF token first
+            await fetchCSRFToken();
+            
             if (await checkAuth()) {
                 initSidebar();
             }
         });
     } else {
         (async () => {
+            // Fetch CSRF token first
+            await fetchCSRFToken();
+            
             if (await checkAuth()) {
                 initSidebar();
             }

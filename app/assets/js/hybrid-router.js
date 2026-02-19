@@ -78,11 +78,11 @@
    * Update .sub-link active states after navigation
    */
   function updateActiveSubLink(url) {
-    var fullPage = url.split('/').pop(); // e.g. "pools.html#advanced" or "pools.html"
+    var page = url.split('/').pop();
 
     document.querySelectorAll('.nav-sub.active .sub-link').forEach(function (link) {
       var href = link.getAttribute('href') || '';
-      if (href === fullPage || href === url || href.endsWith('/' + fullPage)) {
+      if (href === page || href.endsWith('/' + page)) {
         link.classList.add('active');
       } else {
         link.classList.remove('active');
@@ -145,57 +145,27 @@
     if (!link) return;
 
     var href = link.getAttribute('href');
-    if (!href || href.startsWith('http') || href === '#') return;
+    if (!href || href.startsWith('http') || href.startsWith('#')) return;
 
     // Don't intercept if modifier keys are held (open in new tab)
     if (e.ctrlKey || e.metaKey || e.shiftKey) return;
 
-    // Handle hash-only links (pure anchors)
-    if (href.startsWith('#')) return;
-
-    // Split href into page and optional hash fragment
-    var parts = href.split('#');
-    var pagePart = parts[0];
-    var hashPart = parts[1] || '';
-
     e.preventDefault();
 
-    // If the target is the SAME page we're already on, just switch tab via hash
-    var currentPage = window.location.pathname.split('/').pop();
-    if (pagePart === currentPage || pagePart === '') {
-      if (hashPart) {
-        window.location.hash = '#' + hashPart;
-        // Pages use switchConsolidatedTab on 'load' but not on 'hashchange',
-        // so call it directly if available
-        if (typeof window.switchConsolidatedTab === 'function') {
-          window.switchConsolidatedTab(hashPart);
-        }
-      }
-      updateActiveSubLink(href);
-      return;
-    }
-
     // Resolve relative URL
-    var url = new URL(pagePart, window.location.href).pathname;
+    var url = new URL(href, window.location.href).pathname;
     var page = url.split('/').pop();
+
+    // Skip if already on this page
+    if (window.location.pathname.endsWith(page)) return;
 
     // Show loading state
     link.style.opacity = '0.6';
 
-    loadPage(pagePart).then(function (result) {
+    loadPage(href).then(function (result) {
       link.style.opacity = '';
       if (result) {
-        var fullUrl = hashPart ? url + '#' + hashPart : url;
-        swapContent(result.html, result.scripts, fullUrl);
-        // After swap, trigger hash navigation if needed
-        if (hashPart) {
-          setTimeout(function() {
-            window.location.hash = '#' + hashPart;
-            if (typeof window.switchConsolidatedTab === 'function') {
-              window.switchConsolidatedTab(hashPart);
-            }
-          }, TRANSITION_MS + 50);
-        }
+        swapContent(result.html, result.scripts, url);
       }
     }).catch(function (err) {
       // Fallback: normal navigation

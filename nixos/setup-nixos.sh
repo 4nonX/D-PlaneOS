@@ -1,241 +1,167 @@
 #!/usr/bin/env bash
-# ═══════════════════════════════════════════════════════════════
-#  D-PlaneOS NixOS Setup Helper
-# ═══════════════════════════════════════════════════════════════
+# D-PlaneOS v3.0.0 — NixOS First-Boot Setup
+# ─────────────────────────────────────────────────────────────────────────────
+# Run once after initial nixos-install and reboot:
+#   bash /root/setup-nixos.sh
 #
-#  Prepares configuration.nix automatically:
-#    - Generates ZFS host ID
-#    - Auto-detects ZFS pools
-#    - Detects UEFI vs BIOS
-#    - Sets timezone
-#    - Prefetches Go vendor hash (fixes first-build failure)
-#
-#  Usage:  sudo bash setup-nixos.sh
-#
-# ═══════════════════════════════════════════════════════════════
+# What this script does:
+#   1. Generates a unique ZFS host ID and writes it to configuration.nix
+#   2. Sets the correct timezone
+#   3. Detects UEFI vs BIOS and adjusts the boot loader config
+#   4. Verifies the ZFS pool configuration
+#   5. Triggers a nixos-rebuild switch
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
 
-set -e
+CONFIG="/etc/nixos/configuration.nix"
+BOLD="\033[1m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+RED="\033[31m"
+NC="\033[0m"
 
-# ─── Configuration ─────────────────────────────────────────
-NIXOS_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG="$NIXOS_DIR/configuration.nix"
-FLAKE="$NIXOS_DIR/flake.nix"
+log()   { echo -e "${GREEN}✓${NC} $*"; }
+warn()  { echo -e "${YELLOW}⚠${NC}  $*"; }
+error() { echo -e "${RED}✗${NC} $*" >&2; }
+step()  { echo -e "\n${BOLD}$*${NC}"; }
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-echo ""
-echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  D-PlaneOS NixOS Setup${NC}"
-echo -e "${CYAN}  The Immutable NAS: NixOS + ZFS + GitOps${NC}"
-echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-echo ""
-
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}Error: Run with sudo${NC}"
-    echo "  sudo bash setup-nixos.sh"
-    exit 1
+# ─── Root check ──────────────────────────────────────────────────────────────
+if [ "$(id -u)" != "0" ]; then
+  error "This script must be run as root."
+  exit 1
 fi
 
-if [ ! -f "$CONFIG" ]; then
-    echo -e "${RED}Error: configuration.nix not found at $CONFIG${NC}"
-    exit 1
-fi
+echo -e "${BOLD}"
+echo "    D-PlaneOS v3.0.0 — NixOS Setup"
+echo "────────────────────────────────────────"
+echo -e "${NC}"
 
-# ═══════════════════════════════════════════════════════════════
-#  Step 1: ZFS Host ID (required — ZFS won't import without it)
-# ═══════════════════════════════════════════════════════════════
+# ─── Step 1: Generate unique ZFS host ID ─────────────────────────────────────
+step "Step 1/5: ZFS Host ID"
 
-echo -e "${YELLOW}Step 1/5: ZFS Host ID${NC}"
-
-CURRENT_HOSTID=$(grep 'networking.hostId' "$CONFIG" | grep -oP '"[^"]*"' | tr -d '"')
-
-if [ "$CURRENT_HOSTID" = "CHANGE_ME" ]; then
-    # Use existing machine hostid if available, otherwise generate
-    if [ -f /etc/machine-id ]; then
-        NEW_HOSTID=$(head -c 8 /etc/machine-id)
-    else
-        NEW_HOSTID=$(head -c4 /dev/urandom | od -A none -t x4 | tr -d ' ')
-    fi
-    sed -i "s/\"CHANGE_ME\"/\"${NEW_HOSTID}\"/" "$CONFIG"
-    echo -e "  ${GREEN}✓${NC} Generated host ID: ${CYAN}${NEW_HOSTID}${NC}"
+# ZFS requires a unique hostId per machine to prevent pool import conflicts.
+# We derive it from /etc/machine-id (generated during nixos-install).
+if [ -f /etc/machine-id ]; then
+  HOSTID=$(head -c 8 /etc/machine-id)
 else
-    echo -e "  ${GREEN}✓${NC} Already set: ${CYAN}${CURRENT_HOSTID}${NC}"
+  HOSTID=$(dd if=/dev/urandom bs=1 count=4 2>/dev/null | xxd -p)
 fi
 
-# ═══════════════════════════════════════════════════════════════
-#  Step 2: ZFS Pool Detection
-# ═══════════════════════════════════════════════════════════════
+# Validate: must be 8 hex characters
+if ! echo "$HOSTID" | grep -qE '^[0-9a-f]{8}$'; then
+  HOSTID=$(od -A n -t x4 -N 4 /dev/urandom | tr -d ' \n')
+fi
 
-echo ""
-echo -e "${YELLOW}Step 2/5: ZFS Pools${NC}"
+log "Generated hostId: $HOSTID"
 
-CURRENT_POOLS=$(grep 'zpools = ' "$CONFIG" | grep -oP '\[ "[^"]*"' | tr -d '[ "')
-
-if command -v zpool &>/dev/null; then
-    DETECTED_POOLS=$(zpool list -H -o name 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
-
-    if [ -n "$DETECTED_POOLS" ]; then
-        echo "  Detected pools: ${DETECTED_POOLS}"
-
-        # Format as Nix list: [ "pool1" "pool2" ]
-        NIX_POOLS="[ $(echo "$DETECTED_POOLS" | sed 's/\([^ ]*\)/"\1"/g') ]"
-
-        sed -i "s|zpools = \[.*\];|zpools = ${NIX_POOLS};|" "$CONFIG"
-        echo -e "  ${GREEN}✓${NC} Pool list updated: ${CYAN}${NIX_POOLS}${NC}"
-    else
-        echo -e "  ${YELLOW}!${NC} No ZFS pools found (create them first with zpool create)"
-        echo "  Current setting: ${CURRENT_POOLS:-tank}"
-    fi
+# Write hostId into configuration.nix
+if grep -q 'networking.hostId' "$CONFIG"; then
+  sed -i "s/networking.hostId = \"[^\"]*\"/networking.hostId = \"$HOSTID\"/" "$CONFIG"
+  log "Updated hostId in $CONFIG"
 else
-    echo -e "  ${YELLOW}!${NC} ZFS not installed yet (will be after first nixos-rebuild)"
-    echo "  Current setting: ${CURRENT_POOLS:-tank}"
-    echo "  You can re-run this script after creating pools."
+  warn "networking.hostId not found in $CONFIG — add it manually:"
+  echo "  networking.hostId = \"$HOSTID\";"
 fi
 
-# ═══════════════════════════════════════════════════════════════
-#  Step 3: Timezone
-# ═══════════════════════════════════════════════════════════════
+# ─── Step 2: Timezone ─────────────────────────────────────────────────────────
+step "Step 2/5: Timezone"
 
+# Detect current timezone
+CURRENT_TZ=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
+echo "Current timezone: $CURRENT_TZ"
 echo ""
-echo -e "${YELLOW}Step 3/5: Timezone${NC}"
+echo "Press Enter to keep '$CURRENT_TZ', or type a new timezone"
+echo "(full list: timedatectl list-timezones)"
+echo -n "Timezone [${CURRENT_TZ}]: "
+read -r INPUT_TZ
+TZ="${INPUT_TZ:-$CURRENT_TZ}"
 
-CURRENT_TZ=$(grep 'time.timeZone' "$CONFIG" | grep -oP '"[^"]*"' | tr -d '"')
-
-# Try to detect from timedatectl
-DETECTED_TZ=""
-if command -v timedatectl &>/dev/null; then
-    DETECTED_TZ=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+# Validate timezone
+if ! timedatectl list-timezones 2>/dev/null | grep -qx "$TZ"; then
+  warn "Unknown timezone '$TZ' — keeping '$CURRENT_TZ'"
+  TZ="$CURRENT_TZ"
 fi
 
-if [ -n "$DETECTED_TZ" ] && [ "$DETECTED_TZ" != "$CURRENT_TZ" ]; then
-    echo "  Detected: $DETECTED_TZ (config has: $CURRENT_TZ)"
-    read -p "  Use detected timezone? [Y/n] " tz_use
-    if [[ ! "$tz_use" =~ ^[Nn] ]]; then
-        sed -i "s|time.timeZone = \".*\"|time.timeZone = \"${DETECTED_TZ}\"|" "$CONFIG"
-        echo -e "  ${GREEN}✓${NC} Timezone: ${CYAN}${DETECTED_TZ}${NC}"
-    else
-        echo -e "  ${GREEN}✓${NC} Keeping: ${CYAN}${CURRENT_TZ}${NC}"
-    fi
+# Write timezone into configuration.nix
+if grep -q 'time.timeZone' "$CONFIG"; then
+  sed -i "s|time.timeZone = \"[^\"]*\"|time.timeZone = \"$TZ\"|" "$CONFIG"
+  log "Set timezone to: $TZ"
 else
-    echo -e "  ${GREEN}✓${NC} Timezone: ${CYAN}${CURRENT_TZ}${NC}"
-    read -p "  Change? [y/N] " tz_change
-    if [[ "$tz_change" =~ ^[Yy] ]]; then
-        read -p "  New timezone (e.g. America/New_York): " NEW_TZ
-        if [ -n "$NEW_TZ" ]; then
-            sed -i "s|time.timeZone = \".*\"|time.timeZone = \"${NEW_TZ}\"|" "$CONFIG"
-            echo -e "  ${GREEN}✓${NC} Timezone: ${CYAN}${NEW_TZ}${NC}"
-        fi
-    fi
+  warn "time.timeZone not found in $CONFIG — add it manually:"
+  echo "  time.timeZone = \"$TZ\";"
 fi
 
-# ═══════════════════════════════════════════════════════════════
-#  Step 4: Boot Loader Detection
-# ═══════════════════════════════════════════════════════════════
-
-echo ""
-echo -e "${YELLOW}Step 4/5: Boot Loader${NC}"
+# ─── Step 3: Boot loader detection ───────────────────────────────────────────
+step "Step 3/5: Boot Loader Detection"
 
 if [ -d /sys/firmware/efi ]; then
-    echo -e "  ${GREEN}✓${NC} UEFI detected — systemd-boot (default)"
+  log "UEFI boot detected — using systemd-boot (already configured)"
 else
-    echo -e "  ${YELLOW}!${NC} No UEFI detected — switching to GRUB (Legacy BIOS)"
-
-    # Comment out UEFI, uncomment GRUB
-    sed -i 's|^  boot.loader.systemd-boot.enable = true;|  # boot.loader.systemd-boot.enable = true;|' "$CONFIG"
-    sed -i 's|^  boot.loader.efi.canTouchEfiVariables = true;|  # boot.loader.efi.canTouchEfiVariables = true;|' "$CONFIG"
-    sed -i 's|^  # boot.loader.grub.enable = true;|  boot.loader.grub.enable = true;|' "$CONFIG"
-    sed -i 's|^  # boot.loader.grub.device = "/dev/sda";|  boot.loader.grub.device = "/dev/sda";|' "$CONFIG"
-
-    echo ""
-    echo "  Available disks:"
-    lsblk -d -o NAME,SIZE,MODEL 2>/dev/null | grep -v loop || true
-    echo ""
-    read -p "  Boot disk [/dev/sda]: " BOOT_DISK
-    BOOT_DISK=${BOOT_DISK:-/dev/sda}
-    sed -i "s|boot.loader.grub.device = \"/dev/sda\"|boot.loader.grub.device = \"${BOOT_DISK}\"|" "$CONFIG"
-    echo -e "  ${GREEN}✓${NC} GRUB on ${CYAN}${BOOT_DISK}${NC}"
+  warn "BIOS/MBR boot detected"
+  echo ""
+  echo "Your configuration.nix currently has UEFI (systemd-boot) configured."
+  echo "For BIOS/MBR, you need to change it. Edit $CONFIG and:"
+  echo "  - Comment out:  boot.loader.systemd-boot.enable = true;"
+  echo "  - Comment out:  boot.loader.efi.canTouchEfiVariables = true;"
+  echo "  - Uncomment:    boot.loader.grub.enable = true;"
+  echo "  - Uncomment:    boot.loader.grub.device = \"/dev/sda\";  # your boot disk"
+  echo ""
+  echo -n "Press Enter after editing configuration.nix, or Ctrl+C to abort: "
+  read -r _
 fi
 
-# ═══════════════════════════════════════════════════════════════
-#  Step 5: Vendor Hash (prevents first-build failure)
-# ═══════════════════════════════════════════════════════════════
+# ─── Step 4: ZFS pool verification ───────────────────────────────────────────
+step "Step 4/5: ZFS Pool Check"
 
-echo ""
-echo -e "${YELLOW}Step 5/5: Go Vendor Hash${NC}"
-
-if [ -f "$FLAKE" ]; then
-    CURRENT_HASH=$(grep 'vendorHash' "$FLAKE" | grep -oP '"[^"]*"' | tr -d '"' || echo "null")
-
-    if [ "$CURRENT_HASH" = "null" ] || [ -z "$CURRENT_HASH" ]; then
-        echo "  vendorHash is null — first build will fail without it."
-        echo ""
-        echo "  Two options:"
-        echo "    a) Try building now — Nix will show the correct hash"
-        echo "    b) Skip — you'll need to fix it manually after first build attempt"
-        echo ""
-        read -p "  Try prefetching? [Y/n] " prefetch_ok
-
-        if [[ ! "$prefetch_ok" =~ ^[Nn] ]]; then
-            echo "  Attempting build to capture hash (this may take a few minutes)..."
-
-            # Try a build, capture the hash from the error
-            BUILD_OUTPUT=$(nixos-rebuild build --flake "$NIXOS_DIR#dplaneos" 2>&1 || true)
-            GOT_HASH=$(echo "$BUILD_OUTPUT" | grep -oP 'got:\s+\Ksha256-[A-Za-z0-9+/=]+' | head -1)
-
-            if [ -n "$GOT_HASH" ]; then
-                sed -i "s|vendorHash = null;|vendorHash = \"${GOT_HASH}\";|" "$FLAKE"
-                echo -e "  ${GREEN}✓${NC} Hash captured and applied: ${CYAN}${GOT_HASH}${NC}"
-                echo "  Next build should succeed."
-            else
-                echo -e "  ${YELLOW}!${NC} Could not capture hash automatically."
-                echo "  After first build attempt, look for:"
-                echo "    got: sha256-XXXXX..."
-                echo "  Then: sed -i 's|vendorHash = null|vendorHash = \"sha256-XXXXX...\"|' flake.nix"
-            fi
-        else
-            echo -e "  ${YELLOW}!${NC} Skipped. First build will fail — see instructions below."
-        fi
-    else
-        echo -e "  ${GREEN}✓${NC} Already set: ${CYAN}${CURRENT_HASH}${NC}"
-    fi
+if zpool list &>/dev/null && zpool list | grep -q ONLINE; then
+  POOLS=$(zpool list -H -o name 2>/dev/null | tr '\n' ' ')
+  log "ZFS pools detected: $POOLS"
 else
-    echo -e "  ${YELLOW}!${NC} flake.nix not found — skipping"
+  warn "No ZFS pools found (or ZFS not loaded yet)."
+  echo ""
+  echo "If you have existing data disks, import them after this script:"
+  echo "  zpool import               # list importable pools"
+  echo "  zpool import <poolname>    # import your pool"
+  echo ""
+  echo "To create a new pool:"
+  echo "  zpool create tank mirror /dev/sdb /dev/sdc     # 2-disk mirror"
+  echo "  zpool create tank raidz1 /dev/sdb /dev/sdc /dev/sdd  # RAIDZ1"
 fi
 
-# ═══════════════════════════════════════════════════════════════
-#  Done
-# ═══════════════════════════════════════════════════════════════
+# ─── Step 5: Network interface detection ─────────────────────────────────────
+step "Step 5/5: Network Interface"
 
-echo ""
-echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  Setup complete!${NC}"
-echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-echo ""
-echo "  Build your immutable NAS:"
-echo ""
-echo -e "    ${BOLD}sudo nixos-rebuild switch --flake .#dplaneos${NC}"
-echo ""
+PRIMARY_IFACE=$(ip route show default 2>/dev/null | awk '/default/ {print $5}' | head -1)
 
-VENDOR_HASH=$(grep 'vendorHash' "$FLAKE" 2>/dev/null | grep -oP '"[^"]*"' | tr -d '"' || echo "null")
-if [ "$VENDOR_HASH" = "null" ] || [ -z "$VENDOR_HASH" ]; then
-    echo -e "  ${YELLOW}Note:${NC} First build will fail (missing vendor hash)."
-    echo "  This is normal for Nix flakes with Go modules."
-    echo ""
-    echo "  1. Run the build command above"
-    echo "  2. Copy the sha256-... hash from the error"
-    echo "  3. Edit flake.nix: replace 'null' with the hash"
-    echo "  4. Build again — it will succeed"
-    echo ""
+if [ -n "$PRIMARY_IFACE" ] && [ "$PRIMARY_IFACE" != "eth0" ]; then
+  warn "Primary interface is '$PRIMARY_IFACE', not 'eth0'"
+  echo ""
+  echo "Update $CONFIG — find this line:"
+  echo "  matchConfig.Name = \"eth0\";"
+  echo "Change it to:"
+  echo "  matchConfig.Name = \"$PRIMARY_IFACE\";"
+  echo ""
+  # Attempt automatic fix
+  if grep -q 'matchConfig.Name = "eth0"' "$CONFIG"; then
+    sed -i "s/matchConfig.Name = \"eth0\"/matchConfig.Name = \"$PRIMARY_IFACE\"/" "$CONFIG"
+    log "Auto-updated interface to: $PRIMARY_IFACE"
+  fi
+else
+  log "Interface: ${PRIMARY_IFACE:-eth0}"
 fi
 
-echo "  After install:"
-echo "    Web UI → http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'your-ip')"
-echo "    Recovery → sudo dplaneos-recovery"
-echo "    Rollback → sudo nixos-rebuild switch --rollback"
+# ─── Summary ─────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+echo -e "${BOLD}Setup complete. Configuration written to $CONFIG${NC}"
+echo ""
+echo "  hostId:    $HOSTID"
+echo "  timezone:  $TZ"
+echo "  interface: ${PRIMARY_IFACE:-eth0}"
+echo ""
+echo -e "${BOLD}Next step: build the system${NC}"
+echo ""
+echo "  sudo nixos-rebuild switch"
+echo ""
+echo "The first build will fail with a hash mismatch error — this is expected."
+echo "See INSTALLATION-GUIDE-NIXOS.md Step 2.3 for how to resolve it (< 5 min)."
+echo ""

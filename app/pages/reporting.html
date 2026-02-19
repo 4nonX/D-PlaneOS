@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><style>html{background:#0a0a0a}</style>
+<head>
 <meta charset="UTF-8">
 <title>Reporting - D-PlaneOS</title>
-  <link rel="stylesheet" href="/assets/css/design-tokens.css">
+    <link rel="stylesheet" href="/assets/css/design-tokens.css">
+    <link rel="stylesheet" href="/assets/css/dplaneos-ui-complete.css">
 <link rel="stylesheet" href="/assets/css/m3-tokens.css">
 <link rel="stylesheet" href="/assets/css/m3-components.css">
 <link rel="stylesheet" href="/assets/css/m3-icons.css">
@@ -26,232 +27,14 @@
 <!-- D-PlaneOS v3.0.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
-<nav class="nav-container">
-  <div class="nav-main">
-    <div style="display: flex; align-items: center; gap: 16px;">
-      <div class="logo">
-        D-PlaneOS
-        <span class="version-badge">v3.0.0</span>
-      </div>
-    </div>
-    
-    <div class="nav-links">
-      <button class="nav-link" onclick="navigateToSection('dashboard')" data-section="dashboard">
-        Dashboard
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('storage', this)" data-section="storage">
-        Storage
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('compute', this)" data-section="compute">
-        Compute
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('network', this)" data-section="network">
-        Network
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('identity', this)" data-section="identity">
-        Identity
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('security', this)" data-section="security">
-        Security
-      </button>
-      <button class="nav-link" onclick="toggleSubNav('system', this)" data-section="system">
-        System
-      </button>
-    </div>
-    
-    <div class="nav-actions">
-      <button class="nav-action-btn" onclick="showKeyboardHelp()" title="Keyboard Shortcuts (?)">
-        <span class="material-symbols-rounded">keyboard</span>
-      </button>
-      <div class="connection-status online" id="navConnectionStatus">
-        <span class="status-dot"></span>
-        <span>Connected</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Storage Sub-Navigation -->
-  <div id="sub-storage" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="pools.html" class="sub-link" data-page="pools">
-        <span class="material-symbols-rounded">database</span>
-        ZFS Pools
-      </a>
-      <a href="pools-advanced.html" class="sub-link" data-page="pools-advanced">
-        <span class="material-symbols-rounded">photo_camera</span>
-        Snapshots
-      </a>
-      <a href="shares.html" class="sub-link" data-page="shares">
-        <span class="material-symbols-rounded">folder_shared</span>
-        Shares
-      </a>
-      <a href="replication.html" class="sub-link" data-page="replication">
-        <span class="material-symbols-rounded">sync</span>
-        Replication
-      </a>
-      <a href="files.html" class="sub-link" data-page="files">
-        <span class="material-symbols-rounded">folder_open</span>
-        File Explorer
-      </a>
-      <a href="quotas.html" class="sub-link" data-page="quotas">
-        <span class="material-symbols-rounded">pie_chart</span>
-        Quotas
-      </a>
-      <a href="snapshot-scheduler.html" class="sub-link" data-page="snapshot-scheduler">
-        <span class="material-symbols-rounded">schedule</span>
-        Snapshot Scheduler
-      </a>
-      <a href="acl-manager.html" class="sub-link" data-page="acl-manager">
-        <span class="material-symbols-rounded">admin_panel_settings</span>
-        ACL Manager
-      </a>
-      <a href="zfs-encryption.html" class="sub-link" data-page="zfs-encryption">
-        <span class="material-symbols-rounded">enhanced_encryption</span>
-        Encryption
-      </a>
-      <a href="files-enhanced.html" class="sub-link" data-page="files-enhanced">
-        <span class="material-symbols-rounded">upload_file</span>
-        File Upload
-      </a>
-      <a href="cloud-sync.html" class="sub-link" data-page="cloud-sync">
-        <span class="material-symbols-rounded">cloud_sync</span>
-        Cloud Sync
-      </a>
-    </div>
-  </div>
-
-  <!-- Compute Sub-Navigation -->
-  <div id="sub-compute" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="docker.html" class="sub-link" data-page="docker">
-        <span class="material-symbols-rounded">dns</span>
-        Docker Containers
-      </a>
-      <a href="git-sync.html" class="sub-link" data-page="git-sync">
-        <span class="material-symbols-rounded">sync</span>
-        Git Sync
-      </a>
-      <a href="modules.html" class="sub-link" data-page="modules">
-        <span class="material-symbols-rounded">extension</span>
-        App Modules
-      </a>
-    </div>
-  </div>
-
-  <!-- Network Sub-Navigation -->
-  <div id="sub-network" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="network.html" class="sub-link" data-page="network">
-        <span class="material-symbols-rounded">lan</span>
-        Network Settings
-      </a>
-      <a href="network-interfaces.html" class="sub-link" data-page="network-interfaces">
-        <span class="material-symbols-rounded">settings_ethernet</span>
-        Interfaces
-      </a>
-      <a href="network-dns.html" class="sub-link" data-page="network-dns">
-        <span class="material-symbols-rounded">dns</span>
-        DNS
-      </a>
-      <a href="network-routing.html" class="sub-link" data-page="network-routing">
-        <span class="material-symbols-rounded">route</span>
-        Routing
-      </a>
-    </div>
-  </div>
-
-  <!-- Identity Sub-Navigation -->
-  <div id="sub-identity" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="users.html" class="sub-link" data-page="users">
-        <span class="material-symbols-rounded">person</span>
-        Users
-      </a>
-      <a href="groups.html" class="sub-link" data-page="groups">
-        <span class="material-symbols-rounded">group</span>
-        Groups
-      </a>
-      <a href="directory-service.html" class="sub-link" data-page="directory-service">
-        <span class="material-symbols-rounded">domain</span>
-        Directory Service
-      </a>
-      <a href="rbac-management.html" class="sub-link" data-page="rbac-management">
-        <span class="material-symbols-rounded">admin_panel_settings</span>
-        Roles & Permissions
-      </a>
-    </div>
-  </div>
-
-  <!-- Security Sub-Navigation -->
-  <div id="sub-security" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="security.html" class="sub-link" data-page="security">
-        <span class="material-symbols-rounded">shield</span>
-        Security Settings
-      </a>
-      <a href="audit.html" class="sub-link" data-page="audit">
-        <span class="material-symbols-rounded">fact_check</span>
-        Audit Logs
-      </a>
-      <a href="firewall.html" class="sub-link" data-page="firewall">
-        <span class="material-symbols-rounded">local_fire_department</span>
-        Firewall
-      </a>
-      <a href="certificates.html" class="sub-link" data-page="certificates">
-        <span class="material-symbols-rounded">verified_user</span>
-        Certificates
-      </a>
-    </div>
-  </div>
-
-  <!-- System Sub-Navigation -->
-  <div id="sub-system" class="nav-sub">
-    <div class="nav-sub-inner">
-      <a href="settings.html" class="sub-link" data-page="settings">
-        <span class="material-symbols-rounded">tune</span>
-        General Settings
-      </a>
-      <a href="logs.html" class="sub-link" data-page="logs">
-        <span class="material-symbols-rounded">description</span>
-        System Logs
-      </a>
-      <a href="ups.html" class="sub-link" data-page="ups">
-        <span class="material-symbols-rounded">battery_charging_full</span>
-        UPS Management
-      </a>
-      <a href="reporting.html" class="sub-link" data-page="reporting">
-        <span class="material-symbols-rounded">monitoring</span>
-        Reporting
-      </a>
-      <a href="power-management.html" class="sub-link" data-page="power-management">
-        <span class="material-symbols-rounded">power_settings_new</span>
-        Power Management
-      </a>
-      <a href="system-settings.html" class="sub-link" data-page="system-settings">
-        <span class="material-symbols-rounded">settings_suggest</span>
-        System Settings
-      </a>
-      <a href="system-monitoring.html" class="sub-link" data-page="system-monitoring">
-        <span class="material-symbols-rounded">monitor_heart</span>
-        Monitoring
-      </a>
-      <a href="hardware.html" class="sub-link" data-page="hardware">
-        <span class="material-symbols-rounded">developer_board</span>
-        Hardware
-      </a>
-      <a href="ipmi.html" class="sub-link" data-page="ipmi">
-        <span class="material-symbols-rounded">memory</span>
-        IPMI
-      </a>
-      <a href="removable-media-ui.html" class="sub-link" data-page="removable-media-ui">
-        <span class="material-symbols-rounded">usb</span>
-        Removable Media
-      </a>
-    </div>
-  </div>
-</nav>
+<div id="nav-root"></div>
 
 <script>
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
 // Navigation behavior
 function navigateToSection(section) {
   if (section === 'dashboard') {
@@ -665,9 +448,9 @@ canvas{width:100%!important;max-height:200px;}
 .pool-bar-label{min-width:120px;font-size:14px;font-weight:600;}
 .pool-bar-outer{flex:1;height:24px;background:rgba(255,255,255,0.06);border-radius:12px;overflow:hidden;position:relative;}
 .pool-bar-inner{height:100%;border-radius:12px;transition:width 0.6s ease;min-width:2px;}
-.pool-bar-inner.ok{background:linear-gradient(90deg,#4ade80,#22c55e);}
-.pool-bar-inner.warn{background:linear-gradient(90deg,#FBBF24,#F59E0B);}
-.pool-bar-inner.crit{background:linear-gradient(90deg,#F87171,#EF4444);}
+.pool-bar-inner.ok{background:linear-gradient(90deg,var(--success),var(--success));}
+.pool-bar-inner.warn{background:linear-gradient(90deg,var(--warning),var(--warning));}
+.pool-bar-inner.crit{background:linear-gradient(90deg,var(--error),var(--error));}
 .pool-bar-text{min-width:80px;text-align:right;font-size:13px;color:rgba(255,255,255,0.6);}
 .stat-tile{background:rgba(255,255,255,0.04);border-radius:12px;padding:16px;text-align:center;}
 .stat-tile .val{font-size:24px;font-weight:700;margin-bottom:4px;}
@@ -823,7 +606,7 @@ document.addEventListener("DOMContentLoaded",function(){
 });
 </script>
 <script src="/assets/js/realtime-client.js"></script>
-<!-- v2.1.0: Real-time Metrics, IOStat, ZFS Events -->
+<!-- v3.0.0: Real-time Metrics, IOStat, ZFS Events -->
 </div>
 <div id="tab-monitoring" class="consolidation-content">
 <h1>System Monitoring <span id="wsStatus" style="font-size: 14px; margin-left: 10px; color: #666;">⚫ Connecting...</span></h1>
@@ -1102,7 +885,7 @@ async function loadInotifyStats() {
     monitors.innerHTML = `
       <div class="monitor-card critical">
         <div class="monitor-title">Error Loading Stats</div>
-        <div class="monitor-details">${error.message}</div>
+        <div class="monitor-details">${escapeHtml(error.message)}</div>
       </div>
     `;
     console.error('Failed to load inotify stats:', error);
@@ -1152,8 +935,10 @@ function toggleAutoRefresh() {
 }
 </script>
 
+    <script src="/assets/js/nav-flyout.js"></script>
+    <script src="/assets/js/nav-shared.js"></script>
 </body>
-<!-- v2.1.0: System Monitoring Live Data -->
+<!-- v3.0.0: System Monitoring Live Data -->
 </div>
 <div id="tab-hardware" class="consolidation-content">
 <div class="app-shell">
@@ -1960,7 +1745,7 @@ var __hardware_init=false;function init_hardware(){if(__hardware_init)return;__h
                 li.className = 'device-item';
                 li.innerHTML = `
                     <div>
-                        <div class="device-name">${device.model || device.name}</div>
+                        <div class="device-name">${escapeHtml(device.model || device.name)}</div>
                         <div class="device-detail">${device.device} | ${device.size} | ${device.transport.toUpperCase()}</div>
                     </div>
                     <div style="text-align: right;">
@@ -2034,7 +1819,7 @@ var __hardware_init=false;function init_hardware(){if(__hardware_init)return;__h
                     li.className = 'device-item';
                     li.innerHTML = `
                         <div>
-                            <div class="device-name">${fan.name}</div>
+                            <div class="device-name">${escapeHtml(fan.name)}</div>
                             <div class="device-detail">Fan Speed</div>
                         </div>
                         <span style="font-weight: 600;">${fan.rpm} RPM</span>

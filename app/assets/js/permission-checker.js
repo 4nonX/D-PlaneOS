@@ -37,9 +37,6 @@ class PermissionChecker {
             }
 
             this.loaded = true;
-
-            // Also load roles
-            await this.loadRoles();
             
             // Trigger permission-loaded event
             window.dispatchEvent(new CustomEvent('permissions-loaded', { 
@@ -53,80 +50,6 @@ class PermissionChecker {
             this.loaded = false;
             return [];
         }
-    }
-
-    // Load current user's roles
-    async loadRoles() {
-        try {
-            const response = await fetch('/api/rbac/me/roles', {
-                headers: { 'X-Session-Token': this.getSessionToken() }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                this.roles = data.roles || [];
-            }
-        } catch (e) {
-            console.warn('Failed to load roles:', e);
-        }
-    }
-
-    // Server-side permission check (for critical operations)
-    async checkPermission(resource, action) {
-        try {
-            const response = await fetch('/api/rbac/check', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Session-Token': this.getSessionToken()
-                },
-                body: JSON.stringify({ resource, action })
-            });
-            const data = await response.json();
-            return data.allowed === true;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    // Get user roles for a specific user (admin)
-    async getUserRoles(userId) {
-        try {
-            const r = await fetch(`/api/rbac/users/${userId}/roles`, {
-                headers: { 'X-Session-Token': this.getSessionToken() }
-            });
-            const d = await r.json();
-            return d.roles || [];
-        } catch (e) { return []; }
-    }
-
-    // Get user permissions for a specific user (admin)
-    async getUserPermissions(userId) {
-        try {
-            const r = await fetch(`/api/rbac/users/${userId}/permissions`, {
-                headers: { 'X-Session-Token': this.getSessionToken() }
-            });
-            const d = await r.json();
-            return d.permissions || [];
-        } catch (e) { return []; }
-    }
-
-    // Assign role to user (admin)
-    async assignRoleToUser(userId, roleId) {
-        const r = await fetch(`/api/rbac/users/${userId}/roles`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Session-Token': this.getSessionToken() },
-            body: JSON.stringify({ role_id: roleId })
-        });
-        return r.json();
-    }
-
-    // Remove role from user (admin)
-    async removeRoleFromUser(userId, roleId) {
-        const r = await fetch(`/api/rbac/users/${userId}/roles/${roleId}`, {
-            method: 'DELETE',
-            headers: { 'X-Session-Token': this.getSessionToken() }
-        });
-        return r.json();
     }
 
     // Check if user has a specific permission

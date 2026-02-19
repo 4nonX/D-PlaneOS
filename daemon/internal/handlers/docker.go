@@ -84,18 +84,12 @@ func (h *DockerHandler) ContainerAction(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		Action      string `json:"action"`
 		ContainerID string `json:"container_id"`
-		Container   string `json:"container"`  // alias for frontend compat
 		SessionID   string `json:"session_id"`
 		User        string `json:"user"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request", http.StatusBadRequest)
 		return
-	}
-
-	// Accept either field name
-	if req.ContainerID == "" {
-		req.ContainerID = req.Container
 	}
 
 	if !security.IsValidSessionToken(req.SessionID) {
