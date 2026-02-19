@@ -239,6 +239,7 @@ func main() {
 	r.HandleFunc("/api/zfs/command", zfsHandler.HandleCommand).Methods("POST")
 	r.HandleFunc("/api/zfs/pools", zfsHandler.ListPools).Methods("GET")
 	r.HandleFunc("/api/zfs/datasets", zfsHandler.ListDatasets).Methods("GET")
+	r.HandleFunc("/api/zfs/datasets", zfsHandler.ManageDatasets).Methods("POST")
 	
 	// ZFS Encryption handlers
 	zfsEncryptionHandler := handlers.NewZFSEncryptionHandler()
@@ -340,14 +341,7 @@ func main() {
 
 	// ── Git Sync ──
 	gitSyncHandler := handlers.NewGitSyncHandler(db)
-	r.HandleFunc("/api/git-sync/config", gitSyncHandler.GetConfig).Methods("GET")
-	r.HandleFunc("/api/git-sync/config", gitSyncHandler.SaveConfig).Methods("POST")
-	r.HandleFunc("/api/git-sync/pull", gitSyncHandler.Pull).Methods("POST")
 	r.HandleFunc("/api/git-sync/status", gitSyncHandler.Status).Methods("GET")
-	r.HandleFunc("/api/git-sync/stacks", gitSyncHandler.ListStacks).Methods("GET")
-	r.HandleFunc("/api/git-sync/deploy", gitSyncHandler.Deploy).Methods("POST")
-	r.HandleFunc("/api/git-sync/export", gitSyncHandler.ExportContainers).Methods("POST")
-	r.HandleFunc("/api/git-sync/push", gitSyncHandler.Push).Methods("POST")
 
 	// Git-Sync: Multi-Repo + Credentials (v2.1.1)
 	gitReposHandler := handlers.NewGitReposHandler(db)
@@ -390,6 +384,8 @@ func main() {
 	// v2.1.0: Dataset quotas
 	r.HandleFunc("/api/zfs/dataset/quota", handlers.SetDatasetQuota).Methods("POST")
 	r.HandleFunc("/api/zfs/dataset/quota", handlers.GetDatasetQuota).Methods("GET")
+	r.HandleFunc("/api/zfs/dataset/property", handlers.SetZFSProperty).Methods("POST")
+	r.HandleFunc("/api/zfs/dataset/properties", handlers.GetZFSProperties).Methods("GET")
 
 	// v3.0.0: Per-user and per-group quotas (ZFS userquota/groupquota)
 	r.HandleFunc("/api/zfs/quota/usergroup", handlers.GetUserGroupQuotas).Methods("GET")
@@ -458,6 +454,10 @@ func main() {
 	// Disk discovery (setup wizard)
 	r.HandleFunc("/api/system/disks", handlers.HandleDiskDiscovery).Methods("GET")
 	r.HandleFunc("/api/system/pool/create", handlers.HandlePoolCreate).Methods("POST")
+	r.HandleFunc("/api/system/pool/import-scan", handlers.HandlePoolImportScan).Methods("GET")
+	r.HandleFunc("/api/system/pool/import", handlers.HandlePoolImport).Methods("POST")
+	r.HandleFunc("/api/system/pool/export", handlers.HandlePoolExport).Methods("POST")
+	r.HandleFunc("/api/system/pool/destroy", handlers.HandlePoolDestroy).Methods("POST")
 	
 	// Files handlers
 	filesHandler := handlers.NewFilesExtendedHandler()

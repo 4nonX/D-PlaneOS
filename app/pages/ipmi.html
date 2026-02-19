@@ -412,6 +412,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sa
       <span class="material-symbols-rounded">refresh</span>
       Refresh
     </button>
+    <button class="status-refresh" onclick="showRawIPMI()" style="margin-left:8px;">
+      <span class="material-symbols-rounded">terminal</span>
+      Raw IPMI Data
+    </button>
   </div>
 
   <!-- Sensor Monitoring -->
@@ -1016,6 +1020,49 @@ window.addEventListener('beforeunload', () => {
     clearInterval(refreshInterval);
   }
 });
+
+// Raw IPMI sensor data from ipmitool SDR
+async function showRawIPMI() {
+  try {
+    const r = await fetch('/api/system/ipmi');
+    const d = await r.json();
+    if (d.available === false) {
+      alert('IPMI/BMC not available on this system. ipmitool not found or no BMC detected.');
+      return;
+    }
+    if (d.sensors && d.sensors.length) {
+      const html = '<table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);"><th style="text-align:left;padding:8px;">Sensor</th><th>Value</th><th>Unit</th><th>Status</th></tr></thead><tbody>' +
+        d.sensors.map(s => {
+          const color = s.status==='ok'?'var(--success)':s.status==='warn'?'#FBBF24':s.status==='critical'?'var(--error)':'rgba(255,255,255,0.3)';
+          return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:6px 8px;">${s.name}</td><td style="text-align:center;">${s.value}</td><td style="text-align:center;">${s.unit}</td><td style="text-align:center;color:${color};font-weight:600;">${s.status}</td></tr>`;
+        }).join('') + '</tbody></table>';
+      // Show in a modal-like overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = `<div style="background:var(--md-sys-color-surface,#1a1a2e);border-radius:16px;padding:24px;max-width:700px;width:90%;max-height:80vh;overflow:auto;"><h2 style="margin-bottom:16px;">Raw IPMI Sensor Data</h2>${html}<button onclick="this.closest('div[style]').parentElement.remove()" style="margin-top:16px;padding:8px 24px;background:var(--md-sys-color-primary);color:#000;border:none;border-radius:8px;cursor:pointer;">Close</button></div>`;
+      document.body.appendChild(overlay);
+    } else {
+      alert('No IPMI sensors detected.');
+    }
+  } catch(e) { alert('Failed to fetch IPMI data: ' + e.message); }
+}
+
+// System preflight check
+async function showPreflight() {
+  try {
+    const r = await fetch('/api/docker/preflight');
+    const d = await r.json();
+    if (d.checks) {
+      const html = d.checks.map(c => {
+        const icon = c.status==='pass'?'✓':c.status==='warn'?'⚠':'✗';
+        const color = c.status==='pass'?'var(--success)':c.status==='warn'?'#FBBF24':'var(--error)';
+        return `<div style="padding:8px 0;"><span style="color:${color};font-weight:bold;">${icon}</span> <strong>${c.name}</strong>: ${c.message}</div>`;
+      }).join('');
+      alert('Preflight:\n' + d.checks.map(c => `${c.status==='pass'?'✓':c.status==='warn'?'⚠':'✗'} ${c.name}: ${c.message}`).join('\n'));
+    }
+  } catch(e) { alert('Preflight failed'); }
+}
 </script>
 
 </body>

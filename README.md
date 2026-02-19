@@ -4,6 +4,14 @@ Open-source NAS OS built on ZFS, with a web UI, Docker container management, rol
 
 ## Quick Start
 
+### NixOS ISO (easiest)
+```bash
+# Build the ISO or download from Releases
+nix build .#nixosConfigurations.dplaneos-iso.config.system.build.isoImage
+# Flash to USB, boot, open http://dplaneos.local
+# Type 'dplaneos-install' to install permanently
+```
+
 ### Debian/Ubuntu
 ```bash
 tar xzf dplaneos-v3.0.0.tar.gz

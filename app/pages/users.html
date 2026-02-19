@@ -664,10 +664,22 @@
                     .filter(cb => cb.checked)
                     .map(cb => parseInt(cb.dataset.permissionId));
                 
-                // This would need API endpoint to bulk update permissions
-                // For now, show success
+                const disabled = Array.from(checkboxes)
+                    .filter(cb => !cb.checked)
+                    .map(cb => parseInt(cb.dataset.permissionId));
+                
+                // Add enabled permissions
+                for (const pid of enabled) {
+                    try { await daemonAPI('/api/rbac/roles/' + selectedRole.id + '/permissions', 'POST', { permission_id: pid }); } catch(e) {}
+                }
+                // Remove disabled permissions  
+                for (const pid of disabled) {
+                    try { await daemonAPI('/api/rbac/roles/' + selectedRole.id + '/permissions/' + pid, 'DELETE'); } catch(e) {}
+                }
+
                 showToast('Permissions updated successfully', 'success');
                 closePermissionsModal();
+                loadRoles();
                 
             } catch (error) {
                 console.error('Failed to save permissions:', error);
@@ -722,23 +734,26 @@
         // Load Audit Log
         async function loadAuditLog() {
             document.getElementById('audit-loading').style.display = 'block';
-            
-            // Simulated audit log for now
-            setTimeout(() => {
+            try {
+                const r = await csrfFetch('/api/system/logs?limit=50');
+                const d = await r.json();
                 document.getElementById('audit-loading').style.display = 'none';
                 document.getElementById('audit-table').style.display = 'block';
-                
                 const tbody = document.getElementById('audit-tbody');
-                tbody.innerHTML = `
-                    <tr>
-                        <td>${new Date().toLocaleString()}</td>
-                        <td>admin</td>
-                        <td>role_assigned</td>
-                        <td>user_role</td>
-                        <td>Assigned operator role to user john</td>
-                    </tr>
-                `;
-            }, 500);
+                const logs = (d.logs || d.data || []).filter(l => {
+                    const msg = (l.message || l.msg || '').toLowerCase();
+                    return msg.includes('role') || msg.includes('permission') || msg.includes('user') || msg.includes('rbac') || msg.includes('auth') || msg.includes('login') || msg.includes('session');
+                }).slice(0, 20);
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);padding:24px;">No RBAC-related audit events yet</td></tr>';
+                } else {
+                    tbody.innerHTML = logs.map(l => '<tr><td>'+(l.timestamp||l.time||'—')+'</td><td>'+(l.user||l.username||'—')+'</td><td>'+(l.action||l.level||'—')+'</td><td>'+(l.resource||l.component||'—')+'</td><td>'+(l.message||l.msg||'—')+'</td></tr>').join('');
+                }
+            } catch(e) {
+                document.getElementById('audit-loading').style.display = 'none';
+                document.getElementById('audit-table').style.display = 'block';
+                document.getElementById('audit-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--error);">Failed to load audit log</td></tr>';
+            }
         }
 
         // Helper Functions
@@ -1155,10 +1170,22 @@ let roles = [];
                     .filter(cb => cb.checked)
                     .map(cb => parseInt(cb.dataset.permissionId));
                 
-                // This would need API endpoint to bulk update permissions
-                // For now, show success
+                const disabled = Array.from(checkboxes)
+                    .filter(cb => !cb.checked)
+                    .map(cb => parseInt(cb.dataset.permissionId));
+                
+                // Add enabled permissions
+                for (const pid of enabled) {
+                    try { await daemonAPI('/api/rbac/roles/' + selectedRole.id + '/permissions', 'POST', { permission_id: pid }); } catch(e) {}
+                }
+                // Remove disabled permissions  
+                for (const pid of disabled) {
+                    try { await daemonAPI('/api/rbac/roles/' + selectedRole.id + '/permissions/' + pid, 'DELETE'); } catch(e) {}
+                }
+
                 showToast('Permissions updated successfully', 'success');
                 closePermissionsModal();
+                loadRoles();
                 
             } catch (error) {
                 console.error('Failed to save permissions:', error);
@@ -1213,23 +1240,26 @@ let roles = [];
         // Load Audit Log
         async function loadAuditLog() {
             document.getElementById('audit-loading').style.display = 'block';
-            
-            // Simulated audit log for now
-            setTimeout(() => {
+            try {
+                const r = await csrfFetch('/api/system/logs?limit=50');
+                const d = await r.json();
                 document.getElementById('audit-loading').style.display = 'none';
                 document.getElementById('audit-table').style.display = 'block';
-                
                 const tbody = document.getElementById('audit-tbody');
-                tbody.innerHTML = `
-                    <tr>
-                        <td>${new Date().toLocaleString()}</td>
-                        <td>admin</td>
-                        <td>role_assigned</td>
-                        <td>user_role</td>
-                        <td>Assigned operator role to user john</td>
-                    </tr>
-                `;
-            }, 500);
+                const logs = (d.logs || d.data || []).filter(l => {
+                    const msg = (l.message || l.msg || '').toLowerCase();
+                    return msg.includes('role') || msg.includes('permission') || msg.includes('user') || msg.includes('rbac') || msg.includes('auth') || msg.includes('login') || msg.includes('session');
+                }).slice(0, 20);
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);padding:24px;">No RBAC-related audit events yet</td></tr>';
+                } else {
+                    tbody.innerHTML = logs.map(l => '<tr><td>'+(l.timestamp||l.time||'—')+'</td><td>'+(l.user||l.username||'—')+'</td><td>'+(l.action||l.level||'—')+'</td><td>'+(l.resource||l.component||'—')+'</td><td>'+(l.message||l.msg||'—')+'</td></tr>').join('');
+                }
+            } catch(e) {
+                document.getElementById('audit-loading').style.display = 'none';
+                document.getElementById('audit-table').style.display = 'block';
+                document.getElementById('audit-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--error);">Failed to load audit log</td></tr>';
+            }
         }
 
         // Helper Functions

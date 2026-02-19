@@ -14,6 +14,34 @@ or **version-controlled** (Git). Nothing is ever lost.
 
 ## Quick Start
 
+There are two ways to get D-PlaneOS running on NixOS:
+
+### Option A: Boot the ISO (recommended for new installs)
+
+Download or build the installer ISO, flash it to a USB stick, and boot it.
+The live environment runs D-PlaneOS immediately — web UI, recovery tools,
+everything. From there, run `dplaneos-install` to install to disk.
+
+```bash
+# Build the ISO yourself (requires Nix with flakes enabled)
+git clone https://github.com/4nonX/D-PlaneOS
+cd D-PlaneOS/nixos
+nix build .#nixosConfigurations.dplaneos-iso.config.system.build.isoImage
+
+# Flash to USB
+sudo dd if=result/iso/dplaneos-3.0.0-x86_64-linux.iso of=/dev/sdX bs=4M status=progress
+```
+
+Boot the USB. The web UI is at `http://dplaneos.local` (or the IP shown
+on screen). To install permanently, run `dplaneos-install` from the terminal.
+
+The ISO also works as a recovery disk — boot it to mount and repair
+existing ZFS pools.
+
+### Option B: Install on existing NixOS
+
+If you already have NixOS running:
+
 ```bash
 git clone https://github.com/4nonX/D-PlaneOS
 cd D-PlaneOS/nixos

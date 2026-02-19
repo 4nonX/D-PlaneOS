@@ -286,3 +286,193 @@ func HandlePoolCreate(w http.ResponseWriter, r *http.Request) {
 		"name":   request.Name,
 	})
 }
+
+// HandlePoolImportScan lists pools available for import
+func HandlePoolImportScan(w http.ResponseWriter, r *http.Request) {
+	output, err := cmdutil.RunSlow("zpool", "import")
+	if err != nil {
+		// "no pools available to import" is not an error
+		if strings.Contains(string(output), "no pools available") {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"pools": []interface{}{},
+			})
+			return
+		}
+	}
+
+	// Parse zpool import output into structured data
+	type ImportablePool struct {
+		Name   string `json:"name"`
+		ID     string `json:"id"`
+		State  string `json:"state"`
+		Status string `json:"status"`
+	}
+
+	var pools []ImportablePool
+	var current *ImportablePool
+
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "pool:") {
+			if current != nil {
+				pools = append(pools, *current)
+			}
+			current = &ImportablePool{
+				Name: strings.TrimSpace(strings.TrimPrefix(line, "pool:")),
+			}
+		} else if current != nil {
+			if strings.HasPrefix(line, "id:") {
+				current.ID = strings.TrimSpace(strings.TrimPrefix(line, "id:"))
+			} else if strings.HasPrefix(line, "state:") {
+				current.State = strings.TrimSpace(strings.TrimPrefix(line, "state:"))
+			} else if strings.HasPrefix(line, "status:") {
+				current.Status = strings.TrimSpace(strings.TrimPrefix(line, "status:"))
+			}
+		}
+	}
+	if current != nil {
+		pools = append(pools, *current)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"pools": pools,
+	})
+}
+
+// HandlePoolImport imports an existing ZFS pool
+func HandlePoolImport(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Name  string `json:"name"`
+		Force bool   `json:"force"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if request.Name == "" {
+		http.Error(w, "pool name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Validate pool name (alphanumeric, hyphens, underscores only)
+	if !regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`).MatchString(request.Name) {
+		http.Error(w, "invalid pool name", http.StatusBadRequest)
+		return
+	}
+
+	args := []string{"import"}
+	if request.Force {
+		args = append(args, "-f")
+	}
+	args = append(args, request.Name)
+
+	output, err := cmdutil.RunSlow("zpool", args...)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": strings.TrimSpace(string(output)),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "imported",
+		"name":   request.Name,
+	})
+}
+
+// HandlePoolExport cleanly exports a ZFS pool
+func HandlePoolExport(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Name  string `json:"name"`
+		Force bool   `json:"force"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if request.Name == "" {
+		http.Error(w, "pool name is required", http.StatusBadRequest)
+		return
+	}
+
+	if !regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`).MatchString(request.Name) {
+		http.Error(w, "invalid pool name", http.StatusBadRequest)
+		return
+	}
+
+	args := []string{"export"}
+	if request.Force {
+		args = append(args, "-f")
+	}
+	args = append(args, request.Name)
+
+	output, err := cmdutil.RunSlow("zpool", args...)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": strings.TrimSpace(string(output)),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "exported",
+		"name":   request.Name,
+	})
+}
+
+// HandlePoolDestroy destroys a ZFS pool (requires confirmation via body)
+func HandlePoolDestroy(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Name    string `json:"name"`
+		Confirm string `json:"confirm"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if request.Name == "" {
+		http.Error(w, "pool name is required", http.StatusBadRequest)
+		return
+	}
+
+	if !regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`).MatchString(request.Name) {
+		http.Error(w, "invalid pool name", http.StatusBadRequest)
+		return
+	}
+
+	// Require explicit confirmation string matching pool name
+	if request.Confirm != request.Name {
+		http.Error(w, "confirmation must match pool name exactly", http.StatusBadRequest)
+		return
+	}
+
+	output, err := cmdutil.RunSlow("zpool", "destroy", "-f", request.Name)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": strings.TrimSpace(string(output)),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "destroyed",
+		"name":   request.Name,
+	})
+}

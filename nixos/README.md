@@ -6,9 +6,21 @@
 Free to use and modify — see [NIXOS-README.md](NIXOS-README.md#a-note-on-licensing-and-nix-unfree) for
 how this works with Nix's unfree package handling (short version: it's handled automatically).
 
-## Two Installation Paths
+## Three Installation Paths
 
-### Path 1: Flake (recommended)
+### Path 1: Boot the ISO (easiest — no NixOS knowledge needed)
+
+Flash the ISO to a USB stick, boot it, and you're in a live D-PlaneOS
+environment. The web UI runs immediately. Type `dplaneos-install` to
+install permanently.
+
+```bash
+# Build the ISO (or download a release)
+nix build .#nixosConfigurations.dplaneos-iso.config.system.build.isoImage
+sudo dd if=result/iso/dplaneos-3.0.0-x86_64-linux.iso of=/dev/sdX bs=4M status=progress
+```
+
+### Path 2: Flake (for existing NixOS users)
 
 Reproducible, pinned versions, one command to update.
 
@@ -37,7 +49,7 @@ sudo nixos-rebuild switch --flake .#dplaneos
 sudo nixos-rebuild switch --rollback
 ```
 
-### Path 2: Standalone (without Flake)
+### Path 3: Standalone (without Flake)
 
 Simpler if you don't want to use Flakes yet.
 

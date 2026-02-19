@@ -597,6 +597,28 @@ function showKeyboardHelp(){if(window.EnhancedUI)EnhancedUI.toast('g+d Dashboard
     </div>
   </div>
 
+  <!-- ===== GROUP-ROLE MAPPINGS ===== -->
+  <div class="section">
+    <div class="card">
+      <div class="card-header collapse-trigger" onclick="toggleCollapse('mappingsBody', this)">
+        <div class="card-title">
+          <span class="material-symbols-rounded" style="color: var(--primary);">account_tree</span>
+          Group → Role Mappings
+        </div>
+        <span class="material-symbols-rounded expand-icon" style="color: rgba(255,255,255,0.5);">expand_more</span>
+      </div>
+      <div class="collapse-body" id="mappingsBody">
+        <div style="padding-top: 16px;">
+          <p style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px;">Map LDAP groups to D-PlaneOS roles. Users in the LDAP group will automatically be assigned the corresponding role.</p>
+          <div id="mappingsList"></div>
+          <button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="addLDAPMapping()">
+            <span class="material-symbols-rounded" style="font-size:16px;">add</span> Add Mapping
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== SYNC LOG ===== -->
   <div class="section">
     <div class="card">
@@ -1064,6 +1086,60 @@ async function loadSyncLog() {
     el.innerHTML = d.logs.map(l => '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">'+l.timestamp+' — '+(l.success?'✓':'✗')+' '+(l.message||l.users_synced+' users')+'</div>').join('');
   } catch(e) {}
 }
+
+async function loadMappings() {
+  try {
+    const r = await csrfFetch('/api/ldap/mappings');
+    const d = await r.json();
+    const el = document.getElementById('mappingsList');
+    if (!d.mappings || !d.mappings.length) {
+      el.innerHTML = '<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);">No group mappings configured</div>';
+      return;
+    }
+    el.innerHTML = d.mappings.map(m => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:8px;">
+        <div>
+          <span style="font-weight:600;color:#fff;">${esc(m.ldap_group)}</span>
+          <span style="color:rgba(255,255,255,0.4);margin:0 8px;">→</span>
+          <span style="color:var(--primary);font-weight:500;">${esc(m.role_name)}</span>
+        </div>
+        <button class="btn btn-sm" onclick="deleteLDAPMapping(${m.id})" style="color:var(--error);padding:4px 8px;">
+          <span class="material-symbols-rounded" style="font-size:16px;">delete</span>
+        </button>
+      </div>
+    `).join('');
+  } catch(e) { console.error('Failed to load mappings', e); }
+}
+
+async function addLDAPMapping() {
+  const result = await ui.form('Add Group → Role Mapping', [
+    { name: 'ldap_group', label: 'LDAP Group DN', type: 'text', required: true, placeholder: 'CN=Admins,OU=Groups,DC=example,DC=com' },
+    { name: 'role_name', label: 'D-PlaneOS Role', type: 'select', options: [
+      { value: 'admin', label: 'Admin' },
+      { value: 'operator', label: 'Operator' },
+      { value: 'user', label: 'User' },
+      { value: 'readonly', label: 'Read-Only' }
+    ]}
+  ], 'Add Mapping');
+  if (!result) return;
+  try {
+    const r = await csrfFetch('/api/ldap/mappings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(result) });
+    const d = await r.json();
+    d.success ? (ui.toast('Mapping added', 'success'), loadMappings()) : ui.toast(d.error || 'Failed', 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+
+async function deleteLDAPMapping(id) {
+  if (!confirm('Remove this group mapping?')) return;
+  try {
+    const r = await csrfFetch('/api/ldap/mappings', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: id }) });
+    const d = await r.json();
+    d.success ? (ui.toast('Removed', 'success'), loadMappings()) : ui.toast(d.error || 'Failed', 'error');
+  } catch(e) { ui.toast('Failed', 'error'); }
+}
+
+// Load mappings on init
+document.addEventListener('DOMContentLoaded', () => { loadMappings(); });
 </script>
 </body>
 </html>

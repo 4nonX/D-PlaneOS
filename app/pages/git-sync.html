@@ -190,10 +190,6 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-se
       <span class="material-symbols-rounded" style="font-size:16px">key</span>
       Credentials <span class="tab-badge" id="creds-count">0</span>
     </button>
-    <button class="tab" onclick="switchTab('legacy',this)" id="tab-legacy">
-      <span class="material-symbols-rounded" style="font-size:16px">settings</span>
-      Legacy Config
-    </button>
   </div>
 
   <!-- Repos Panel -->
@@ -220,21 +216,6 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-se
     </div>
   </div>
 
-  <!-- Legacy Config Panel -->
-  <div id="panel-legacy" style="display:none">
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">
-          <span class="material-symbols-rounded">settings</span>
-          Legacy Single-Repo Config
-        </div>
-      </div>
-      <p style="font-size:13px;color:var(--amber);margin-bottom:16px">
-        ⚠️ This is the original single-repo configuration. Use the Syncs tab for multi-repo management.
-      </p>
-      <div id="legacy-status" style="font-size:13px;color:var(--text-muted)">Loading…</div>
-    </div>
-  </div>
 </main>
 
 <!-- ══════════════════════════════════════════ -->
@@ -458,10 +439,10 @@ let editingCredId = null;
 function switchTab(tab, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  ['repos','credentials','legacy'].forEach(p => {
+  ['repos','credentials'].forEach(p => {
     document.getElementById('panel-' + p).style.display = p === tab ? '' : 'none';
   });
-  if (tab === 'legacy') loadLegacyStatus();
+  if (tab === 'credentials') loadCredentials();
 }
 
 // ── Repos ──────────────────────────────────────────────────────
@@ -879,25 +860,6 @@ async function deleteCred(id, name) {
   const d = await r.json();
   if (d.success) { ui.toast('Credential deleted', 'success'); loadCredentials(); }
   else ui.toast(d.error || 'Failed', 'error');
-}
-
-// ── Legacy Status ──────────────────────────────────────────────
-async function loadLegacyStatus() {
-  try {
-    const r = await csrfFetch('/api/git-sync/status');
-    const d = await r.json();
-    if (!d.success) { document.getElementById('legacy-status').textContent = 'Not configured'; return; }
-    const el = document.getElementById('legacy-status');
-    el.innerHTML = `
-      <div style="display:grid;grid-template-columns:120px 1fr;gap:8px 16px;font-size:13px">
-        <span style="color:var(--text-dim)">Repo</span><span>${esc(d.repo_url||'—')}</span>
-        <span style="color:var(--text-dim)">Branch</span><span>${esc(d.branch||'main')}</span>
-        <span style="color:var(--text-dim)">Last commit</span><span style="color:var(--primary)">${esc(d.last_commit||'—')}</span>
-        <span style="color:var(--text-dim)">Last sync</span><span>${d.last_sync_at ? esc(relativeTime(d.last_sync_at)) : '—'}</span>
-      </div>`;
-  } catch(e) {
-    document.getElementById('legacy-status').textContent = 'Failed to load';
-  }
 }
 
 // ── Utilities ──────────────────────────────────────────────────

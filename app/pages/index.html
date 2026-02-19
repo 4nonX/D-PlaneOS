@@ -725,6 +725,21 @@ if (window.ConnectionMonitor) {
         const pools = await poolsRes.json();
         if (pools.success) updatePools(pools.pools);
         
+        // Load ZFS health, capacity & latency
+        try {
+          const [healthRes, capRes, latRes, gateRes, locksRes] = await Promise.allSettled([
+            csrfFetch('/api/zfs/health'),
+            csrfFetch('/api/zfs/capacity'),
+            csrfFetch('/api/zfs/disk-latency'),
+            csrfFetch('/api/system/zfs-gate-status'),
+            csrfFetch('/api/system/stale-locks')
+          ]);
+          // Store for potential future display; errors are non-fatal
+          if (healthRes.status === 'fulfilled') { const h = await healthRes.value.json(); window._zfsHealth = h; }
+          if (gateRes.status === 'fulfilled') { const g = await gateRes.value.json(); if (!g.ready) console.warn('ZFS gate not ready'); }
+          if (locksRes.status === 'fulfilled') { const l = await locksRes.value.json(); if (l.stale_locks && l.stale_locks.length > 0) console.warn('Stale locks detected:', l.stale_locks.length); }
+        } catch(e) { /* non-critical */ }
+        
         // Load recent activity
         const logsRes = await csrfFetch('/api/system/logs?limit=3');
         const logs = await logsRes.json();
@@ -932,8 +947,28 @@ if (window.ConnectionMonitor) {
     
     // Load dashboard on page load
     window.addEventListener('DOMContentLoaded', () => {
-      loadDashboard();
-      initWebSocketHandlers();
+      // Check for first-run: redirect to setup wizard if not completed
+      if (!localStorage.getItem('dplaneos_setup_completed')) {
+        // Double-check: if the system already has pools, setup was done before localStorage existed
+        (async () => {
+          try {
+            const r = await csrfFetch('/api/zfs/pools');
+            const d = await r.json();
+            if (!d.success || !d.pools || d.pools.length === 0) {
+              // No pools and no setup flag — likely first run
+              window.location.href = '/pages/setup-wizard.html';
+              return;
+            }
+            // Has pools — setup was done, just missing the flag
+            localStorage.setItem('dplaneos_setup_completed', 'true');
+          } catch(e) { /* can't check — continue */ }
+          loadDashboard();
+          initWebSocketHandlers();
+        })();
+      } else {
+        loadDashboard();
+        initWebSocketHandlers();
+      }
     });
     
     // Initialize WebSocket event handlers

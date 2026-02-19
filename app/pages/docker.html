@@ -744,6 +744,8 @@ function renderContainers(containers) {
         '<button class="c-btn" onclick="viewLogs(\''+esc(name)+'\')" title="Logs"><span class="material-symbols-rounded">description</span></button>' +
         '<button class="c-btn" onclick="doContainerAction(\''+esc(name)+'\',\''+(state==='running'?'stop':'start')+'\')" title="'+(state==='running'?'Stop':'Start')+'"><span class="material-symbols-rounded">'+(state==='running'?'stop':'play_arrow')+'</span></button>' +
         '<button class="c-btn" onclick="doContainerAction(\''+esc(name)+'\',\'restart\')" title="Restart"><span class="material-symbols-rounded">refresh</span></button>' +
+        '<button class="c-btn" onclick="updateContainer(\''+esc(name)+'\',\''+esc(image)+'\')" title="Update Image"><span class="material-symbols-rounded">system_update_alt</span></button>' +
+        '<button class="c-btn" onclick="removeContainer(\''+esc(name)+'\')" title="Remove" style="color:var(--error);"><span class="material-symbols-rounded">delete</span></button>' +
       '</div>' +
     '</div>'+statsHTML+'</div>';
   }).join('');
@@ -1004,6 +1006,74 @@ async function convertDockerRun() {
 
 /* ─── Helpers ────────────────────────────────────────────── */
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ─── Container Remove ───────────────────────────────────── */
+async function removeContainer(name) {
+  if (!confirm(`Remove container "${name}"? This cannot be undone.`)) return;
+  try {
+    const r = await csrfFetch('/api/docker/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({container_name:name,force:true})});
+    const d = await r.json();
+    d.success ? EnhancedUI.toast(name+' removed','success') : EnhancedUI.toast(d.error||'Failed','error');
+    setTimeout(loadAllData,1000);
+  } catch(e){ EnhancedUI.toast('Error: '+e.message,'error'); }
+}
+
+/* ─── Container Update ───────────────────────────────────── */
+async function updateContainer(name, image) {
+  if (!confirm(`Update "${name}" to latest image? A ZFS snapshot will be taken first.`)) return;
+  try {
+    EnhancedUI.toast('Updating '+name+'...','info');
+    const r = await csrfFetch('/api/docker/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({container_name:name,image:image||''})});
+    const d = await r.json();
+    d.success ? EnhancedUI.toast(name+' updated','success') : EnhancedUI.toast(d.error||'Update failed','error');
+    setTimeout(loadAllData,2000);
+  } catch(e){ EnhancedUI.toast('Error: '+e.message,'error'); }
+}
+
+/* ─── Docker Preflight Check ─────────────────────────────── */
+async function dockerPreflight() {
+  try {
+    const r = await csrfFetch('/api/docker/preflight');
+    const d = await r.json();
+    if (d.checks) {
+      const html = d.checks.map(c => {
+        const icon = c.status==='pass'?'check_circle':c.status==='warn'?'warning':'error';
+        const color = c.status==='pass'?'var(--success)':c.status==='warn'?'#FBBF24':'var(--error)';
+        return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;"><span class="material-symbols-rounded" style="color:${color};">${icon}</span><div><strong>${c.name}</strong><div style="font-size:13px;color:rgba(255,255,255,0.5);">${c.message}</div></div></div>`;
+      }).join('');
+      EnhancedUI.modal('System Preflight', html, [{text:'Close',primary:true}]);
+    }
+  } catch(e){ EnhancedUI.toast('Preflight failed','error'); }
+}
+
+/* ─── Compose Direct Control ─────────────────────────────── */
+async function composeUp(path) {
+  try {
+    const r = await csrfFetch('/api/docker/compose/up',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:path,detach:true})});
+    const d = await r.json();
+    d.success ? EnhancedUI.toast('Compose up','success') : EnhancedUI.toast(d.error||'Failed','error');
+    setTimeout(loadAllData,2000);
+  } catch(e){ EnhancedUI.toast('Error: '+e.message,'error'); }
+}
+
+async function composeDown(path, removeVolumes) {
+  try {
+    const r = await csrfFetch('/api/docker/compose/down',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:path,remove_volumes:!!removeVolumes})});
+    const d = await r.json();
+    d.success ? EnhancedUI.toast('Compose down','success') : EnhancedUI.toast(d.error||'Failed','error');
+    setTimeout(loadAllData,2000);
+  } catch(e){ EnhancedUI.toast('Error: '+e.message,'error'); }
+}
+
+async function composeStatus(path) {
+  try {
+    const r = await csrfFetch('/api/docker/compose/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:path})});
+    const d = await r.json();
+    if (d.success) {
+      EnhancedUI.modal('Compose Status', `<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;max-height:400px;overflow:auto;">${esc(d.output||JSON.stringify(d,null,2))}</pre>`, [{text:'Close',primary:true}]);
+    } else { EnhancedUI.toast(d.error||'Failed','error'); }
+  } catch(e){ EnhancedUI.toast('Error: '+e.message,'error'); }
+}
 
 /* ─── Permission Issue Detection ─────────────────────────── */
 const _permChecked = new Set();

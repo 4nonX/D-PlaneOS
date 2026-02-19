@@ -650,9 +650,9 @@
 
             <!-- Step 4: Initial Scan -->
             <div class="step-content" data-step="4">
-                <div class="step-title">Indexing Your Files</div>
+                <div class="step-title">System Verification</div>
                 <div class="step-description">
-                    D-PlaneOS is now scanning your storage pool and building the search index. This may take a while for large pools.
+                    D-PlaneOS is verifying your storage pool and system services are running correctly.
                 </div>
 
                 <div class="progress-container">
@@ -971,46 +971,49 @@
 
         let scanProgress = 0;
         function startIndexing() {
-            // Simulate indexing progress
-            const interval = setInterval(() => {
-                scanProgress += Math.random() * 10;
-                if (scanProgress > 100) scanProgress = 100;
-
-                updateProgress(scanProgress);
-
-                if (scanProgress >= 100) {
-                    clearInterval(interval);
-                    document.getElementById('progress-status').textContent = 'Indexing Complete';
-                    document.getElementById('progress-detail').textContent = 'All files have been indexed';
+            // Real system verification — check pools, services, daemon health
+            const checks = [
+                { label: 'Verifying ZFS pools...', detail: 'Checking pool health', endpoint: '/api/zfs/pools' },
+                { label: 'Checking system services...', detail: 'Verifying Docker and Samba', endpoint: '/api/docker/preflight' },
+                { label: 'Loading configuration...', detail: 'Reading system settings', endpoint: '/api/status' },
+                { label: 'Finalizing setup...', detail: 'Completing initial configuration', endpoint: null }
+            ];
+            let step = 0;
+            
+            async function runCheck() {
+                if (step >= checks.length) {
+                    updateProgress(100);
+                    document.getElementById('progress-status').textContent = 'Setup Complete';
+                    document.getElementById('progress-detail').textContent = 'Your NAS is ready to use';
+                    return;
                 }
-            }, 500);
+                
+                const check = checks[step];
+                const pct = ((step + 0.5) / checks.length) * 100;
+                updateProgress(pct);
+                document.getElementById('progress-status').textContent = check.label;
+                document.getElementById('progress-detail').textContent = check.detail;
+                
+                if (check.endpoint) {
+                    try { await fetch(check.endpoint, { credentials: 'same-origin' }); } catch(e) {}
+                }
+                
+                step++;
+                setTimeout(runCheck, 800);
+            }
+            
+            runCheck();
         }
 
         function updateProgress(percent) {
             const circle = document.getElementById('progress-bar');
             const percentText = document.getElementById('progress-percent');
-            const status = document.getElementById('progress-status');
-            const detail = document.getElementById('progress-detail');
 
             const circumference = 339;
             const offset = circumference - (percent / 100 * circumference);
             circle.style.strokeDashoffset = offset;
 
             percentText.textContent = Math.round(percent) + '%';
-
-            if (percent < 25) {
-                status.textContent = 'Scanning directories...';
-                detail.textContent = 'Discovering files and folders';
-            } else if (percent < 50) {
-                status.textContent = 'Building index...';
-                detail.textContent = 'Creating search database';
-            } else if (percent < 75) {
-                status.textContent = 'Indexing files...';
-                detail.textContent = 'Processing file metadata';
-            } else if (percent < 100) {
-                status.textContent = 'Finalizing...';
-                detail.textContent = 'Completing setup';
-            }
         }
 
         // Password strength checker

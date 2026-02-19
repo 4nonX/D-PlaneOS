@@ -19,7 +19,7 @@
 var NAV_LINKS = {
   storage: [
     { page: 'pools',              href: 'pools.html',              icon: 'database',             label: 'ZFS Pools' },
-    { page: 'pools-advanced',     href: 'pools.html#advanced',     icon: 'photo_camera',         label: 'Snapshots' },
+    { page: 'pools-advanced',     href: 'pools.html#advanced',     icon: 'build',                label: 'Advanced ZFS' },
     { page: 'snapshot-scheduler', href: 'snapshot-scheduler.html', icon: 'schedule',             label: 'Scheduler' },
     { page: 'shares',             href: 'shares.html',             icon: 'folder_shared',        label: 'Shares' },
     { page: 'replication',        href: 'replication.html',        icon: 'sync',                 label: 'Replication' },
@@ -31,8 +31,7 @@ var NAV_LINKS = {
   ],
   compute: [
     { page: 'docker',   href: 'docker.html',    icon: 'dns',       label: 'Docker Stacks' },
-    { page: 'git-sync', href: 'git-sync.html',   icon: 'sync',      label: 'Git Sync' },
-    { page: 'modules',  href: 'modules.html',    icon: 'extension', label: 'App Modules' }
+    { page: 'git-sync', href: 'git-sync.html',   icon: 'sync',      label: 'Git Sync' }
   ],
   network: [
     { page: 'network',            href: 'network.html',             icon: 'lan',               label: 'Overview' },
@@ -240,6 +239,31 @@ if (document.readyState === 'loading') {
    * Attach hover handlers to all nav-links with sub-navs
    */
   function init() {
+    // Load permission checker if not already present
+    if (!window.permissions && !document.querySelector('script[src*="permission-checker"]')) {
+      var s = document.createElement('script');
+      s.src = '/assets/js/permission-checker.js';
+      document.head.appendChild(s);
+    }
+
+    // Inject logout button into nav-actions if not present
+    var navActions = document.querySelector('.nav-actions');
+    if (navActions && !navActions.querySelector('.nav-logout-btn')) {
+      var logoutBtn = document.createElement('button');
+      logoutBtn.className = 'nav-action-btn nav-logout-btn';
+      logoutBtn.title = 'Logout';
+      logoutBtn.innerHTML = '<span class="material-symbols-rounded">logout</span>';
+      logoutBtn.onclick = async function() {
+        if (!confirm('Log out?')) return;
+        try {
+          var r = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+          if (r.ok) { window.location.href = '/pages/login.html'; return; }
+        } catch(e) {}
+        window.location.href = '/pages/login.html';
+      };
+      navActions.appendChild(logoutBtn);
+    }
+
     var navLinks = document.querySelectorAll('.nav-link[data-section]');
 
     navLinks.forEach(function (link) {
