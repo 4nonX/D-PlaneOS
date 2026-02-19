@@ -57,7 +57,7 @@ sudo nixos-rebuild switch
 ## System Requirements
 
 - NixOS 24.11 (stable)
-- Minimum 8 GB RAM (recommended: 32 GB for 16 GB ZFS ARC)
+- Minimum 8 GB RAM (more RAM = larger ZFS ARC read cache)
 - Separate boot disk (SSD) + data disks (HDD/SSD for ZFS pool)
 - Network connection
 

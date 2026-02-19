@@ -2,7 +2,7 @@
 #
 # D-PlaneOS SQLite Hardening & Optimization
 # 
-# Critical fixes for 52TB+ production systems:
+# Critical fixes for large-scale production systems:
 # 1. WAL mode for concurrency
 # 2. Indexes for performance
 # 3. Foreign key constraints
@@ -79,7 +79,7 @@ PRAGMA cache_size = -64000;
 PRAGMA mmap_size = 268435456;
 
 -- ==================================================================
--- SECTION 2: CRITICAL INDEXES FOR 52TB METADATA
+-- SECTION 2: CRITICAL INDEXES FOR large-scale metadata
 -- ==================================================================
 
 -- Files table indexes (CRITICAL for large datasets)
@@ -202,8 +202,8 @@ echo "  ✓ Auto-vacuum configured"
 echo "  ✓ Cache optimized (64MB)"
 echo "  ✓ Memory-mapped I/O enabled"
 echo ""
-echo "For 52TB+ systems, consider:"
+echo "For large storage pools, consider:"
 echo "  - Moving DB to NVMe for faster access"
-echo "  - Increasing cache_size if you have >32GB RAM"
+echo "  - Increasing cache_size if you have ample RAM"
 echo "  - Running VACUUM periodically to reclaim space"
 echo ""

@@ -804,8 +804,14 @@
   padding: 10px 32px;
   display: flex;
   gap: 4px;
-  flex-wrap: wrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+  -webkit-overflow-scrolling: touch;
 }
+.nav-sub-inner::-webkit-scrollbar { height: 3px; }
+.nav-sub-inner::-webkit-scrollbar-track { background: transparent; }
+.nav-sub-inner::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
 .sub-link {
   display: flex;
@@ -821,6 +827,8 @@
   text-decoration: none;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sub-link .material-symbols-rounded {

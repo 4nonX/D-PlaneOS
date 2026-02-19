@@ -163,6 +163,11 @@ func main() {
 
 	log.Printf("D-PlaneOS Daemon v%s starting...", Version)
 
+	// Ensure stacks directory exists for Docker stack management
+	if err := handlers.EnsureStacksDir(); err != nil {
+		log.Printf("WARNING: %v", err)
+	}
+
 	// Initialize WebSocket Hub for real-time monitoring
 	wsHub := websocket.NewMonitorHub()
 	go wsHub.Run()
@@ -262,6 +267,15 @@ func main() {
 	r.HandleFunc("/api/docker/compose/up", dockerHandler.ComposeUp).Methods("POST")
 	r.HandleFunc("/api/docker/compose/down", dockerHandler.ComposeDown).Methods("POST")
 	r.HandleFunc("/api/docker/compose/status", dockerHandler.ComposeStatus).Methods("GET")
+	// v3.0.0: Stack management (Dockge-like YAML → Deploy workflow)
+	stackHandler := handlers.NewStackHandler()
+	r.HandleFunc("/api/docker/stacks", stackHandler.ListStacks).Methods("GET")
+	r.HandleFunc("/api/docker/stacks/deploy", stackHandler.DeployStack).Methods("POST")
+	r.HandleFunc("/api/docker/stacks/yaml", stackHandler.GetStackYAML).Methods("GET")
+	r.HandleFunc("/api/docker/stacks/yaml", stackHandler.UpdateStackYAML).Methods("PUT")
+	r.HandleFunc("/api/docker/stacks", stackHandler.DeleteStack).Methods("DELETE")
+	r.HandleFunc("/api/docker/stacks/action", stackHandler.StackAction).Methods("POST")
+	r.HandleFunc("/api/docker/convert-run", stackHandler.ConvertDockerRun).Methods("POST")
 
 	// v2.1.0: ZFS Snapshots CRUD
 	snapshotCRUDHandler := handlers.NewZFSSnapshotHandler()

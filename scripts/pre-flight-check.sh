@@ -34,7 +34,7 @@ echo "Available: $(numfmt --to=iec-i $INOTIFY_AVAILABLE) watches"
 if [ $INOTIFY_PERCENT -gt 80 ]; then
     echo -e "${RED}✗ CRITICAL: Inotify usage >80%${NC}"
     echo "  Other processes (Docker, Plex, etc.) are consuming watches"
-    echo "  D-PlaneOS may not get enough watches for 52TB indexing"
+    echo "  D-PlaneOS may not get enough watches for file indexing"
     ERRORS=$((ERRORS + 1))
     
     echo ""

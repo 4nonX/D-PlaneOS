@@ -25,6 +25,7 @@ let
   # │  Examples: "tank", "datapool", "nas"                    │
   # └─────────────────────────────────────────────────────────┘
   zpools = [ "tank" ];
+  zpoolMountpoints = map (p: "/${p}") zpools;
 
   # Samba workgroup (default "WORKGROUP" is fine for most setups)
   sambaWorkgroup = "WORKGROUP";
@@ -185,12 +186,15 @@ in {
   };
 
   # ZFS ARC (read cache)
-  #   16 GB RAM → 8589934592  (8 GB)
-  #   32 GB RAM → 17179869184 (16 GB)  ← current
-  #   64 GB RAM → 34359738368 (32 GB)
-  boot.kernelParams = [
-    "zfs.zfs_arc_max=17179869184"
-  ];
+  # ZFS ARC (read cache) — auto-sized by ZFS to ~50% of RAM by default
+  # Only set this if you want to limit ARC to leave RAM for other services.
+  # Values in bytes:
+  #   8 GB RAM → 4294967296  (4 GB ARC)
+  #   16 GB RAM → 8589934592 (8 GB ARC)
+  #   32 GB RAM → 17179869184 (16 GB ARC)
+  #   64 GB RAM → 34359738368 (32 GB ARC)
+  # To use: uncomment and set the value for your hardware
+  # boot.kernelParams = [ "zfs.zfs_arc_max=8589934592" ];
 
   # ═══════════════════════════════════════════════════════════
   #  KERNEL TUNING (optimized for NAS — do not modify)
@@ -224,6 +228,7 @@ in {
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-XSS-Protection "1; mode=block" always;
         add_header Referrer-Policy "no-referrer-when-downgrade" always;
+        client_max_body_size 10G;
       '';
 
       locations = {
@@ -239,7 +244,11 @@ in {
         "/ws/" = {
           proxyPass = "http://127.0.0.1:9000";
           proxyWebsockets = true;
-          extraConfig = "proxy_read_timeout 86400s;";
+          extraConfig = ''
+            proxy_connect_timeout 7d;
+            proxy_send_timeout 7d;
+            proxy_read_timeout 7d;
+          '';
         };
         "/health" = { proxyPass = "http://127.0.0.1:9000/health"; };
         "~ \\.php$" = { extraConfig = "deny all;"; };
@@ -255,10 +264,19 @@ in {
 
   systemd.services.dplaned = {
     description = "D-PlaneOS System Daemon";
-    after = [ "network.target" "zfs-import.target" "zfs-mount.service" ];
+    after = [ "network.target" "zfs-import.target" "zfs-mount.service" "docker.service" ];
     wants = [ "zfs-import.target" ];
     requires = [ "zfs-mount.service" ];
     wantedBy = [ "multi-user.target" ];
+
+    path = with pkgs; [
+      zfs smartmontools hdparm dmidecode
+      acl ethtool ipmitool util-linux
+      coreutils gnugrep gnused gawk
+      docker docker-compose
+      samba nfs-utils
+      openssl git openssh rclone curl
+    ];
 
     serviceConfig = {
       Type = "simple";
@@ -282,7 +300,7 @@ in {
       PrivateTmp = true;
       ProtectSystem = "strict";
       ProtectHome = true;
-      ReadWritePaths = [ "/var/log/dplaneos" "/var/lib/dplaneos" "/run/dplaneos" ];
+      ReadWritePaths = [ "/var/log/dplaneos" "/var/lib/dplaneos" "/run/dplaneos" "/var/run/docker.sock" "/etc/exports" ] ++ zpoolMountpoints;
       AmbientCapabilities = [ "CAP_SYS_ADMIN" "CAP_NET_ADMIN" "CAP_DAC_READ_SEARCH" "CAP_CHOWN" "CAP_FOWNER" ];
       LimitNOFILE = 65536;
       TasksMax = 4096;
@@ -297,6 +315,8 @@ in {
     "d /var/lib/dplaneos/backups 0750 root root -"
     "d /var/lib/dplaneos/config 0750 root root -"
     "d /var/lib/dplaneos/config/ssl 0700 root root -"
+    "d /var/lib/dplaneos/stacks 0750 root root -"
+    "d /var/lib/dplaneos/git-repos 0750 root root -"
     "f /var/lib/dplaneos/smb-shares.conf 0644 root root -"
   ];
 
@@ -371,10 +391,13 @@ in {
 
   environment.systemPackages = with pkgs; [
     dplaned dplaneos-recovery
-    zfs smartmontools hdparm lsof
-    ethtool iperf3
-    htop tmux git sqlite docker-compose
-    nano
+    zfs smartmontools hdparm parted
+    dmidecode acl ethtool ipmitool lsof pciutils usbutils
+    iperf3 nfs-utils
+    docker-compose
+    rclone rsync
+    git openssh
+    htop tmux nano curl wget sqlite
   ];
 
   # ═══════════════════════════════════════════════════════════
@@ -407,8 +430,19 @@ in {
   services.cron = {
     enable = true;
     systemCronJobs = [
-      # Database backup daily at 3 AM, 30-day retention
       "0 3 * * *  root  ${pkgs.sqlite}/bin/sqlite3 /var/lib/dplaneos/dplaneos.db \".backup /var/lib/dplaneos/backups/dplaneos-$(date +\\%Y\\%m\\%d).db\" && find /var/lib/dplaneos/backups -mtime +30 -delete"
     ];
   };
+
+  # Docker-ZFS boot gate
+  systemd.services.docker = {
+    after = [ "zfs-mount.service" "zfs-import.target" ];
+    requires = [ "zfs-mount.service" ];
+  };
+
+  # Removable media detection
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEMS=="usb", KERNEL=="sd[a-z][0-9]*", ENV{DEVTYPE}=="partition", RUN+="${pkgs.curl}/bin/curl -sf -X POST http://127.0.0.1:9000/api/system/device-event -d '{\"action\":\"add\",\"device\":\"%E{DEVNAME}\",\"type\":\"usb\"}' -H 'Content-Type: application/json' || true"
+    ACTION=="remove", SUBSYSTEMS=="usb", KERNEL=="sd[a-z][0-9]*", ENV{DEVTYPE}=="partition", RUN+="${pkgs.curl}/bin/curl -sf -X POST http://127.0.0.1:9000/api/system/device-event -d '{\"action\":\"remove\",\"device\":\"%E{DEVNAME}\",\"type\":\"usb\"}' -H 'Content-Type: application/json' || true"
+  '';
 }

@@ -3,168 +3,239 @@
 #  D-PlaneOS NixOS Setup Helper
 # ═══════════════════════════════════════════════════════════════
 #
-#  Prepares your configuration.nix automatically.
-#  Handles the technical steps so you don't have to.
+#  Prepares configuration.nix automatically:
+#    - Generates ZFS host ID
+#    - Auto-detects ZFS pools
+#    - Detects UEFI vs BIOS
+#    - Sets timezone
+#    - Prefetches Go vendor hash (fixes first-build failure)
 #
-#  Usage:
-#    sudo bash setup-nixos.sh
+#  Usage:  sudo bash setup-nixos.sh
 #
 # ═══════════════════════════════════════════════════════════════
 
 set -e
 
-CONFIG="/etc/nixos/configuration.nix"
+# ─── Configuration ─────────────────────────────────────────
+NIXOS_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG="$NIXOS_DIR/configuration.nix"
+FLAKE="$NIXOS_DIR/flake.nix"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  D-PlaneOS NixOS Setup Helper${NC}"
+echo -e "${CYAN}  D-PlaneOS NixOS Setup${NC}"
+echo -e "${CYAN}  The Immutable NAS: NixOS + ZFS + GitOps${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
 echo ""
 
-# ─── Check if configuration.nix exists ─────────────────────
-
-if [ ! -f "$CONFIG" ]; then
-    echo -e "${RED}ERROR: $CONFIG not found.${NC}"
-    echo ""
-    echo "Did you copy the configuration.nix yet?"
-    echo "  sudo cp configuration.nix /etc/nixos/configuration.nix"
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}Error: Run with sudo${NC}"
+    echo "  sudo bash setup-nixos.sh"
     exit 1
 fi
 
-echo -e "${GREEN}✓${NC} configuration.nix found"
+if [ ! -f "$CONFIG" ]; then
+    echo -e "${RED}Error: configuration.nix not found at $CONFIG${NC}"
+    exit 1
+fi
 
-# ─── Step 1: Generate host ID ──────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+#  Step 1: ZFS Host ID (required — ZFS won't import without it)
+# ═══════════════════════════════════════════════════════════════
 
-echo ""
-echo -e "${YELLOW}Step 1/4: ZFS Host ID${NC}"
+echo -e "${YELLOW}Step 1/5: ZFS Host ID${NC}"
 
 CURRENT_HOSTID=$(grep 'networking.hostId' "$CONFIG" | grep -oP '"[^"]*"' | tr -d '"')
 
 if [ "$CURRENT_HOSTID" = "CHANGE_ME" ]; then
-    NEW_HOSTID=$(head -c4 /dev/urandom | od -A none -t x4 | tr -d ' ')
-    sed -i "s/\"CHANGE_ME\"/\"${NEW_HOSTID}\"/" "$CONFIG"
-    echo -e "${GREEN}✓${NC} Host ID generated and applied: ${CYAN}${NEW_HOSTID}${NC}"
-else
-    echo -e "${GREEN}✓${NC} Host ID already set: ${CYAN}${CURRENT_HOSTID}${NC}"
-fi
-
-# ─── Step 2: Verify timezone ───────────────────────────────
-
-echo ""
-echo -e "${YELLOW}Step 2/4: Timezone${NC}"
-
-CURRENT_TZ=$(grep 'time.timeZone' "$CONFIG" | grep -oP '"[^"]*"' | tr -d '"')
-echo "  Current setting: $CURRENT_TZ"
-
-read -p "  Is this correct? [Y/n] " tz_ok
-if [[ "$tz_ok" =~ ^[Nn] ]]; then
-    echo ""
-    echo "  Common timezones:"
-    echo "    Europe/Berlin      (Germany)"
-    echo "    Europe/London      (UK)"
-    echo "    America/New_York   (US East)"
-    echo "    America/Los_Angeles (US West)"
-    echo "    Asia/Tokyo         (Japan)"
-    echo ""
-    read -p "  New timezone: " NEW_TZ
-    if [ -n "$NEW_TZ" ]; then
-        sed -i "s|time.timeZone = \".*\"|time.timeZone = \"${NEW_TZ}\"|" "$CONFIG"
-        echo -e "${GREEN}✓${NC} Timezone changed: ${CYAN}${NEW_TZ}${NC}"
+    # Use existing machine hostid if available, otherwise generate
+    if [ -f /etc/machine-id ]; then
+        NEW_HOSTID=$(head -c 8 /etc/machine-id)
+    else
+        NEW_HOSTID=$(head -c4 /dev/urandom | od -A none -t x4 | tr -d ' ')
     fi
+    sed -i "s/\"CHANGE_ME\"/\"${NEW_HOSTID}\"/" "$CONFIG"
+    echo -e "  ${GREEN}✓${NC} Generated host ID: ${CYAN}${NEW_HOSTID}${NC}"
 else
-    echo -e "${GREEN}✓${NC} Timezone kept: ${CYAN}${CURRENT_TZ}${NC}"
+    echo -e "  ${GREEN}✓${NC} Already set: ${CYAN}${CURRENT_HOSTID}${NC}"
 fi
 
-# ─── Step 3: ZFS pool name ─────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+#  Step 2: ZFS Pool Detection
+# ═══════════════════════════════════════════════════════════════
 
 echo ""
-echo -e "${YELLOW}Step 3/4: ZFS Pool${NC}"
+echo -e "${YELLOW}Step 2/5: ZFS Pools${NC}"
 
-CURRENT_POOL=$(grep 'zpools = ' "$CONFIG" | grep -oP '"[^"]*"' | tr -d '"')
-echo "  Current pool name: $CURRENT_POOL"
+CURRENT_POOLS=$(grep 'zpools = ' "$CONFIG" | grep -oP '\[ "[^"]*"' | tr -d '[ "')
 
 if command -v zpool &>/dev/null; then
-    EXISTING=$(zpool list -H -o name 2>/dev/null || true)
-    if [ -n "$EXISTING" ]; then
-        echo -e "  ${GREEN}Detected ZFS pools:${NC} $EXISTING"
-    fi
-fi
+    DETECTED_POOLS=$(zpool list -H -o name 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
 
-read -p "  Change pool name? [y/N] " pool_ok
-if [[ "$pool_ok" =~ ^[Yy] ]]; then
-    read -p "  New pool name: " NEW_POOL
-    if [ -n "$NEW_POOL" ]; then
-        sed -i "s|zpools = \[ \".*\" \]|zpools = [ \"${NEW_POOL}\" ]|" "$CONFIG"
-        echo -e "${GREEN}✓${NC} Pool name changed: ${CYAN}${NEW_POOL}${NC}"
+    if [ -n "$DETECTED_POOLS" ]; then
+        echo "  Detected pools: ${DETECTED_POOLS}"
+
+        # Format as Nix list: [ "pool1" "pool2" ]
+        NIX_POOLS="[ $(echo "$DETECTED_POOLS" | sed 's/\([^ ]*\)/"\1"/g') ]"
+
+        sed -i "s|zpools = \[.*\];|zpools = ${NIX_POOLS};|" "$CONFIG"
+        echo -e "  ${GREEN}✓${NC} Pool list updated: ${CYAN}${NIX_POOLS}${NC}"
+    else
+        echo -e "  ${YELLOW}!${NC} No ZFS pools found (create them first with zpool create)"
+        echo "  Current setting: ${CURRENT_POOLS:-tank}"
     fi
 else
-    echo -e "${GREEN}✓${NC} Pool name kept: ${CYAN}${CURRENT_POOL}${NC}"
+    echo -e "  ${YELLOW}!${NC} ZFS not installed yet (will be after first nixos-rebuild)"
+    echo "  Current setting: ${CURRENT_POOLS:-tank}"
+    echo "  You can re-run this script after creating pools."
 fi
 
-# ─── Step 4: Detect boot loader ────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+#  Step 3: Timezone
+# ═══════════════════════════════════════════════════════════════
 
 echo ""
-echo -e "${YELLOW}Step 4/4: Boot Loader${NC}"
+echo -e "${YELLOW}Step 3/5: Timezone${NC}"
+
+CURRENT_TZ=$(grep 'time.timeZone' "$CONFIG" | grep -oP '"[^"]*"' | tr -d '"')
+
+# Try to detect from timedatectl
+DETECTED_TZ=""
+if command -v timedatectl &>/dev/null; then
+    DETECTED_TZ=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+fi
+
+if [ -n "$DETECTED_TZ" ] && [ "$DETECTED_TZ" != "$CURRENT_TZ" ]; then
+    echo "  Detected: $DETECTED_TZ (config has: $CURRENT_TZ)"
+    read -p "  Use detected timezone? [Y/n] " tz_use
+    if [[ ! "$tz_use" =~ ^[Nn] ]]; then
+        sed -i "s|time.timeZone = \".*\"|time.timeZone = \"${DETECTED_TZ}\"|" "$CONFIG"
+        echo -e "  ${GREEN}✓${NC} Timezone: ${CYAN}${DETECTED_TZ}${NC}"
+    else
+        echo -e "  ${GREEN}✓${NC} Keeping: ${CYAN}${CURRENT_TZ}${NC}"
+    fi
+else
+    echo -e "  ${GREEN}✓${NC} Timezone: ${CYAN}${CURRENT_TZ}${NC}"
+    read -p "  Change? [y/N] " tz_change
+    if [[ "$tz_change" =~ ^[Yy] ]]; then
+        read -p "  New timezone (e.g. America/New_York): " NEW_TZ
+        if [ -n "$NEW_TZ" ]; then
+            sed -i "s|time.timeZone = \".*\"|time.timeZone = \"${NEW_TZ}\"|" "$CONFIG"
+            echo -e "  ${GREEN}✓${NC} Timezone: ${CYAN}${NEW_TZ}${NC}"
+        fi
+    fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
+#  Step 4: Boot Loader Detection
+# ═══════════════════════════════════════════════════════════════
+
+echo ""
+echo -e "${YELLOW}Step 4/5: Boot Loader${NC}"
 
 if [ -d /sys/firmware/efi ]; then
-    echo -e "  ${GREEN}UEFI detected${NC} — configuration matches (systemd-boot)"
+    echo -e "  ${GREEN}✓${NC} UEFI detected — systemd-boot (default)"
 else
-    echo -e "  ${YELLOW}No UEFI detected${NC} — likely BIOS/MBR"
-    echo ""
-    read -p "  Switch to BIOS/MBR? [y/N] " bios_ok
-    if [[ "$bios_ok" =~ ^[Yy] ]]; then
-        sed -i 's|^  boot.loader.systemd-boot.enable = true;|  # boot.loader.systemd-boot.enable = true;|' "$CONFIG"
-        sed -i 's|^  boot.loader.efi.canTouchEfiVariables = true;|  # boot.loader.efi.canTouchEfiVariables = true;|' "$CONFIG"
-        sed -i 's|^  # boot.loader.grub.enable = true;|  boot.loader.grub.enable = true;|' "$CONFIG"
-        sed -i 's|^  # boot.loader.grub.device = "/dev/sda";|  boot.loader.grub.device = "/dev/sda";|' "$CONFIG"
+    echo -e "  ${YELLOW}!${NC} No UEFI detected — switching to GRUB (Legacy BIOS)"
 
-        echo ""
-        echo "  Available disks:"
-        lsblk -d -o NAME,SIZE,MODEL | grep -v loop
-        echo ""
-        read -p "  Boot disk (e.g. /dev/sda): " BOOT_DISK
-        if [ -n "$BOOT_DISK" ]; then
-            sed -i "s|boot.loader.grub.device = \"/dev/sda\"|boot.loader.grub.device = \"${BOOT_DISK}\"|" "$CONFIG"
-        fi
-        echo -e "${GREEN}✓${NC} Switched to BIOS/MBR"
-    else
-        echo -e "${GREEN}✓${NC} Boot loader kept (UEFI)"
-    fi
+    # Comment out UEFI, uncomment GRUB
+    sed -i 's|^  boot.loader.systemd-boot.enable = true;|  # boot.loader.systemd-boot.enable = true;|' "$CONFIG"
+    sed -i 's|^  boot.loader.efi.canTouchEfiVariables = true;|  # boot.loader.efi.canTouchEfiVariables = true;|' "$CONFIG"
+    sed -i 's|^  # boot.loader.grub.enable = true;|  boot.loader.grub.enable = true;|' "$CONFIG"
+    sed -i 's|^  # boot.loader.grub.device = "/dev/sda";|  boot.loader.grub.device = "/dev/sda";|' "$CONFIG"
+
+    echo ""
+    echo "  Available disks:"
+    lsblk -d -o NAME,SIZE,MODEL 2>/dev/null | grep -v loop || true
+    echo ""
+    read -p "  Boot disk [/dev/sda]: " BOOT_DISK
+    BOOT_DISK=${BOOT_DISK:-/dev/sda}
+    sed -i "s|boot.loader.grub.device = \"/dev/sda\"|boot.loader.grub.device = \"${BOOT_DISK}\"|" "$CONFIG"
+    echo -e "  ${GREEN}✓${NC} GRUB on ${CYAN}${BOOT_DISK}${NC}"
 fi
 
-# ─── Summary ────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+#  Step 5: Vendor Hash (prevents first-build failure)
+# ═══════════════════════════════════════════════════════════════
+
+echo ""
+echo -e "${YELLOW}Step 5/5: Go Vendor Hash${NC}"
+
+if [ -f "$FLAKE" ]; then
+    CURRENT_HASH=$(grep 'vendorHash' "$FLAKE" | grep -oP '"[^"]*"' | tr -d '"' || echo "null")
+
+    if [ "$CURRENT_HASH" = "null" ] || [ -z "$CURRENT_HASH" ]; then
+        echo "  vendorHash is null — first build will fail without it."
+        echo ""
+        echo "  Two options:"
+        echo "    a) Try building now — Nix will show the correct hash"
+        echo "    b) Skip — you'll need to fix it manually after first build attempt"
+        echo ""
+        read -p "  Try prefetching? [Y/n] " prefetch_ok
+
+        if [[ ! "$prefetch_ok" =~ ^[Nn] ]]; then
+            echo "  Attempting build to capture hash (this may take a few minutes)..."
+
+            # Try a build, capture the hash from the error
+            BUILD_OUTPUT=$(nixos-rebuild build --flake "$NIXOS_DIR#dplaneos" 2>&1 || true)
+            GOT_HASH=$(echo "$BUILD_OUTPUT" | grep -oP 'got:\s+\Ksha256-[A-Za-z0-9+/=]+' | head -1)
+
+            if [ -n "$GOT_HASH" ]; then
+                sed -i "s|vendorHash = null;|vendorHash = \"${GOT_HASH}\";|" "$FLAKE"
+                echo -e "  ${GREEN}✓${NC} Hash captured and applied: ${CYAN}${GOT_HASH}${NC}"
+                echo "  Next build should succeed."
+            else
+                echo -e "  ${YELLOW}!${NC} Could not capture hash automatically."
+                echo "  After first build attempt, look for:"
+                echo "    got: sha256-XXXXX..."
+                echo "  Then: sed -i 's|vendorHash = null|vendorHash = \"sha256-XXXXX...\"|' flake.nix"
+            fi
+        else
+            echo -e "  ${YELLOW}!${NC} Skipped. First build will fail — see instructions below."
+        fi
+    else
+        echo -e "  ${GREEN}✓${NC} Already set: ${CYAN}${CURRENT_HASH}${NC}"
+    fi
+else
+    echo -e "  ${YELLOW}!${NC} flake.nix not found — skipping"
+fi
+
+# ═══════════════════════════════════════════════════════════════
+#  Done
+# ═══════════════════════════════════════════════════════════════
 
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  Configuration ready!${NC}"
+echo -e "${GREEN}  Setup complete!${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
 echo ""
-echo "  Next step:"
+echo "  Build your immutable NAS:"
 echo ""
-echo -e "    ${CYAN}sudo nixos-rebuild switch --flake .#dplaneos${NC}"
+echo -e "    ${BOLD}sudo nixos-rebuild switch --flake .#dplaneos${NC}"
 echo ""
-echo "  The first build will likely fail due to missing package"
-echo "  hashes. This is normal!"
-echo ""
-echo "  How to fix:"
-echo ""
-echo "  1. The error shows the correct hash:"
-echo "       hash mismatch in fixed-output derivation:"
-echo "         got: sha256-AbCdEf1234...="
-echo ""
-echo "  2. Copy the 'got:' hash and replace the placeholder"
-echo "     in flake.nix (or configuration.nix for standalone):"
-echo ""
-echo -e "       ${CYAN}sudo nano flake.nix${NC}"
-echo "       (Ctrl+W → search 'null' or 'AAAA' → paste hash)"
-echo ""
-echo "  3. Rebuild: sudo nixos-rebuild switch --flake .#dplaneos"
-echo ""
-echo "  After max 3 attempts everything will build."
+
+VENDOR_HASH=$(grep 'vendorHash' "$FLAKE" 2>/dev/null | grep -oP '"[^"]*"' | tr -d '"' || echo "null")
+if [ "$VENDOR_HASH" = "null" ] || [ -z "$VENDOR_HASH" ]; then
+    echo -e "  ${YELLOW}Note:${NC} First build will fail (missing vendor hash)."
+    echo "  This is normal for Nix flakes with Go modules."
+    echo ""
+    echo "  1. Run the build command above"
+    echo "  2. Copy the sha256-... hash from the error"
+    echo "  3. Edit flake.nix: replace 'null' with the hash"
+    echo "  4. Build again — it will succeed"
+    echo ""
+fi
+
+echo "  After install:"
+echo "    Web UI → http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'your-ip')"
+echo "    Recovery → sudo dplaneos-recovery"
+echo "    Rollback → sudo nixos-rebuild switch --rollback"
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"

@@ -1,85 +1,93 @@
-# D-PlaneOS NixOS — Technical Reference
+# D-PlaneOS on NixOS — The Immutable NAS
 
-## Zero Code Changes Required
+NixOS is a **first-class platform** for D-PlaneOS. The combination gives you
+something no other NAS can offer:
 
-The D-PlaneOS daemon supports configurable paths via CLI flags. The NixOS configuration passes these flags automatically:
+| Layer | Technology | What it means |
+|-------|-----------|--------------|
+| System | NixOS | Declarative, reproducible, rollback with one command |
+| Data | ZFS | Snapshots, checksums, encryption, compression |
+| Containers | GitOps | Docker stacks version-controlled in Git repos |
 
+Every piece of your NAS state is either **declarative** (Nix), **snapshotted** (ZFS),
+or **version-controlled** (Git). Nothing is ever lost.
+
+## Quick Start
+
+```bash
+git clone https://github.com/4nonX/D-PlaneOS
+cd D-PlaneOS/nixos
+sudo bash setup-nixos.sh
+sudo nixos-rebuild switch --flake .#dplaneos
 ```
-dplaned \
-  -config-dir /var/lib/dplaneos/config \
-  -smb-conf /var/lib/dplaneos/smb-shares.conf \
-  -db /var/lib/dplaneos/dplaneos.db \
-  -listen 127.0.0.1:9000
+
+`setup-nixos.sh` auto-detects your ZFS pools, timezone, and boot loader.
+
+## Update
+
+```bash
+cd D-PlaneOS/nixos
+git pull
+sudo nixos-rebuild switch --flake .#dplaneos
 ```
-
-On Debian, the defaults (`/etc/dplaneos`, `/etc/samba/smb.conf`) are used automatically — no flags needed. The same binary works on both distros.
-
-## Key Difference from Debian
-
-On Debian, `install.sh` writes config files to `/etc/` imperatively. On NixOS, everything is declared in `configuration.nix`:
-
-| Debian | NixOS |
-|--------|-------|
-| `smb.conf` written directly by daemon | Daemon writes to `/var/lib/dplaneos/smb-shares.conf`, included by Nix-managed Samba |
-| `apt install` packages | Packages declared in `environment.systemPackages` |
-| `systemctl enable` services | Services declared in `services.*` or `systemd.services.*` |
-| Config drift over time | Configuration is the single source of truth |
-| Broken update → manual fix | Broken update → `nixos-rebuild switch --rollback` |
 
 ## Rollback
 
+Something broke? One command:
+
 ```bash
-# Last working version:
 sudo nixos-rebuild switch --rollback
-
-# List all generations:
-sudo nix-env --list-generations --profile /nix/var/nix/profiles/system
-
-# Boot menu: select an older generation at the GRUB/systemd-boot screen
 ```
 
-## Version Control Your NAS
+Or pick a specific generation:
 
 ```bash
-cd /etc/nixos
-sudo git init
-sudo git add .
-sudo git commit -m "D-PlaneOS v3.0.0 initial setup"
-
-# After any change:
-sudo git add -A && sudo git commit -m "description of change"
-sudo nixos-rebuild switch
+nixos-rebuild list-generations
+sudo nixos-rebuild switch --generation 42
 ```
 
-## Automatic Updates (optional)
+## What's Included
 
-Add to `configuration.nix`:
-```nix
-  system.autoUpgrade = {
-    enable = true;
-    dates = "04:00";
-    allowReboot = false;
-  };
+The NixOS configuration sets up everything the Debian installer does:
+
+- **ZFS** — pools, auto-scrub, auto-snapshots (15min/hourly/daily/weekly/monthly)
+- **Samba** — SMB file sharing with performance tuning
+- **NFS** — Unix/Linux file sharing
+- **Docker** — native ZFS storage driver, weekly auto-prune
+- **Docker-ZFS boot gate** — Docker waits for ZFS pools before starting
+- **SMART monitoring** — disk health with wall notifications
+- **Avahi** — `dplaneos.local` mDNS discovery
+- **Nginx** — reverse proxy with 7-day WebSocket timeout
+- **Firewall** — HTTP, SMB, NFS, SSH ports open
+- **Daily DB backups** — systemd timer with 30-day retention
+- **Recovery CLI** — `sudo dplaneos-recovery`
+- **Removable media** — udev rules for USB device detection
+
+## Vendor Hash (First Build)
+
+Nix requires a hash of Go dependencies. On first build, you'll see:
+
+```
+hash mismatch in fixed-output derivation:
+  got: sha256-AbCdEf1234...=
 ```
 
-## Security Features
+Copy that hash into `flake.nix` replacing `vendorHash = null;` and rebuild.
+`setup-nixos.sh` attempts to do this automatically.
 
-- `sudo` requires password (`wheelNeedsPassword = true`)
-- Daemon runs with `ProtectSystem = "strict"`, `PrivateTmp`, capability bounding
-- SQLite backups use `.backup` command (WAL-safe, consistent snapshots)
-- Daemon starts only after `zfs-mount.service` completes (no race condition)
-- OOM protection: daemon limited to 1 GB, `OOMScoreAdjust = -900`
-- Nginx blocks PHP execution, hidden files, and sensitive directories
+## Files
 
-## Getting Package Hashes
+| File | Purpose |
+|------|---------|
+| `flake.nix` | Nix flake — builds dplaned, frontend, recovery CLI |
+| `configuration.nix` | Full NixOS system config (flake version) |
+| `configuration-standalone.nix` | Standalone version (no flake, imports packages directly) |
+| `setup-nixos.sh` | Interactive setup helper |
 
-For the standalone configuration (not needed for flake):
+## Why NixOS for a NAS?
 
-```bash
-# Source hash:
-nix-shell -p nix-prefetch-github --run "nix-prefetch-github 4nonX dplaneos --rev v3.0.0"
-
-# Vendor hash (Go dependencies):
-# Set vendorHash = ""; then run nixos-rebuild switch
-# The error message shows the correct hash
-```
+- **Atomic upgrades**: System updates are all-or-nothing. No partial states.
+- **Generations**: Every config change creates a bootable snapshot. Pick any one.
+- **Reproducible**: Same flake.nix = same system, anywhere, anytime.
+- **Git-native**: Your entire NAS config is a Git repo. `git log` is your changelog.
+- **No drift**: The system *is* the config file. Nothing else.

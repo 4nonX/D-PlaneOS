@@ -267,12 +267,18 @@ func (h *DockerHandler) PullImage(w http.ResponseWriter, r *http.Request) {
 func (h *DockerHandler) RemoveContainer(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ContainerName string `json:"container_name"`
+		Container     string `json:"container"` // alias for frontend compat
 		Force         bool   `json:"force"`
 		RemoveVolumes bool   `json:"remove_volumes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request", http.StatusBadRequest)
 		return
+	}
+
+	// Accept either field name
+	if req.ContainerName == "" {
+		req.ContainerName = req.Container
 	}
 
 	if !isValidContainerName(req.ContainerName) {
