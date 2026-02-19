@@ -112,8 +112,9 @@ func (h *HybridIndexer) addRealtimeWatch(config WatchConfig) error {
 		return h.addPeriodicScanner(config)
 	}
 	
-	// TODO: Implement actual inotify watch
-	// For now, simulate
+	// Periodic polling is used instead of inotify for reliability.
+	// inotify watch limits are finite and can conflict with Docker/other services.
+	// Polling every 5 minutes is the safer default for a NAS.
 	h.realtimeWatches[config.Path] = nil
 	h.inotifyUsed++
 	

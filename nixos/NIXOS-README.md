@@ -23,6 +23,39 @@ sudo nixos-rebuild switch --flake .#dplaneos
 
 `setup-nixos.sh` auto-detects your ZFS pools, timezone, and boot loader.
 
+## A Note on Licensing and Nix "Unfree"
+
+D-PlaneOS is licensed under **PolyForm Shield 1.0.0**. This means:
+
+- You **can** use it for free, forever, on any hardware you own
+- You **can** modify the source code and contribute changes
+- You **can** distribute copies (with the license attached)
+- You **cannot** use it to build a competing commercial NAS product
+
+This is not an OSI-approved open-source license. It exists to prevent large
+companies from rebranding a solo developer's work as their own commercial
+product. The code is fully source-available and you can read every line.
+
+**What this means on NixOS:** Nix classifies non-OSI licenses as "unfree."
+The D-PlaneOS flake handles this automatically — it marks only the three
+D-PlaneOS packages (dplaned, frontend, recovery CLI) as unfree via
+`allowUnfreePredicate`. All system packages (ZFS, Samba, Docker, nginx, etc.)
+remain under their own open-source licenses and are unaffected.
+
+If your system-wide Nix config has `allowUnfree = false` (the default), the
+flake still works because the predicate is scoped to the flake's own package
+set. You do not need to change your global Nix settings.
+
+**If you hit an "unfree" error anyway**, add this to your system
+`/etc/nixos/configuration.nix`:
+
+```nix
+nixpkgs.config.allowUnfreePredicate = pkg:
+  builtins.elem (lib.getName pkg) [ "dplaned" "dplaneos-frontend" "dplaneos-recovery" ];
+```
+
+This allows only D-PlaneOS packages through. Nothing else changes.
+
 ## Update
 
 ```bash
@@ -65,7 +98,7 @@ The NixOS configuration sets up everything the Debian installer does:
 
 ## Vendor Hash (First Build)
 
-Nix requires a hash of Go dependencies. On first build, you'll see:
+Nix requires a hash of Go dependencies. On first build, you may see:
 
 ```
 hash mismatch in fixed-output derivation:
@@ -81,7 +114,7 @@ Copy that hash into `flake.nix` replacing `vendorHash = null;` and rebuild.
 |------|---------|
 | `flake.nix` | Nix flake — builds dplaned, frontend, recovery CLI |
 | `configuration.nix` | Full NixOS system config (flake version) |
-| `configuration-standalone.nix` | Standalone version (no flake, imports packages directly) |
+| `configuration-standalone.nix` | Standalone version (no flake) |
 | `setup-nixos.sh` | Interactive setup helper |
 
 ## Why NixOS for a NAS?

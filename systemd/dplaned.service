@@ -48,11 +48,13 @@ CapabilityBoundingSet=CAP_SYS_ADMIN CAP_NET_ADMIN CAP_DAC_READ_SEARCH CAP_CHOWN 
 LimitNOFILE=65536
 TasksMax=4096
 
-# OOM Protection — prevent daemon from killing the NAS
-# 512MB should be more than enough for metadata management;
-# if it exceeds this, something is wrong (memory leak, runaway indexing)
-MemoryMax=512M
-MemoryHigh=384M
+# OOM Protection — prevent daemon from destabilizing the NAS
+# 1GB is generous for a Go daemon that shells out to zfs/docker CLI tools.
+# MemoryHigh triggers cgroup throttling before the hard kill.
+# OOMScoreAdjust=-900 makes dplaned one of the last to be killed system-wide.
+# Restart=always ensures recovery within 5 seconds if killed.
+MemoryMax=1G
+MemoryHigh=768M
 OOMScoreAdjust=-900
 
 # Logging

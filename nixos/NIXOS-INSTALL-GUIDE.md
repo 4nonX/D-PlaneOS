@@ -27,6 +27,18 @@ NixOS is a Linux distribution where the **entire system is defined in a single t
 
 ---
 
+## License
+
+D-PlaneOS is free to use on your own hardware. It's licensed under
+[PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0/) —
+you can use, modify, and share it, but you can't use it to build a competing
+commercial NAS product. Nix will classify it as "unfree" software; the
+D-PlaneOS flake handles this automatically. See
+[NIXOS-README.md](NIXOS-README.md#a-note-on-licensing-and-nix-unfree) if you
+run into issues.
+
+---
+
 ## Part 1: Installing NixOS (~20 minutes)
 
 ### Step 1.1 — Download ISO

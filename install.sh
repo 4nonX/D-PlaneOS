@@ -65,18 +65,17 @@ fi
 # Banner
 clear
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${BOLD}    D-PlaneOS v3.0.0 - System Hardening Installer${NC}"
-echo "    Zero Config | Zero Debugging | Just Works"
+echo -e "${BOLD}    D-PlaneOS v3.0.0 Installer${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "This installer guarantees:"
-echo "  ✓ All dependencies automatically installed"
-echo "  ✓ All services configured correctly"
-echo "  ✓ Login works out of the box"
-echo "  ✓ Recovery CLI for emergencies"
-echo "  ✓ Complete validation after install"
+echo "This installer will:"
+echo "  • Install all dependencies"
+echo "  • Configure services (nginx, samba, NFS, Docker)"
+echo "  • Create admin account with random password"
+echo "  • Deploy recovery CLI"
+echo "  • Validate the installation"
 echo ""
-echo "Target: Any ZFS-capable system"
+echo "Target: Debian/Ubuntu with ZFS support"
 echo "Time: ~5-10 minutes"
 echo ""
 
@@ -656,6 +655,11 @@ server {
     location ~ /\\. {
         deny all;
     }
+    
+    # Block internal directories
+    location ~ /(config|daemon|scripts|systemd)/ {
+        deny all;
+    }
 }
 EONGINX
 
@@ -826,6 +830,10 @@ User=root
 StandardOutput=journal
 StandardError=journal
 LimitNOFILE=65536
+TasksMax=4096
+MemoryMax=1G
+MemoryHigh=768M
+OOMScoreAdjust=-900
 
 [Install]
 WantedBy=multi-user.target
@@ -1010,5 +1018,5 @@ echo "✅ Database writable and accessible"
 echo "✅ Recovery CLI available for emergencies"
 echo ""
 echo "Installation completed successfully!"
-echo "Your NAS is production-ready! 🚀"
+echo "Installation complete."
 echo ""

@@ -2,7 +2,7 @@
 #
 # D-PlaneOS FTS5 File Search Setup
 # 
-# Creates SQLite FTS5 (Full-Text Search) virtual table for blazing-fast file searches
+# Creates SQLite FTS5 (Full-Text Search) virtual table for fast file searches
 # 
 # WHY THIS MATTERS:
 # - B-Tree index on long paths: O(log n) but slow with long strings

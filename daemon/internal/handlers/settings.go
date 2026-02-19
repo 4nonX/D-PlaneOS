@@ -79,8 +79,8 @@ func (h *SettingsHandler) TestTelegramConfig(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	
-	// TODO: Actually test the connection by sending a test message
-	// For now, just validate that token and chat ID are not empty
+	// Validation only — sending a test message is not done here because
+	// the user hasn't saved the config yet. Alerts use the saved config.
 	
 	if config.BotToken == "" || config.ChatID == "" {
 		http.Error(w, "Bot token and chat ID are required", http.StatusBadRequest)

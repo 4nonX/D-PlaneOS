@@ -1,6 +1,6 @@
-# D-PlaneOS v3.0.0 — Enterprise NAS Operating System
+# D-PlaneOS v3.0.0 — NAS Operating System
 
-Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
+Open-source NAS OS built on ZFS, with a web UI, Docker container management, role-based access control, and LDAP/AD integration.
 
 ## Quick Start
 
@@ -95,4 +95,4 @@ Hardware monitoring via ipmitool (graceful no-op if unavailable).
 
 ## License
 
-Open source. See LICENSE file.
+[PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0/) — free to use, modify, and distribute, but not to compete with D-PlaneOS. See [LICENSE](LICENSE) for full terms.

@@ -1,6 +1,10 @@
 # D-PlaneOS on NixOS
 
-> Your complete NAS defined in a single text file. Reproducible, versioned, indestructible.
+> Your complete NAS defined in a single text file. Reproducible, versioned, rollback-safe.
+
+**License:** D-PlaneOS uses [PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0/).
+Free to use and modify — see [NIXOS-README.md](NIXOS-README.md#a-note-on-licensing-and-nix-unfree) for
+how this works with Nix's unfree package handling (short version: it's handled automatically).
 
 ## Two Installation Paths
 
@@ -10,8 +14,8 @@ Reproducible, pinned versions, one command to update.
 
 ```bash
 # On a running NixOS:
-git clone https://github.com/4nonX/D-PlaneOS /tmp/dplaneos
-cd /tmp/dplaneos/nixos
+git clone https://github.com/4nonX/D-PlaneOS
+cd D-PlaneOS/nixos
 
 # Run setup helper (fills in host ID, timezone, etc.)
 sudo bash setup-nixos.sh
@@ -24,7 +28,7 @@ sudo nixos-rebuild switch --flake .#dplaneos
 
 **Update:**
 ```bash
-cd /tmp/dplaneos/nixos && git pull
+cd D-PlaneOS/nixos && git pull
 sudo nixos-rebuild switch --flake .#dplaneos
 ```
 

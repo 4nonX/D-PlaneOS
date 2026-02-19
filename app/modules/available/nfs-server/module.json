@@ -4,7 +4,7 @@
   "description": "Network File System (Unix/Linux file sharing)",
   "version": "1.0.0",
   "author": "D-PlaneOS Team",
-  "license": "GPL-3.0",
+  "license": "PolyForm-Shield-1.0.0",
   "category": "storage-protocols",
   "icon": "share",
   

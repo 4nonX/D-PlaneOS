@@ -1,6 +1,6 @@
 # D-PlaneOS v3.0.0 Installation Guide
 
-**Complete enterprise NAS with RBAC - Production Ready**
+**ZFS-based NAS with web UI, role-based access control, and Docker management**
 
 ---
 
@@ -345,4 +345,4 @@ After installation:
 
 ---
 
-**Installation complete! Your enterprise NAS is ready.**
+**Installation complete! Your NAS is ready.**

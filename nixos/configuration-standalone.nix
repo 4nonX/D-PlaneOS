@@ -58,7 +58,7 @@ let
     meta = with lib; {
       description = "D-PlaneOS NAS System Daemon";
       homepage = "https://github.com/4nonX/dplaneos";
-      license = licenses.mit;
+      license = licenses.unfree;  # PolyForm Shield 1.0.0
     };
   };
 

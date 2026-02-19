@@ -2,7 +2,7 @@
 
 ## Overview
 
-D-PlaneOS is designed to run on **any reasonable Linux-capable hardware**, from Raspberry Pi to enterprise servers. The system **automatically detects** hardware capabilities and **tunes itself** accordingly.
+D-PlaneOS is designed to run on **any reasonable Linux-capable hardware**, from low-power SBCs to multi-socket servers. The system **automatically detects** hardware capabilities and **tunes itself** accordingly.
 
 ---
 
@@ -73,14 +73,14 @@ D-PlaneOS is designed to run on **any reasonable Linux-capable hardware**, from 
 - ✅ **Atom** (Minimal performance, works)
 
 **Special Notes:**
-- Intel QuickSync: Not used (future feature)
+- Intel QuickSync: Not used by D-PlaneOS (media transcoding is handled by apps like Plex/Jellyfin running in Docker)
 - AVX/AVX2: Not required
 - VT-x/VT-d: Optional (for Docker)
 
 #### AMD
 - ✅ **Ryzen** (All series: 3, 5, 7, 9)
 - ✅ **Threadripper** (Excellent)
-- ✅ **EPYC** (Enterprise, excellent)
+- ✅ **EPYC** (server-grade, excellent)
 - ✅ **Athlon/A-Series** (Limited performance)
 
 **Special Notes:**
@@ -106,7 +106,7 @@ D-PlaneOS is designed to run on **any reasonable Linux-capable hardware**, from 
 | RAM Type | Status | Notes |
 |----------|--------|-------|
 | **ECC Unbuffered** | ✅ Recommended | Best for data integrity |
-| **ECC Registered** | ✅ Recommended | Enterprise servers |
+| **ECC Registered** | ✅ Recommended | Server hardware |
 | **Non-ECC** | ⚠️ Supported | See NON-ECC-WARNING.md |
 
 **Non-ECC Limitations:**
@@ -130,8 +130,8 @@ D-PlaneOS is designed to run on **any reasonable Linux-capable hardware**, from 
 | **8GB** | ✅ Good | ARC: 2GB, Inotify: 262K |
 | **16GB** | ✅ Great | ARC: 4GB, Inotify: 524K |
 | **32GB** | ✅ Excellent | ARC: 8GB, Inotify: 1M |
-| **64GB** | ✅ Enterprise | ARC: 16GB, Inotify: 1M |
-| **128GB+** | ✅ Enterprise | ARC: 32GB, Inotify: 1M |
+| **64GB** | ✅ High-end | ARC: 16GB, Inotify: 1M |
+| **128GB+** | ✅ High-end | ARC: 32GB, Inotify: 1M |
 
 **Virtualized Systems:**
 - ARC reduced by 25%
@@ -210,8 +210,8 @@ D-PlaneOS is designed to run on **any reasonable Linux-capable hardware**, from 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | **IPMI/BMC** | ✅ Supported | Server management |
-| **TPM** | ⚠️ Not Used | Future feature |
-| **Secure Boot** | ⚠️ Disabled | Requires signed kernel |
+| **TPM** | Not Used | ZFS handles encryption natively; TPM key sealing is a distro-level concern |
+| **Secure Boot** | Compatible | Works if your distro supports it; D-PlaneOS does not modify the boot chain |
 | **UEFI** | ✅ Full Support | Recommended |
 | **Legacy BIOS** | ✅ Supported | Works |
 
@@ -251,7 +251,7 @@ Auto-Tuned:
 Result: ✅ Smooth operation for home media server
 ```
 
-#### Scenario 2: Enterprise Server
+#### Scenario 2: High-End Server
 ```
 CPU: AMD EPYC 7452 (32 cores, 64 threads)
 RAM: 128GB DDR4 ECC
@@ -347,7 +347,7 @@ Result: ✅ Conservative tuning for virtualized environment
 1. Upgrade to ECC RAM
 2. Add NVMe for cache
 3. Upgrade to 10GbE
-4. Result: Enterprise-grade performance
+4. Result: High performance
 
 ### Home → Production
 1. **Must have:**
@@ -407,7 +407,7 @@ Result: ✅ Conservative tuning for virtualized environment
 - ✅ Auto-detects capabilities
 - ✅ Tunes itself accordingly
 - ✅ Degrades gracefully on low-end systems
-- ✅ Scales up to enterprise servers
+- ✅ Scales up to high-end servers
 
 **Minimum to run:** 2GB RAM, 1 CPU core  
 **Recommended for good experience:** 8GB RAM, 4 CPU threads  

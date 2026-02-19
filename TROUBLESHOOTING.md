@@ -248,12 +248,6 @@ docker pull <image-name>
 
 This tests Docker Hub connectivity and warns if unreachable.
 
-### Future Fix
-- Download progress indicator in GUI
-- Better error messages
-- Retry logic with exponential backoff
-- Offline mode with pre-downloaded images
-
 ---
 
 ## 4️⃣ Service Worker Cache Mismatch (LOW)
@@ -350,10 +344,9 @@ Safari:  Cmd+Option+R
 Why? Service Worker cache mismatch will break the UI
 ```
 
-### Future Fix
-- Service Worker version check on page load
-- Auto-prompt user to refresh if cache mismatch detected
-- Graceful degradation without Service Worker
+### Workaround
+- Hard refresh the page (Ctrl+Shift+R) to clear stale cache
+- If persistent, clear browser cache for the D-PlaneOS site
 
 ---
 

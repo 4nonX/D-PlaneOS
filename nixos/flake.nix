@@ -41,7 +41,11 @@
     system = "x86_64-linux";
     pkgs = import nixpkgs {
       inherit system;
-      config.allowUnfree = false;
+      config.allowUnfreePredicate = pkg: builtins.elem (nixpkgs.lib.getName pkg) [
+        "dplaned"
+        "dplaneos-frontend"
+        "dplaneos-recovery"
+      ];
     };
 
     # ─── D-PlaneOS Packages ──────────────────────────────
@@ -65,7 +69,7 @@
       meta = with pkgs.lib; {
         description = "D-PlaneOS NAS System Daemon";
         homepage = "https://github.com/4nonX/dplaneos";
-        license = licenses.mit;
+        license = licenses.unfree;  # PolyForm Shield 1.0.0
         platforms = platforms.linux;
       };
     };
