@@ -964,21 +964,7 @@ if (window.ConnectionMonitor) {
     <script>
 function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(function(c){c.classList.remove('active')});document.querySelectorAll('.consolidation-tab').forEach(function(b){b.classList.remove('active')});var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
 async function enable2FA() {
-        try {
-            const response = await csrfFetch('/api/auth/check?action=enable_2fa', {
-                method: 'POST',
-                body: JSON.stringify({})
-            });
-            const data = await response.json();
-            if (data.success) {
-                showToast('2FA QR Code displayed. Scan with your authenticator app.', 'success');
-                // Show QR code modal
-            } else {
-                showToast(data.error, 'error');
-            }
-        } catch (error) {
-            showToast('Failed to enable 2FA', 'error');
-        }
+        showToast('Two-factor authentication is not yet available in this version.', 'info');
     }
 
     async function changePassword() {
@@ -1014,78 +1000,16 @@ async function enable2FA() {
     }
 
     async function createAPIToken() {
-        const name = await ui.prompt('Create API Token', 'Enter token name:', '', 'My API Token');
-        if (!name) return;
-
-        try {
-            const response = await csrfFetch('/api/auth/check?action=create_api_token', {
-                method: 'POST',
-                body: JSON.stringify({ name, permissions: [] })
-            });
-            const data = await response.json();
-            if (data.success) {
-                const content = `
-                    <div class="warning-box mb-16">
-                        <p class="text-base mb-8"><strong>Save this token now!</strong></p>
-                        <p class="text-sm text-muted">This token will not be shown again. Copy it to a safe place.</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">API Token</label>
-                        <input type="text" class="form-input" value="${data.token}" readonly onclick="this.select()" id="tokenValue">
-                    </div>
-                `;
-                await ui.modal('API Token Created', content, [
-                    { text: 'Copy to Clipboard', icon: 'content_copy', callback: (modal) => {
-                        const input = modal.querySelector('#tokenValue');
-                        input.select();
-                        document.execCommand('copy');
-                        ui.toast('Token copied to clipboard', 'success');
-                        return false;
-                    }},
-                    { text: 'Close', primary: true }
-                ], { large: true });
-                loadAPITokens();
-            } else {
-                showToast(data.error, 'error');
-            }
-        } catch (error) {
-            showToast('Failed to create token', 'error');
-        }
+        showToast('API token management is not yet available in this version.', 'info');
     }
 
     async function loadAPITokens() {
-        try {
-            const response = await csrfFetch('/api/auth/check?action=list_api_tokens');
-            const data = await response.json();
-            if (data.success) {
-                const list = document.getElementById('apiTokensList');
-                list.innerHTML = data.tokens.map(t => `
-                    <div style="padding: 12px; background: #f5f5f5; margin-top: 8px; border-radius: 4px;">
-                        <strong>${t.name}</strong>
-                        <button onclick="revokeToken(${t.id})" class="btn btn-sm">Revoke</button>
-                    </div>
-                `).join('');
-            }
-        } catch (error) {
-            console.error('Failed to load tokens', error);
-        }
+        const list = document.getElementById('apiTokensList');
+        if (list) list.innerHTML = '<div style="padding:16px;color:var(--text-dim);text-align:center;">API token management coming soon.</div>';
     }
 
-    async function revokeToken(id) {
-        if (!await ui.confirm('Revoke Token', 'Revoke this API token? Any applications using this token will lose access immediately.')) return;
-        try {
-            const response = await csrfFetch('/api/auth/check?action=revoke_api_token', {
-                method: 'POST',
-                body: JSON.stringify({ token_id: id })
-            });
-            const data = await response.json();
-            if (data.success) {
-                showToast('Token revoked', 'success');
-                loadAPITokens();
-            }
-        } catch (error) {
-            showToast('Failed to revoke token', 'error');
-        }
+    async async function revokeToken(id) {
+        showToast('API token management is not yet available in this version.', 'info');
     }
 
     document.addEventListener('DOMContentLoaded', loadAPITokens);

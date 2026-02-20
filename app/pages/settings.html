@@ -1912,7 +1912,7 @@ var __config_init=false;function init_config(){if(__config_init)return;__config_
             }
         }
 
-        function resetToDefaults() {
+        async function resetToDefaults() {
             if (await ui.confirm('Reset Settings', 'Reset all settings to recommended defaults?')) {
                 document.getElementById('arc-slider').value = 8;
                 document.getElementById('swappiness-slider').value = 10;

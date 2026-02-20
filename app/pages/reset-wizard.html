@@ -127,7 +127,7 @@
     </div>
 
     <script>
-        function resetWizard() {
+        async function resetWizard() {
             if (await ui.confirm('Reset Wizard', 'Reset the setup wizard? It will appear again on next page load.')) {
                 // Clear localStorage flag
                 localStorage.removeItem('dplaneos_setup_completed');

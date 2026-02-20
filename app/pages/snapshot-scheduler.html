@@ -338,7 +338,7 @@ function toggleSchedule(i) {
   saveAllSchedules();
 }
 
-function removeSchedule(i) {
+async function removeSchedule(i) {
   if (!await ui.confirm("Remove Schedule", "Remove schedule for " + schedules[i].dataset + "?")) return;
   schedules.splice(i, 1);
   saveAllSchedules();
@@ -346,10 +346,15 @@ function removeSchedule(i) {
 
 async function saveAllSchedules() {
   try {
-    await fetch("/api/snapshots/schedules", {method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify(schedules)});
-    renderSchedules();
-    if (window.EnhancedUI) EnhancedUI.toast("Schedules saved", "success");
-  } catch(e) { if (window.EnhancedUI) EnhancedUI.toast("Failed to save", "error"); }
+    const r = await fetch("/api/snapshots/schedules", {method:"POST",headers:{"Content-Type":"application/json","X-Session-ID":getSessionId(),"X-User":getUser()},body:JSON.stringify(schedules)});
+    const d = await r.json();
+    if (d.success || r.ok) {
+      renderSchedules();
+      if (window.EnhancedUI) EnhancedUI.toast("Schedules saved", "success");
+    } else {
+      if (window.EnhancedUI) EnhancedUI.toast("Failed to save: " + (d.error || "Unknown error"), "error");
+    }
+  } catch(e) { if (window.EnhancedUI) EnhancedUI.toast("Failed to save: " + e.message, "error"); }
 }
 
 async function runNow(i) {

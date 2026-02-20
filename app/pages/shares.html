@@ -280,9 +280,9 @@ function renderShares(shares) {
     card.className = 'share-card';
     
     const protocols = [];
-    if (share.smb_enabled) protocols.push('<span class="badge badge-success">SMB</span>');
-    if (share.nfs_enabled) protocols.push('<span class="badge badge-info">NFS</span>');
-    if (share.afp_enabled) protocols.push('<span class="badge badge-warning">AFP</span>');
+    if (share.enabled !== false) protocols.push('<span class="badge badge-success">SMB</span>');
+    if (share.read_only) protocols.push('<span class="badge badge-warning">Read Only</span>');
+    if (share.guest_ok) protocols.push('<span class="badge">Guest OK</span>');
     
     card.innerHTML = `
       <div class="share-header">
@@ -297,7 +297,7 @@ function renderShares(shares) {
           <button class="icon-btn" onclick="deleteShare(${share.id}, '"+JSON.stringify(share.name)+"')" style="color: #ef4444;"><span class="material-symbols-rounded">delete</span></button>
         </div>
       </div>
-      ${share.description ? `<div style="color: rgba(255,255,255,0.6); font-size: 14px; margin-top: 12px;">${escapeHtml(share.description)}</div>` : ''}
+      ${share.description ? `<div style="color: rgba(255,255,255,0.6); font-size: 14px; margin-top: 12px;">${escapeHtml(share.comment)}</div>` : ''}
     `;
     
     container.appendChild(card);
@@ -308,9 +308,9 @@ async function createShare() {
   const result = await ui.form('Create Share', [
     { name: 'name', label: 'Share Name', type: 'text', required: true, placeholder: 'e.g., photos' },
     { name: 'path', label: 'Path', type: 'text', required: true, placeholder: '/pool/dataset/share' },
-    { name: 'description', label: 'Description', type: 'text', placeholder: 'Optional description' },
-    { name: 'smb_enabled', label: 'Enable SMB', type: 'checkbox', checked: true },
-    { name: 'nfs_enabled', label: 'Enable NFS', type: 'checkbox', checked: false }
+    { name: 'comment', label: 'Description', type: 'text', placeholder: 'Optional description' },
+    { name: 'read_only', label: 'Read Only', type: 'checkbox' },
+    { name: 'guest_ok', label: 'Allow Guest Access', type: 'checkbox' }
   ], 'Create');
   
   if (result) {
@@ -352,9 +352,9 @@ async function editShare(id) {
       const result = await ui.form('Edit Share', [
         { name: 'name', label: 'Share Name', type: 'text', required: true, value: share.name },
         { name: 'path', label: 'Path', type: 'text', required: true, value: share.path },
-        { name: 'description', label: 'Description', type: 'text', value: share.description || '' },
-        { name: 'smb_enabled', label: 'Enable SMB', type: 'checkbox', checked: share.smb_enabled },
-        { name: 'nfs_enabled', label: 'Enable NFS', type: 'checkbox', checked: share.nfs_enabled }
+        { name: 'comment', label: 'Description', type: 'text', value: share.comment || '' },
+        { name: 'read_only', label: 'Read Only', type: 'checkbox', checked: share.read_only },
+        { name: 'guest_ok', label: 'Allow Guest Access', type: 'checkbox', checked: share.guest_ok }
       ], 'Save');
       
       if (result) {

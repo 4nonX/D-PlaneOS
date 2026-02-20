@@ -213,19 +213,7 @@ class AlertSystem {
             toast.remove();
         }, 300);
         
-        // Mark as dismissed in backend
-        try {
-            await fetch('/api/metrics/current?action=dismiss', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': getCSRFToken()
-                },
-                body: JSON.stringify({ alert_id: alertId })
-            });
-        } catch (error) {
-            console.error('Failed to dismiss alert:', error);
-        }
+        // Alert dismissed (client-side only)
     }
     
     /**
@@ -274,25 +262,8 @@ class AlertSystem {
      * Acknowledge critical alert
      */
     async acknowledgeCritical(alertId) {
-        try {
-            const response = await fetch('/api/metrics/current?action=acknowledge', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': getCSRFToken()
-                },
-                body: JSON.stringify({ alert_id: alertId })
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                // Reload alerts to update display
-                this.loadAlerts();
-            }
-        } catch (error) {
-            console.error('Failed to acknowledge alert:', error);
-        }
+        // Alert acknowledged (client-side only)
+        this.activeCritical = null;
     }
     
     /**

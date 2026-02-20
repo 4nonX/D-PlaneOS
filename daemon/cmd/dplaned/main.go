@@ -210,6 +210,7 @@ func main() {
 	r.HandleFunc("/api/zfs/command", zfsHandler.HandleCommand).Methods("POST")
 	r.HandleFunc("/api/zfs/pools", zfsHandler.ListPools).Methods("GET")
 	r.HandleFunc("/api/zfs/datasets", zfsHandler.ListDatasets).Methods("GET")
+	r.HandleFunc("/api/zfs/datasets", zfsHandler.CreateDataset).Methods("POST")
 	
 	// ZFS Encryption handlers
 	zfsEncryptionHandler := handlers.NewZFSEncryptionHandler()
@@ -222,6 +223,7 @@ func main() {
 	// System handlers
 	systemHandler := handlers.NewSystemHandler()
 	r.HandleFunc("/api/system/ups", systemHandler.GetUPSStatus).Methods("GET")
+	r.HandleFunc("/api/system/ups", systemHandler.SaveUPSConfig).Methods("POST")
 	r.HandleFunc("/api/system/network", systemHandler.GetNetworkInfo).Methods("GET")
 	r.HandleFunc("/api/system/logs", systemHandler.GetSystemLogs).Methods("GET")
 
@@ -261,7 +263,7 @@ func main() {
 	sandboxHandler := handlers.NewZFSSandboxHandler()
 	r.HandleFunc("/api/sandbox/create", sandboxHandler.CreateSandbox).Methods("POST")
 	r.HandleFunc("/api/sandbox/list", sandboxHandler.ListSandboxes).Methods("GET")
-	r.HandleFunc("/api/sandbox/destroy", sandboxHandler.DestroySandbox).Methods("DELETE")
+	r.HandleFunc("/api/sandbox/destroy", sandboxHandler.DestroySandbox).Methods("DELETE", "POST")
 
 	// v2.1.0: NixOS Config Guard (only active on NixOS systems)
 	nixosGuardHandler := handlers.NewNixOSGuardHandler()
@@ -434,7 +436,7 @@ func main() {
 	r.HandleFunc("/api/files/chmod", handlers.ChangePermissions).Methods("POST")
 	
 	// Backup handlers
-	r.HandleFunc("/api/backup/rsync", handlers.ExecuteRsync).Methods("POST")
+	r.HandleFunc("/api/backup/rsync", handlers.ExecuteRsync).Methods("GET", "POST")
 	
 	// Replication handlers
 	r.HandleFunc("/api/replication/send", handlers.ZFSSend).Methods("POST")

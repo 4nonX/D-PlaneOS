@@ -567,7 +567,7 @@
 <script>
 async function clearStaleLocks() {
   try { const r = await csrfFetch('/api/system/stale-locks/clear',{method:'POST'}); const d = await r.json();
-    d.success ? ui.toast('Stale locks cleared','success') : ui.toast(d.error,'error');
+    if (d.success) { ui.toast('Stale locks cleared','success'); loadDashboard(); } else { ui.toast(d.error,'error'); }
   } catch(e) { ui.toast('Failed','error'); }
 }
 </script>

@@ -9,13 +9,28 @@ import (
 	"dplaned/internal/security"
 )
 
-// ExecuteRsync executes rsync backup
+// ExecuteRsync handles GET (list tasks — returns empty, rsync is fire-and-forget)
+// and POST (execute rsync backup)
 func ExecuteRsync(w http.ResponseWriter, r *http.Request) {
 	user := r.Header.Get("X-User")
 	sessionID := r.Header.Get("X-Session-ID")
 
 	if valid, _ := security.ValidateSession(sessionID, user); !valid {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// GET: return empty task list (rsync jobs are not persisted)
+	if r.Method == http.MethodGet {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"tasks":   []interface{}{},
+		})
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 

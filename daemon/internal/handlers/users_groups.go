@@ -34,6 +34,31 @@ func (h *UserGroupHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserGroupHandler) listUsers(w http.ResponseWriter, r *http.Request) {
+	// Support ?id= for single-user lookup
+	if idStr := r.URL.Query().Get("id"); idStr != "" {
+		var id, active int
+		var username, email, role, createdAt string
+		err := h.db.QueryRow(
+			`SELECT id, username, COALESCE(email,''), COALESCE(role,'user'), active, COALESCE(created_at,'') FROM users WHERE id = ?`, idStr,
+		).Scan(&id, &username, &email, &role, &active, &createdAt)
+		if err != nil {
+			respondErrorSimple(w, "User not found", http.StatusNotFound)
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+			"user": map[string]interface{}{
+				"id":         id,
+				"username":   username,
+				"email":      email,
+				"role":       role,
+				"active":     active == 1,
+				"created_at": createdAt,
+			},
+		})
+		return
+	}
+
 	rows, err := h.db.Query(`SELECT id, username, COALESCE(email,''), COALESCE(role,'user'), active, COALESCE(created_at,'') FROM users ORDER BY id`)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to list users", err)
@@ -240,7 +265,31 @@ func (h *UserGroupHandler) listGroups(w http.ResponseWriter, r *http.Request) {
 		FOREIGN KEY (user_id) REFERENCES users(id)
 	)`)
 
-	rows, err := h.db.Query(`SELECT id, name, COALESCE(description,''), COALESCE(gid,0), COALESCE(created_at,'') FROM groups ORDER BY name`)
+	// Support ?id= for single-group lookup
+	if idStr := r.URL.Query().Get("id"); idStr != "" {
+		var id, gid int
+		var name, desc, createdAt string
+		err := h.db.QueryRow(
+			`SELECT id, name, COALESCE(description,''), COALESCE(gid,0), COALESCE(created_at,'') FROM groups WHERE id = ?`, idStr,
+		).Scan(&id, &name, &desc, &gid, &createdAt)
+		if err != nil {
+			respondErrorSimple(w, "Group not found", http.StatusNotFound)
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+			"group": map[string]interface{}{
+				"id":          id,
+				"name":        name,
+				"description": desc,
+				"gid":         gid,
+				"created_at":  createdAt,
+			},
+		})
+		return
+	}
+
+		rows, err := h.db.Query(`SELECT id, name, COALESCE(description,''), COALESCE(gid,0), COALESCE(created_at,'') FROM groups ORDER BY name`)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to list groups", err)
 		return

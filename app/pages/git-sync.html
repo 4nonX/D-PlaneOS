@@ -710,10 +710,12 @@ async function saveRepo() {
 
 async function deleteRepo(id, name) {
   if (!await ui.confirm('Delete Sync', 'Delete "' + name + '"? The local clone will not be removed.')) return;
-  const r = await csrfFetch('/api/git-sync/repos/delete?id=' + id, {method:'POST'});
-  const d = await r.json();
-  if (d.success) { ui.toast('Sync deleted', 'success'); loadRepos(); }
-  else ui.toast(d.error || 'Failed', 'error');
+  try {
+    const r = await csrfFetch('/api/git-sync/repos/delete?id=' + id, {method:'POST'});
+    const d = await r.json();
+    if (d.success) { ui.toast('Sync deleted', 'success'); loadRepos(); }
+    else ui.toast(d.error || 'Failed to delete', 'error');
+  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
 }
 
 // ── Repo Actions ───────────────────────────────────────────────
@@ -888,10 +890,12 @@ async function testCred() {
 
 async function deleteCred(id, name) {
   if (!await ui.confirm('Delete Credential', 'Delete "' + name + '"? Syncs using this credential will stop authenticating.')) return;
-  const r = await csrfFetch('/api/git-sync/credentials/delete?id=' + id, {method:'POST'});
-  const d = await r.json();
-  if (d.success) { ui.toast('Credential deleted', 'success'); loadCredentials(); }
-  else ui.toast(d.error || 'Failed', 'error');
+  try {
+    const r = await csrfFetch('/api/git-sync/credentials/delete?id=' + id, {method:'POST'});
+    const d = await r.json();
+    if (d.success) { ui.toast('Credential deleted', 'success'); loadCredentials(); }
+    else ui.toast(d.error || 'Failed to delete', 'error');
+  } catch(e) { ui.toast('Error: ' + e.message, 'error'); }
 }
 
 // ── Legacy Status ──────────────────────────────────────────────

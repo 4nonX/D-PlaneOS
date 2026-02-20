@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -182,9 +183,98 @@ func (h *ZFSHandler) ListDatasets(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Helper functions
+// CreateDataset handles POST /api/zfs/datasets
+// Body: { "name": "tank/photos", "mountpoint": "/tank/photos", "quota": "100G", "compression": "lz4" }
+func (h *ZFSHandler) CreateDataset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-// executeCommand runs a command with timeout and returns ONLY stdout.
+	user := r.Header.Get("X-User")
+	sessionID := r.Header.Get("X-Session-ID")
+
+	if !security.IsValidSessionToken(sessionID) {
+		audit.LogSecurityEvent("Invalid session token", user, r.RemoteAddr)
+		respondErrorSimple(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name"`        // full ZFS path: pool/child or pool/parent/child
+		Mountpoint  string `json:"mountpoint"`  // optional: /tank/photos
+		Quota       string `json:"quota"`       // optional: 100G, 1T
+		Compression string `json:"compression"` // optional: lz4, zstd, gzip, off
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate dataset name: must be pool/name or pool/parent/child
+	namePattern := regexp.MustCompile(`^[a-zA-Z0-9_\-]+(/[a-zA-Z0-9_\-]+)+$`)
+	if !namePattern.MatchString(req.Name) {
+		respondErrorSimple(w, "Invalid dataset name: use pool/name format, alphanumeric and - _ only", http.StatusBadRequest)
+		return
+	}
+
+	start := time.Now()
+
+	// Step 1: zfs create <name>
+	if err := security.ValidateCommand("zfs_create", []string{"create", req.Name}); err != nil {
+		respondErrorSimple(w, "Dataset name not allowed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	_, err := executeCommand("/usr/sbin/zfs", []string{"create", req.Name})
+	duration := time.Since(start)
+	audit.LogCommand(audit.LevelInfo, user, "zfs_create", []string{req.Name}, err == nil, duration, err)
+	if err != nil {
+		respondOK(w, CommandResponse{Success: false, Error: err.Error(), Duration: duration.Milliseconds()})
+		return
+	}
+
+	// Step 2: set optional properties
+	type prop struct{ key, val string }
+	var props []prop
+
+	if req.Compression != "" && req.Compression != "inherit" {
+		allowed := map[string]bool{"lz4": true, "zstd": true, "gzip": true, "off": true}
+		if allowed[req.Compression] {
+			props = append(props, prop{"compression", req.Compression})
+		}
+	}
+	if req.Quota != "" {
+		quotaPattern := regexp.MustCompile(`^[0-9]+[KMGTP]?$`)
+		if quotaPattern.MatchString(req.Quota) {
+			props = append(props, prop{"quota", req.Quota})
+		}
+	}
+	if req.Mountpoint != "" {
+		mpPattern := regexp.MustCompile(`^/[a-zA-Z0-9_\-/]+$`)
+		if mpPattern.MatchString(req.Mountpoint) {
+			props = append(props, prop{"mountpoint", req.Mountpoint})
+		}
+	}
+
+	for _, p := range props {
+		kv := p.key + "=" + p.val
+		if err2 := security.ValidateCommand("zfs_set_property", []string{"set", kv, req.Name}); err2 == nil {
+			setDur := time.Now()
+			_, setErr := executeCommand("/usr/sbin/zfs", []string{"set", kv, req.Name})
+			audit.LogCommand(audit.LevelInfo, user, "zfs_set_property",
+				[]string{kv, req.Name}, setErr == nil, time.Since(setDur), setErr)
+			// Non-fatal: log but continue
+		}
+	}
+
+	respondOK(w, CommandResponse{
+		Success:  true,
+		Output:   "Dataset " + req.Name + " created",
+		Duration: time.Since(start).Milliseconds(),
+	})
+}
+
+
 // Stderr is logged separately to prevent warning messages (e.g. "pool is DEGRADED")
 // from being misinterpreted as data by the ZFS parsers.
 func executeCommand(path string, args []string) (string, error) {

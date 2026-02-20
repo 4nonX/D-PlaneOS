@@ -618,7 +618,7 @@ async function composeUp() {
   if (!path) { ui.toast('Enter compose file path', 'warning'); return; }
   ui.toast('Starting stack...', 'info');
   try { const r = await csrfFetch('/api/docker/compose/up',{method:'POST',body:JSON.stringify({path})}); const d = await r.json();
-    showOutput('compose-output', d.output || d.error); d.success ? ui.toast('Stack started', 'success') : ui.toast(d.error, 'error');
+    showOutput('compose-output', d.output || d.error); if (d.success) { ui.toast('Stack started', 'success'); setTimeout(() => loadContainers(), 1500); } else { ui.toast(d.error, 'error'); }
   } catch(e) { ui.toast('Failed', 'error'); }
 }
 async function composeDown() {
@@ -626,7 +626,7 @@ async function composeDown() {
   if (!path) { ui.toast('Enter compose file path', 'warning'); return; }
   if (!await ui.confirm('Compose Down', 'Stop and remove all containers in this stack?')) return;
   try { const r = await csrfFetch('/api/docker/compose/down',{method:'POST',body:JSON.stringify({path})}); const d = await r.json();
-    showOutput('compose-output', d.output || d.error); d.success ? ui.toast('Stack stopped', 'success') : ui.toast(d.error, 'error');
+    showOutput('compose-output', d.output || d.error); if (d.success) { ui.toast('Stack stopped', 'success'); setTimeout(() => loadContainers(), 1500); } else { ui.toast(d.error, 'error'); }
   } catch(e) { ui.toast('Failed', 'error'); }
 }
 async function composeStatus() {
@@ -649,7 +649,7 @@ async function removeContainer() {
   if (!name) { ui.toast('Enter container name', 'warning'); return; }
   if (!await ui.confirm('Remove Container', 'Remove container ' + name + '?')) return;
   try { const r = await csrfFetch('/api/docker/remove',{method:'POST',body:JSON.stringify({container:name})}); const d = await r.json();
-    d.success ? ui.toast('Container removed', 'success') : ui.toast(d.error, 'error');
+    if (d.success) { ui.toast('Container removed', 'success'); setTimeout(() => loadContainers(), 600); } else { ui.toast(d.error, 'error'); }
   } catch(e) { ui.toast('Failed', 'error'); }
 }
 async function updateContainer() {
@@ -658,7 +658,7 @@ async function updateContainer() {
   if (!await ui.confirm('Update Container', 'Pull latest image and recreate ' + name + '?')) return;
   ui.toast('Updating...', 'info');
   try { const r = await csrfFetch('/api/docker/update',{method:'POST',body:JSON.stringify({container:name})}); const d = await r.json();
-    showOutput('container-output', d.output || d.error); d.success ? ui.toast('Updated', 'success') : ui.toast(d.error, 'error');
+    showOutput('container-output', d.output || d.error); if (d.success) { ui.toast('Updated', 'success'); setTimeout(() => loadContainers(), 1000); } else { ui.toast(d.error, 'error'); }
   } catch(e) { ui.toast('Failed', 'error'); }
 }
 async function containerStats() {

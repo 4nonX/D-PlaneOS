@@ -97,7 +97,7 @@ async function configureInterface(name) {
     ui.showLoading('Applying network configuration...');
     
     try {
-      const response = await csrfFetch('/api/system/network', {
+      const response = await csrfFetch('/api/network/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'configure', interface: name, ...result })
@@ -129,7 +129,7 @@ async function configureVPN() {
     ui.showLoading('Saving VPN settings...');
     
     try {
-      const response = await csrfFetch('/api/system/network', {
+      const response = await csrfFetch('/api/network/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'vpn', ...result })
@@ -332,7 +332,7 @@ async function configureInterface(name) {
     ui.showLoading('Applying network configuration...');
     
     try {
-      const response = await csrfFetch('/api/system/network', {
+      const response = await csrfFetch('/api/network/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'configure', interface: name, ...result })
@@ -364,7 +364,7 @@ async function configureVPN() {
     ui.showLoading('Saving VPN settings...');
     
     try {
-      const response = await csrfFetch('/api/system/network', {
+      const response = await csrfFetch('/api/network/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'vpn', ...result })
@@ -558,7 +558,7 @@ async function createBondUI() {
   const data = { name: document.getElementById('bond-name').value, slaves: document.getElementById('bond-slaves').value.split(',').map(s=>s.trim()), mode: document.getElementById('bond-mode').value };
   if (!data.name || !data.slaves.length) { ui.toast('Name and slaves required','warning'); return; }
   if (!await ui.confirm('Create Bond', `Create ${data.name} (${data.mode}) with ${data.slaves.join(', ')}?`)) return;
-  try { const r = await csrfFetch('/api/network/bond', {method:'POST',body:JSON.stringify(data)}); const d = await r.json(); d.success ? ui.toast('Bond created','success') : ui.toast(d.error,'error'); } catch(e) { ui.toast('Failed','error'); }
+  try { const r = await csrfFetch('/api/network/bond', {method:'POST',body:JSON.stringify(data)}); const d = await r.json(); if (d.success) { ui.toast('Bond created','success'); setTimeout(() => loadNetworkInterfaces(), 1000); } else { ui.toast(d.error,'error'); } } catch(e) { ui.toast('Failed','error'); }
 }
 async function loadNTP() {
   try { const r = await csrfFetch('/api/system/ntp'); const d = await r.json();
@@ -722,7 +722,7 @@ async function configureInterface(name) {
     ui.showLoading('Applying network configuration...');
     
     try {
-      const applyResponse = await csrfFetch('/api/system/network', {
+      const applyResponse = await csrfFetch('/api/network/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -825,7 +825,7 @@ async function saveDNSChange(data) {
   ui.showLoading('Updating DNS configuration...');
   
   try {
-    const response = await csrfFetch('/api/system/network', {
+    const response = await csrfFetch('/api/network/apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -899,7 +899,7 @@ async function addRoute() {
     ui.showLoading('Adding route...');
     
     try {
-      const response = await csrfFetch('/api/system/network', {
+      const response = await csrfFetch('/api/network/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'add', ...result })
@@ -926,7 +926,7 @@ async function deleteRoute(route) {
     ui.showLoading('Deleting route...');
     
     try {
-      const response = await csrfFetch('/api/system/network', {
+      const response = await csrfFetch('/api/network/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', destination: route.destination, gateway: route.gateway })

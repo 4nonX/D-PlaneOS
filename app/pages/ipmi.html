@@ -572,6 +572,12 @@ async function checkIPMIStatus() {
       document.getElementById('sensorsEmpty').style.display = 'block';
       document.getElementById('eventsLoading').classList.remove('active');
       document.getElementById('eventsEmpty').style.display = 'block';
+      
+      // Disable all power buttons when IPMI is not available
+      document.querySelectorAll('.power-btn').forEach(btn => {
+        btn.disabled = true;
+        btn.title = 'IPMI not available on this system';
+      });
     }
   } catch (error) {
     console.error('Failed to check IPMI status:', error);
@@ -757,7 +763,7 @@ async function doPowerOperation(operation) {
     }
   } catch (error) {
     console.error('Power operation failed:', error);
-    showToast('Failed to execute power operation', 'error');
+    showToast('Power operation failed — IPMI not accessible', 'error');
   }
 }
 

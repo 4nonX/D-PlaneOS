@@ -92,6 +92,38 @@ var CommandWhitelist = map[string]Command{
 		ArgPatterns: []*regexp.Regexp{regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)},
 		Description: "Start ZFS pool scrub",
 	},
+	"zpool_add_cache": {
+		Name:        "zpool_add_cache",
+		Path:        "/usr/sbin/zpool",
+		AllowedArgs: []string{"add"},
+		ArgPatterns: []*regexp.Regexp{
+			regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`),     // pool name
+			regexp.MustCompile(`^cache$`),                 // "cache" keyword
+			regexp.MustCompile(`^[a-zA-Z0-9_\-/]+$`),    // device path
+		},
+		Description: "Add L2ARC cache device to pool",
+	},
+	"zpool_add_log": {
+		Name:        "zpool_add_log",
+		Path:        "/usr/sbin/zpool",
+		AllowedArgs: []string{"add"},
+		ArgPatterns: []*regexp.Regexp{
+			regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`),     // pool name
+			regexp.MustCompile(`^(?:log|mirror)$`),        // "log" or "mirror"
+			regexp.MustCompile(`^[a-zA-Z0-9_\-/]+$`),    // device path
+		},
+		Description: "Add ZIL log device to pool",
+	},
+	"zpool_remove_device": {
+		Name:        "zpool_remove_device",
+		Path:        "/usr/sbin/zpool",
+		AllowedArgs: []string{"remove"},
+		ArgPatterns: []*regexp.Regexp{
+			regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`),    // pool name
+			regexp.MustCompile(`^[a-zA-Z0-9_\-/]+$`),   // device path
+		},
+		Description: "Remove cache or log device from pool",
+	},
 	"zpool_import_scan": {
 		Name:        "zpool_import_scan",
 		Path:        "/usr/sbin/zpool",
@@ -110,10 +142,10 @@ var CommandWhitelist = map[string]Command{
 		Path:        "/usr/sbin/zfs",
 		AllowedArgs: []string{"set"},
 		ArgPatterns: []*regexp.Regexp{
-			regexp.MustCompile(`^[a-zA-Z0-9_\-\./:]+=[a-zA-Z0-9_\-\.:]+$`), // property=value
+			regexp.MustCompile(`^[a-zA-Z0-9_\-\./:]+=[a-zA-Z0-9_\-\.:/]+$`), // property=value (/ allowed for mountpoint=/tank/data)
 			regexp.MustCompile(`^[a-zA-Z0-9_\-\./]+$`),                     // dataset name
 		},
-		Description: "Set ZFS property (for pool adoption and ACL configuration)",
+		Description: "Set ZFS property (mountpoint, quota, compression, etc.)",
 	},
 	
 	// Network Management

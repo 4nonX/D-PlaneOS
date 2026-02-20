@@ -454,8 +454,26 @@ async function testRemote() {
 async function startReplication() {
   const data = { snapshot:document.getElementById('repl-snap').value, remote_host:document.getElementById('repl-host').value, remote_pool:document.getElementById('repl-pool').value, rate_limit:document.getElementById('repl-rate').value, resume:document.getElementById('repl-resume').checked, compressed:document.getElementById('repl-compressed').checked, remote_user:'root' };
   if (!data.snapshot||!data.remote_host||!data.remote_pool) { ui.toast('Fill all required fields','warning'); return; }
-  ui.toast('Replication started...','info');
-  try { const r = await csrfFetch('/api/replication/remote',{method:'POST',body:JSON.stringify(data)}); const d = await r.json(); d.success ? ui.toast('Replication complete ('+d.duration_ms+'ms)','success') : ui.toast(d.error||'Failed','error'); } catch(e) { ui.toast('Error','error'); }
+  const btn = document.querySelector('[onclick*="startReplication"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Replicating…'; }
+  ui.showLoading('Replicating data — this may take several minutes for large datasets…');
+  try {
+    const r = await csrfFetch('/api/replication/remote',{method:'POST',body:JSON.stringify(data)});
+    const d = await r.json();
+    ui.hideLoading();
+    if (btn) { btn.disabled = false; btn.textContent = 'Start Replication'; }
+    if (d.success) {
+      const ms = d.duration_ms || 0;
+      const sec = (ms/1000).toFixed(1);
+      ui.toast('Replication complete in '+sec+'s', 'success');
+    } else {
+      ui.toast(d.error||'Replication failed', 'error');
+    }
+  } catch(e) {
+    ui.hideLoading();
+    if (btn) { btn.disabled = false; btn.textContent = 'Start Replication'; }
+    ui.toast('Error: '+e.message, 'error');
+  }
 }
 </script>
     <script src="/assets/js/nav-flyout.js"></script>

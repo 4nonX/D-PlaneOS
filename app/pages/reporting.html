@@ -1894,7 +1894,7 @@ async function clearLogs() {
     ui.showLoading('Clearing logs...');
     
     try {
-      const response = await csrfFetch('/api/system/logs', {
+      const response = await csrfFetch('/api/system/audit/rotate', {
         method: 'POST'
       });
       

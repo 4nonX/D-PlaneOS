@@ -99,6 +99,79 @@ func (h *SystemHandler) GetUPSStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// SaveUPSConfig handles POST /api/system/ups
+// Persists UPS shutdown action and thresholds to /etc/nut/upsmon.conf
+func (h *SystemHandler) SaveUPSConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user := r.Header.Get("X-User")
+	sessionID := r.Header.Get("X-Session-ID")
+
+	if !security.IsValidSessionToken(sessionID) {
+		audit.LogSecurityEvent("Invalid session token", user, r.RemoteAddr)
+		respondErrorSimple(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Action    string `json:"action"`    // "shutdown" or "hibernate"
+		Threshold int    `json:"threshold"` // battery % to trigger
+		Grace     int    `json:"grace"`     // seconds grace period
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate
+	if req.Action != "shutdown" && req.Action != "hibernate" {
+		req.Action = "shutdown"
+	}
+	if req.Threshold < 1 || req.Threshold > 99 {
+		req.Threshold = 20
+	}
+	if req.Grace < 0 || req.Grace > 600 {
+		req.Grace = 30
+	}
+
+	// Write upsmon.conf snippet — create/overwrite dplaned section
+	conf := fmt.Sprintf(
+		"# D-PlaneOS UPS config — do not edit this block manually\n"+
+			"MINSUPPLIES 1\n"+
+			"SHUTDOWNCMD \"/sbin/%s -h now\"\n"+
+			"NOTIFYCMD /usr/sbin/upssched\n"+
+			"POLLFREQ 5\n"+
+			"POLLFREQALERT 5\n"+
+			"HOSTSYNC 15\n"+
+			"DEADTIME 15\n"+
+			"RBWARNTIME 43200\n"+
+			"NOCOMMWARNTIME 300\n"+
+			"FINALDELAY %d\n",
+		req.Action, req.Grace,
+	)
+
+	confPath := "/etc/nut/upsmon.d/dplaneos.conf"
+	if err := os.MkdirAll("/etc/nut/upsmon.d", 0750); err != nil {
+		respondErrorSimple(w, "Cannot create config dir: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := os.WriteFile(confPath, []byte(conf), 0640); err != nil {
+		respondErrorSimple(w, "Cannot write config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	audit.LogActivity(user, "ups_config_save", map[string]interface{}{
+		"action":    req.Action,
+		"threshold": req.Threshold,
+		"grace":     req.Grace,
+	})
+
+	respondOK(w, CommandResponse{Success: true, Output: "UPS config saved"})
+}
+
 func (h *SystemHandler) GetNetworkInfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		h.handleNetworkGet(w, r, r.Header.Get("X-User"))
