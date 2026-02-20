@@ -5,6 +5,7 @@
 | Version | Supported |
 |---------|-----------|
 | v3.0.0  | ✅ Current release |
+| v2.2.0 | ⚠️ Legacy — critical fixes only |
 | v2.1.0 | ⚠️ Legacy — critical fixes only |
 | v2.0.0-OMEGA | ⚠️ Legacy — critical fixes only |
 | < v1.14.0 | ❌ End of life |
