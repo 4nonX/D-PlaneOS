@@ -228,3 +228,11 @@ D-PlaneOS is a NAS management layer running on top of NixOS or Debian/Ubuntu. It
 - **SQLite plaintext** — DB is not encrypted independently; relies on ZFS pool-level encryption if the pool is configured that way
 - **No API request signing** — no HMAC or nonce scheme for critical destructive operations (pool export, dataset destroy, Docker remove)
 - **CSP not set by daemon** — CSP only present in nginx config; direct connections to port 9000 have no CSP
+
+## Recommended deployment: 
+Run behind a VPN or reverse proxy with authentication (e. g. WireGuard, Tailscale, Cloudflare, Pangolin). 
+Enable ZFS dataset encryption with a strong passphrase for protection against physical access. 
+Do not expose port 9000 directly to the internet.
+For internet-facing deployments, layered security middlewares are strongly recommended: 
+CrowdSec (proactive IP reputation), GeoBlock (country-level filtering), and Fail2ban (reactive ban on suspicious behaviour) 
+in front of the reverse proxy.
