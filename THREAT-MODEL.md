@@ -1,4 +1,4 @@
-# D-PlaneOS v3.2.0 — Threat Model
+# D-PlaneOS v3.2.1 — Threat Model
 
 ## System Context
 
@@ -110,8 +110,9 @@ D-PlaneOS is a NAS management layer running on top of NixOS or Debian/Ubuntu. It
 **Mitigation**:
 - CSP header set in `nginx-dplaneos.conf`: `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; frame-ancestors 'self';`
 - API responses are JSON, not rendered HTML
+- All server-sourced values interpolated into `innerHTML` are passed through an `esc()` / `escapeHtml()` sanitiser before insertion — applied consistently across all frontend pages and the alert system (v3.2.1)
 
-**Residual risk**: MEDIUM. The frontend uses `innerHTML` with template literals in several places (`alert-system.js`, `enhanced-ui.js`, `connection-monitor.js`), interpolating server-sourced values such as `alert.title`, `alert.message`, and `alert.alert_id` directly into HTML. If an attacker can inject a malicious alert title via a compromised monitoring event or API, it would execute in the browser. CSP `'unsafe-inline'` does not block inline event handlers injected via `innerHTML`. This should be migrated to `textContent` / DOM APIs or a sanitisation library.
+**Residual risk**: LOW. CSP `'unsafe-inline'` remains present for style/script compatibility; the sanitiser closes the practical injection vector. Residual theoretical risk requires both a server-side data injection and a sanitiser bypass simultaneously.
 
 ---
 
@@ -220,19 +221,16 @@ D-PlaneOS is a NAS management layer running on top of NixOS or Debian/Ubuntu. It
 
 ---
 
-## Known Gaps (not mitigated in v3.2.0)
+## Recommended Deployment
+
+Run behind a VPN or reverse proxy with authentication (e.g. WireGuard, Tailscale, Cloudflare, Pangolin). Enable ZFS dataset encryption with a strong passphrase for protection against physical access. Do not expose port 9000 directly to the internet. For internet-facing deployments, layered security middlewares are strongly recommended: CrowdSec (proactive IP reputation), GeoBlock (country-level filtering), and Fail2ban (reactive ban on suspicious behaviour) in front of the reverse proxy.
+
+---
+
+## Known Gaps (not mitigated in v3.2.1)
 
 - **Partial RBAC coverage** — many operational routes (ZFS, Docker, snapshots, replication, system) are session-authenticated but lack per-route `RequirePermission` checks
-- **innerHTML with server data** — `alert.title`, `alert.message`, and similar fields are interpolated into `innerHTML` without sanitisation; CSP `'unsafe-inline'` does not mitigate injected event handlers
 - **ZFS keys not auto-locked on shutdown** — `zfs unload-key` must be called manually before powering down if encryption-at-rest is required
 - **SQLite plaintext** — DB is not encrypted independently; relies on ZFS pool-level encryption if the pool is configured that way
 - **No API request signing** — no HMAC or nonce scheme for critical destructive operations (pool export, dataset destroy, Docker remove)
 - **CSP not set by daemon** — CSP only present in nginx config; direct connections to port 9000 have no CSP
-
-## Recommended deployment: 
-Run behind a VPN or reverse proxy with authentication (e. g. WireGuard, Tailscale, Cloudflare, Pangolin). 
-Enable ZFS dataset encryption with a strong passphrase for protection against physical access. 
-Do not expose port 9000 directly to the internet.
-For internet-facing deployments, layered security middlewares are strongly recommended: 
-CrowdSec (proactive IP reputation), GeoBlock (country-level filtering), and Fail2ban (reactive ban on suspicious behaviour) 
-in front of the reverse proxy.

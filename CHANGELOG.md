@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## v3.2.1 (2026-02-21) — **"XSS Sanitisation"**
+
+### 🔒 Security: Frontend XSS sanitisation (T5 closure)
+- Added `esc()` / `escapeHtml()` sanitiser to all frontend pages and the alert system
+- Server-sourced values (`alert.title`, `alert.message`, `alert.alert_id`, log fields, UPS hardware strings, dataset names, error messages) are now escaped before `innerHTML` insertion
+- Affected files: `alert-system.js`, `audit.html`, `docker.html`, `iscsi.html`, `pools.html`, `ups.html`, `reporting.html`, `system-updates.html`
+- T5 residual risk downgraded from MEDIUM to LOW in `THREAT-MODEL.md`
+
+### 📄 Documentation
+- All version references bumped to v3.2.1 across all docs, scripts, and NixOS modules
+- `THREAT-MODEL.md` updated to reflect v3.2.1 security posture (T5 mitigated, Known Gaps updated)
+
+### ✅ Compatibility
+- Drop-in replacement for v3.2.0. No schema changes, no daemon flag changes, no config changes.
+- Binary rebuilt with `-X main.Version=3.2.1`
+
+---
+
 ## v3.2.0 (2026-02-21) — **"networkd Persistence"**
 
 ### ⚡ Architecture: systemd-networkd file writer (networkdwriter)
@@ -34,11 +52,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Samba persistence: declarative NixOS ownership + imperative share management via include bridge
 - `/etc/systemd/network` naming convention: NixOS owns `10-`/`20-` prefix, D-PlaneOS owns `50-dplane-`
 
-### ✅ Security & Stability
-- SSH hardening: PasswordAuthentication=false, PermitRootLogin=no
-- Support bundle: `POST /api/system/support-bundle` streams diagnostic .tar.gz
-- Pre-upgrade ZFS snapshots: automatic `@pre-upgrade-<timestamp>` before every rebuild
-- Firewall sync endpoint: `POST /api/firewall/sync` for NixOS port list persistence
+### 🔒 Security & Stability
+- SSH hardening: `PasswordAuthentication=false`, `PermitRootLogin=no`; new `sshKeys` NixOS module option
+- Support bundle: `POST /api/system/support-bundle` — streams diagnostic `.tar.gz` (ZFS, SMART, journal, audit tail)
+- Pre-upgrade ZFS snapshots: automatic `@pre-upgrade-<timestamp>` on all pools before every `nixos-rebuild switch`; `GET /api/nixos/pre-upgrade-snapshots`
+- Webhook alerting: generic HTTP webhooks for all system events; `GET/POST/DELETE /api/alerts/webhooks`, test endpoint
+- Audit HMAC chain: tamper-evident audit log with HMAC-SHA256; `GET /api/system/audit/verify-chain`; key at `/var/lib/dplaneos/audit.key`
+
+### 📊 Monitoring & Real-Time Alerting
+- Background monitor: debounced alerting (5 min cooldown, 30 s hysteresis) for inotify, ZFS health, capacity
+- WebSocket hub: real-time events at `WS /api/ws/monitor`
+- ZFS pool heartbeat: active I/O test every 30 s; auto-stops Docker on pool failure
+- Capacity guardian: configurable thresholds, emergency reserve dataset, auto-release at 95%+
+- Deep ZFS health: per-disk risk scoring, SMART JSON integration; `GET /api/zfs/health`
+- SMTP alerting: configurable SMTP for system alerts
+
+### 🔁 GitOps
+- Declarative `state.yaml`: schema for pools, datasets, shares with stdlib YAML parser
+- By-ID enforcement: `/dev/disk/by-id/` required; bare `/dev/sdX` rejected at parse time
+- Diff engine: CREATE / MODIFY / DELETE / BLOCKED / NOP classification with risk levels
+- Safety contract: pool destroy always BLOCKED; dataset destroy blocked if used > 0 bytes; share remove blocked if active SMB connections
+- Transactional apply: halts on unapproved BLOCKED items; idempotent operations
+- Drift detection: background worker every 5 min; broadcasts `gitops.drift` WebSocket event
+- API: `GET /api/gitops/plan`, `POST /api/gitops/apply`, `POST /api/gitops/approve`, `GET/PUT /api/gitops/state`
+
+### 🏗️ Appliance Hardening (NixOS)
+- A/B partition layout (`disko.nix`): EFI + system-a (8 G) + system-b (8 G) + persist (remaining)
+- OTA update flow (`ota-update.sh`): Ed25519 signature verification, A/B slot switch, 90 s auto-revert health check
+- NixOS OTA module (`ota-module.nix`): systemd health check timer, daemon integration
+- Version pinning (`flake.nix`): kernel 6.6 LTS + OpenZFS 2.2, eval-time assertions
+- Impermanence layer (`impermanence.nix`): ephemeral root, all state persisted to `/persist`
+
+### New API routes
+```
+POST   /api/system/support-bundle
+GET    /api/nixos/pre-upgrade-snapshots
+GET    /api/system/audit/verify-chain
+GET    /api/alerts/webhooks
+POST   /api/alerts/webhooks
+DELETE /api/alerts/webhooks/{id}
+POST   /api/alerts/webhooks/{id}/test
+GET    /api/gitops/status
+GET    /api/gitops/plan
+POST   /api/gitops/apply
+POST   /api/gitops/approve
+POST   /api/gitops/check
+GET    /api/gitops/state
+PUT    /api/gitops/state
+WS     /api/ws/monitor
+GET    /api/zfs/health
+GET    /api/zfs/iostat
+GET    /api/zfs/events
+GET    /api/zfs/capacity
+POST   /api/zfs/capacity/reserve
+POST   /api/zfs/capacity/release
+```
 
 ---
 

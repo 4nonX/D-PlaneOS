@@ -235,6 +235,7 @@ select.form-input option { background: #1a1a2e; }
 </div>
 
 <script>
+function esc(s){const d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
 const csrfToken = () => document.cookie.match(/csrf_token=([^;]+)/)?.[1] || '';
 const session = () => localStorage.getItem('sessionId') || '';
 const user = () => localStorage.getItem('username') || '';
@@ -310,7 +311,7 @@ async function loadTargets() {
       sel.appendChild(opt);
     });
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Failed to load targets: ${e.message}</div>`;
+    el.innerHTML = `<div class="empty-state">Failed to load targets: ${esc(e.message)}</div>`;
   }
 }
 
@@ -368,7 +369,7 @@ async function loadACLs() {
         <button class="btn btn-danger btn-sm" onclick="deleteACL('${iqn}','${a.initiator_iqn}')">Remove</button>
       </div>`).join('');
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    el.innerHTML = `<div class="empty-state">Error: ${esc(e.message)}</div>`;
   }
 }
 

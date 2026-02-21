@@ -63,6 +63,7 @@
 <div id="nav-root"></div>
 
 <script>
+function esc(s){const d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
 // Navigation behavior
 function navigateToSection(section) {
   if (section === 'dashboard') {
@@ -685,7 +686,7 @@ async function sandboxList() {
   try { const r = await csrfFetch('/api/sandbox/list'); const d = await r.json();
     const el = document.getElementById('sandbox-output');
     if (!d.sandboxes || !d.sandboxes.length) { el.textContent = 'No active sandboxes'; return; }
-    el.innerHTML = d.sandboxes.map(s => `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">${s.id?.substring(0,12)||s.name} — ${s.image} — ${s.state||'running'}</div>`).join('');
+    el.innerHTML = d.sandboxes.map(s => `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">${esc(s.id?.substring(0,12)||s.name)} — ${esc(s.image)} — ${esc(s.state||'running')}</div>`).join('');
   } catch(e) {}
 }
 async function sandboxDestroy(id) {

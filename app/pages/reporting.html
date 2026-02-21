@@ -1647,7 +1647,7 @@ async function loadEvents() {
   try { const r = await csrfFetch('/api/zfs/events'); const d = await r.json();
     const el = document.getElementById('events-data');
     if (d.events && d.events.length) {
-      el.innerHTML = d.events.map(e => '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">'+(e.timestamp||'')+' '+( e.class||'')+' '+(e.description||e.message||'')+'</div>').join('');
+      el.innerHTML = d.events.map(e => '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">'+(esc(e.timestamp||''))+' '+(esc(e.class||''))+' '+(esc(e.description||e.message||''))+'</div>').join('');
     } else { el.textContent = d.output || 'No recent events'; }
   } catch(e) { el.textContent = 'Failed to load'; }
 }

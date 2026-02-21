@@ -1,4 +1,4 @@
-# D-PlaneOS v3.2.0 - Dependencies
+# D-PlaneOS v3.2.1 - Dependencies
 
 **Vollständige Abhängigkeitsliste**
 
@@ -262,7 +262,7 @@ sudo usermod -aG docker apache
 
 ```bash
 #!/bin/bash
-# D-PlaneOS v3.2.0 - Dependency Checker
+# D-PlaneOS v3.2.1 - Dependency Checker
 
 echo "=== D-PlaneOS Dependency Check ==="
 echo ""
@@ -432,8 +432,8 @@ sudo apt install docker.io ipmitool
 curl https://rclone.org/install.sh | bash
 
 # 3. D-PlaneOS installieren
-tar -xzf dplaneos-v3.2.0-networkd.tar.gz
-cd dplaneos-v3.2.0-networkd
+tar -xzf dplaneos-v3.2.1.tar.gz
+cd dplaneos-v3.2.1
 sudo ./install.sh
 
 # 4. Fertig!

@@ -9,6 +9,8 @@
  * CRITICAL FIX: Intelligent auto-dismiss prevents alert fatigue
  */
 
+function esc(s){const d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+
 class AlertSystem {
     constructor() {
         this.alerts = [];
@@ -170,11 +172,11 @@ class AlertSystem {
         toast.innerHTML = `
             <div class="alert-toast-icon">${icon}</div>
             <div class="alert-toast-content">
-                <div class="alert-toast-title">${alert.title}</div>
-                <div class="alert-toast-message">${alert.message}</div>
-                ${alert.count > 1 ? `<div class="alert-toast-count">${alert.count} occurrences</div>` : ''}
+                <div class="alert-toast-title">${esc(alert.title)}</div>
+                <div class="alert-toast-message">${esc(alert.message)}</div>
+                ${alert.count > 1 ? `<div class="alert-toast-count">${esc(alert.count)} occurrences</div>` : ''}
             </div>
-            <button class="alert-toast-close" onclick="alertSystem.dismissToast('${alert.alert_id}')">
+            <button class="alert-toast-close" onclick="alertSystem.dismissToast('\${esc(alert.alert_id)}')">
                 <span class="material-symbols-outlined">close</span>
             </button>
         `;
@@ -235,12 +237,12 @@ class AlertSystem {
                     <span class="material-symbols-outlined">error</span>
                 </div>
                 <div class="alert-critical-text">
-                    <div class="alert-critical-title">${alert.title}</div>
-                    <div class="alert-critical-message">${alert.message}</div>
+                    <div class="alert-critical-title">${esc(alert.title)}</div>
+                    <div class="alert-critical-message">${esc(alert.message)}</div>
                     ${additionalCount > 0 ? `<div class="alert-critical-additional">+${additionalCount} more critical alerts</div>` : ''}
                 </div>
                 <div class="alert-critical-actions">
-                    <button class="alert-btn-acknowledge" onclick="alertSystem.acknowledgeCritical('${alert.alert_id}')">
+                    <button class="alert-btn-acknowledge" onclick="alertSystem.acknowledgeCritical('\${esc(alert.alert_id)}')">
                         Acknowledge
                     </button>
                     ${additionalCount > 0 ? `<button class="alert-btn-view-all" onclick="alertSystem.showAllCritical()">View All</button>` : ''}
@@ -278,14 +280,14 @@ class AlertSystem {
             this.bellContainer.innerHTML = '<div class="alert-bell-empty">No new notifications</div>';
         } else {
             this.bellContainer.innerHTML = warningAlerts.map(alert => `
-                <div class="alert-bell-item" data-alert-id="${alert.alert_id}">
+                <div class="alert-bell-item" data-alert-id="${esc(alert.alert_id)}">
                     <div class="alert-bell-item-icon">${this.getIcon(alert.priority)}</div>
                     <div class="alert-bell-item-content">
-                        <div class="alert-bell-item-title">${alert.title}</div>
-                        <div class="alert-bell-item-message">${alert.message}</div>
+                        <div class="alert-bell-item-title">${esc(alert.title)}</div>
+                        <div class="alert-bell-item-message">${esc(alert.message)}</div>
                         <div class="alert-bell-item-time">${this.formatTime(alert.last_seen)}</div>
                     </div>
-                    <button class="alert-bell-item-dismiss" onclick="alertSystem.dismissBellAlert('${alert.alert_id}')">
+                    <button class="alert-bell-item-dismiss" onclick="alertSystem.dismissBellAlert('\${esc(alert.alert_id)}')">
                         <span class="material-symbols-outlined">close</span>
                     </button>
                 </div>

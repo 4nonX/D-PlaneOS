@@ -424,7 +424,7 @@ async function loadGenerations() {
     // Also populate diff selectors
     populateDiffSelectors(generationList);
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    el.innerHTML = `<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -562,7 +562,7 @@ async function runDiff() {
     const d = await r.json();
 
     if (!d.success) {
-      el.innerHTML = `<div class="output-log error">${d.error || 'Diff failed'}</div>`;
+      el.innerHTML = `<div class="output-log error">${escapeHtml(d.error || 'Diff failed')}</div>`;
       return;
     }
 
@@ -577,7 +577,7 @@ async function runDiff() {
       return `<span class="diff-line ${cls}">${escapeHtml(line)}</span>`;
     }).join('')}</div>`;
   } catch (e) {
-    el.innerHTML = `<div class="output-log error">Error: ${e.message}</div>`;
+    el.innerHTML = `<div class="output-log error">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -601,7 +601,7 @@ async function loadSnapshots() {
         <span style="font-size:12px;color:${s.success ? '#81c784' : '#ef9a9a'}">${s.success ? '✓ OK' : '✗ Failed'}</span>
       </div>`).join('');
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    el.innerHTML = `<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -653,7 +653,7 @@ async function loadWatchdog() {
         </div>`;
     }
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Error loading watchdog: ${e.message}</div>`;
+    el.innerHTML = `<div class="empty-state">Error loading watchdog: ${escapeHtml(e.message)}</div>`;
   }
 }
 

@@ -1,4 +1,4 @@
-# D-PlaneOS v3.2.0 — Advanced NAS Operating System
+# D-PlaneOS v3.2.1 — Enterprise NAS Operating System
 
 Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
 
@@ -6,7 +6,7 @@ Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RB
 
 ### Debian/Ubuntu
 ```bash
-tar xzf dplaneos-v3.2.0-networkd.tar.gz
+tar xzf dplaneos-v3.2.1.tar.gz
 cd dplaneos
 sudo make install   # Pre-built binary, no compiler needed
 sudo systemctl start dplaned
@@ -45,7 +45,7 @@ Creates a VACUUM INTO backup on startup + every 24 hours.
 - **System:** Settings, logs, UPS management, hardware detection
 - **UI:** Material Design 3, dark theme, responsive, keyboard shortcuts
 
-## Features (v3.2.0)
+## Features (v3.2.1)
 
 ### Safe Container Updates
 `POST /api/docker/update` — ZFS snapshot → pull → restart → health check. On failure: instant rollback. No other NAS OS does this.
@@ -98,4 +98,4 @@ Navigate to **Identity → Directory Service** to configure. Supports:
 
 ## License
 
-Source Available. See LICENSE file.
+Open source. See LICENSE file.

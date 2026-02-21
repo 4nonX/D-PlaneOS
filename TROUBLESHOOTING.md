@@ -1,10 +1,10 @@
-# D-PlaneOS v2.1.0 - Troubleshooting Guide
+# D-PlaneOS v3.2.1 - Troubleshooting Guide
 
 **Critical Issues & Solutions**
 
 ---
 
-## 🔧 Build Issues (v2.0.0 Vendor Build)
+## 🔧 Build Issues
 
 ### gcc Not Found
 **Symptom:** `make build` fails with `cgo: C compiler "gcc" not found`  
@@ -181,7 +181,7 @@ sudo systemctl restart dplaneos
 - Background: Docker trying to pull images from DockerHub but failing
 
 ### Root Cause
-System is behind strict firewall or requires HTTP proxy. Docker daemon cannot reach DockerHub. The GUI has no download progress indicator in v3.2.0.
+System is behind strict firewall or requires HTTP proxy. Docker daemon cannot reach DockerHub. The GUI has no download progress indicator in v3.2.1.
 
 ### Diagnosis
 ```bash
@@ -259,7 +259,7 @@ This tests Docker Hub connectivity and warns if unreachable.
 ## 4️⃣ Service Worker Cache Mismatch (LOW)
 
 ### Symptom
-- Upgrade from v3.0.x to v3.2.0
+- Upgrade from v3.0.x to v3.2.1
 - Browser still open from a previous v3.x session
 - After upgrade: Page layout "tears apart"
 - Buttons don't work
@@ -330,7 +330,7 @@ Application → Service Workers
 nano /var/www/dplaneos/app/sw.js
 
 # Change CACHE_NAME
-const CACHE_NAME = 'dplaneos-v3.2.0';  // Increment version on each release
+const CACHE_NAME = 'dplaneos-v3.2.1';  // Increment version on each release
 
 # Users will auto-update on next visit
 ```
@@ -340,7 +340,7 @@ const CACHE_NAME = 'dplaneos-v3.2.0';  // Increment version on each release
 ```
 ⚠️  CRITICAL: Browser Cache
 
-If you're upgrading from v3.0.x or v3.1.x:
+If you're upgrading from v3.0.x, v3.1.x, or v3.2.0:
 YOU MUST CLEAR YOUR BROWSER CACHE!
 
 Chrome:  Ctrl+Shift+R
