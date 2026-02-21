@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# D-PlaneOS v4.0.4 - Daemon Watchdog & Health Monitor
+# D-PlaneOS v3.2.0 - Daemon Watchdog & Health Monitor
 # 
 # Purpose: Monitor Go daemon, auto-restart on failure, alert on issues
 # Install: /usr/local/bin/dplaneos-watchdog.sh

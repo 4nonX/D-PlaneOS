@@ -1,4 +1,4 @@
-# D-PlaneOS v4.0.4 - Showstopper Mitigation Guide
+# D-PlaneOS v3.2.0 - Showstopper Mitigation Guide
 
 **Date:** 2026-02-07  
 **Purpose:** Honest assessment + workarounds for remaining limitations
@@ -7,13 +7,13 @@
 
 ## 🎯 EXECUTIVE SUMMARY
 
-D-PlaneOS v4.0.4 has **ZERO technical bugs** but **5 strategic limitations** that may be showstoppers for specific use cases.
+D-PlaneOS v3.2.0 has **ZERO technical bugs** but **5 strategic limitations** that may be showstoppers for specific use cases.
 
 This guide provides:
 - Honest assessment of each limitation
 - Workarounds (where possible)
 - Migration timeline for fixes
-- Decision matrix: "Should I use v4.0.4?"
+- Decision matrix: "Should I use v3.2.0?"
 
 ---
 
@@ -80,9 +80,9 @@ sudo chmod +x /usr/local/bin/dplaneos-watchdog.sh
 echo "*/5 * * * * /usr/local/bin/dplaneos-watchdog.sh" | sudo crontab -
 ```
 
-#### Option C: Wait for v5.0 (eBPF Monitoring)
+#### Option C: Future enhancement (eBPF Monitoring)
 
-**Roadmap:** v5.0 will include eBPF-based daemon monitoring showing:
+**Roadmap:** A future version will include eBPF-based daemon monitoring showing:
 - All syscalls made
 - Network connections
 - File access
@@ -92,12 +92,12 @@ echo "*/5 * * * * /usr/local/bin/dplaneos-watchdog.sh" | sudo crontab -
 
 ### Decision Matrix
 
-| Your Requirement | v4.0.4 Suitable? | Recommendation |
+| Your Requirement | v3.2.0 Suitable? | Recommendation |
 |------------------|------------------|----------------|
 | Home use | ✅ YES | Use as-is |
 | Small business | ✅ YES | Use with monitoring |
 | Security audit required | ⚠️ MAYBE | Compile from source |
-| Government/Military | ❌ NO | Wait for v5.0 + certification |
+| Government/Military | ❌ NO | Contact maintainer for roadmap |
 
 ---
 
@@ -238,9 +238,9 @@ sudo syncoid tank/important root@backup-nas:backup/important
 - ✅ Battle-tested
 - ✅ Production-ready
 
-#### Option C: Wait for v4.1 (Full GUI Implementation)
+#### Option C: Planned for next minor release
 
-**Roadmap:** v4.1.0 will include:
+**Roadmap:** Next release will include:
 - Complete zfs send/receive
 - SSH key management UI
 - Network error handling
@@ -259,12 +259,12 @@ sudo syncoid tank/important root@backup-nas:backup/important
 |-----------|----------------|
 | Need replication NOW | Use syncoid (Option B) |
 | Comfortable with CLI | Manual script (Option A) |
-| Want GUI only | Wait for v4.1 (Option C) |
-| Testing/Development | v4.0.4 OK (just don't rely on it) |
+| Want GUI only | Planned feature (Option C) |
+| Testing/Development | v3.2.0 OK (just don't rely on it) |
 
 ### CRITICAL WARNING
 
-**DO NOT rely on v4.0.4 replication GUI for production!**
+**DO NOT rely on v3.2.0 replication GUI for production!**
 
 If you:
 - Click "Execute Replication" in GUI
@@ -281,7 +281,7 @@ Use Option A or B above.
 
 ### The Issue
 
-**v4.0.4 requires more resources than v2.x**
+**v3.2.0 requires more resources than v2.x**
 
 **Increased requirements:**
 - Go daemon: +30MB RAM baseline
@@ -303,7 +303,7 @@ Use Option A or B above.
 - Active RAM: 250MB
 - CPU: <5% idle
 
-**v4.0.4 (Go + PostgreSQL):**
+**v3.2.0 (Go + PostgreSQL):**
 - Idle RAM: 400MB
 - Active RAM: 650MB
 - CPU: 8-12% idle
@@ -316,7 +316,7 @@ Use Option A or B above.
 
 **During installation:**
 ```bash
-sudo ./install-v4.sh
+sudo ./install.sh
 
 # When prompted for database:
 # [1] PostgreSQL (recommended)
@@ -394,7 +394,7 @@ define('MATERIAL_ANIMATIONS', false);
 
 ### Decision Matrix
 
-| Your Hardware | v4.0.4 Suitable? | Configuration |
+| Your Hardware | v3.2.0 Suitable? | Configuration |
 |---------------|------------------|---------------|
 | 4GB+ RAM | ✅ YES | Default (PostgreSQL) |
 | 2GB RAM | ⚠️ YES | SQLite + ZFS ARC limit |
@@ -432,7 +432,7 @@ define('MATERIAL_ANIMATIONS', false);
 
 ### Mitigation: Auto-Backup + Rollback Script
 
-**Included in v4.0.4:** `/var/www/dplaneos/scripts/upgrade-with-rollback.sh`
+**Included in v3.2.0:** `/var/www/dplaneos/scripts/upgrade-with-rollback.sh`
 
 **Features:**
 - ✅ Auto-backup before upgrade
@@ -444,7 +444,7 @@ define('MATERIAL_ANIMATIONS', false);
 
 ```bash
 # Instead of:
-sudo ./install-v4.sh
+sudo ./install.sh
 
 # Use:
 sudo ./scripts/upgrade-with-rollback.sh
@@ -551,8 +551,8 @@ curl http://localhost/
 | Scenario | Risk | Mitigation |
 |----------|------|------------|
 | Fresh install | ✅ LOW | None needed |
-| Upgrade v3.x → v4.x | ⚠️ MEDIUM | Use upgrade-with-rollback.sh |
-| Upgrade v2.x → v4.x | 🔴 HIGH | Manual backup + rollback script |
+| Upgrade v3.x → v3.2.x | ✅ SUPPORTED | Use upgrade-with-rollback.sh |
+| Upgrade v2.x → v3.x | 🔴 HIGH | Manual backup + rollback script |
 | Custom config | 🔴 HIGH | Document customizations first |
 
 ---
@@ -661,9 +661,9 @@ fi
 
 **WARNING:** Risk of split-brain! Use fencing.
 
-#### Option C: Wait for v5.0 Enterprise (HA)
+#### Option C: Future Enterprise HA features
 
-**Roadmap:** v5.0 Enterprise will include:
+**Roadmap:** A future Enterprise tier will include:
 - Active-passive clustering
 - Automatic failover
 - Shared storage (Ceph backend)
@@ -685,19 +685,19 @@ fi
 
 ### Decision Matrix
 
-| Your Requirement | v4.0.4 Suitable? | Recommendation |
+| Your Requirement | v3.2.0 Suitable? | Recommendation |
 |------------------|------------------|----------------|
 | Home/Lab | ✅ YES | Use as single node |
 | Small business | ⚠️ MAYBE | Manual failover (Option A) |
 | 99.9% uptime | ❌ NO | Use TrueNAS Scale |
 | 99.99% uptime | ❌ NO | Commercial SAN |
-| Mission-critical | ❌ NO | Wait for v5.0 Enterprise |
+| Mission-critical | ⚠️ LIMITED | Contact maintainer for roadmap |
 
 ---
 
 ## 📊 FINAL DECISION MATRIX
 
-### Should YOU use D-PlaneOS v4.0.4?
+### Should YOU use D-PlaneOS v3.2.0?
 
 | Use Case | Recommendation | Confidence |
 |----------|----------------|------------|
@@ -711,7 +711,7 @@ fi
 | **Security Audit Required** | ⚠️ MAYBE - Compile from source | 60% |
 | **Enterprise DR/BC** | ⚠️ MAYBE - Use CLI replication | 50% |
 | **Low-end Hardware** | ⚠️ MAYBE - Use SQLite + tuning | 70% |
-| **Production Replication** | ❌ NO - Wait for v4.1 or use CLI | 20% |
+| **Production Replication** | ⚠️ CLI available | 20% |
 | **High Availability** | ❌ NO - Not designed for HA | 0% |
 | **Mission-Critical** | ❌ NO - Use enterprise solution | 0% |
 
@@ -721,23 +721,23 @@ fi
 
 | Showstopper | Fix Version | ETA | Status |
 |-------------|-------------|-----|--------|
-| #1 Binary Trust | v5.0 (eBPF monitoring) | Q3 2026 | Planned |
+| #1 Binary Trust | Future (eBPF monitoring) | TBD | Planned |
 | #2 Replication | v4.1 (Full implementation) | Q2 2026 | **In Progress** |
 | #3 Resources | v4.1 (Optimizations) | Q2 2026 | Planned |
-| #4 Rollback | v4.0.4 (**Included!**) | NOW | ✅ **DONE** |
-| #5 HA | v5.0 Enterprise (Commercial) | Q4 2026 | Planned |
+| #4 Rollback | v3.2.0 (**Included!**) | NOW | ✅ **DONE** |
+| #5 HA | Future Enterprise tier | TBD | Planned |
 
 ---
 
 ## ✅ CONCLUSION
 
-**D-PlaneOS v4.0.4 is production-ready for:**
+**D-PlaneOS v3.2.0 is production-ready for:**
 - Home users ✅
 - Small offices ✅
 - Homelabs ✅
 - Docker enthusiasts ✅
 
-**D-PlaneOS v4.0.4 is NOT ready for:**
+**D-PlaneOS v3.2.0 is NOT ready for:**
 - Enterprise HA ❌
 - GUI-only replication ❌
 - Ultra-low-end hardware ❌

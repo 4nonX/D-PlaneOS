@@ -25,7 +25,7 @@
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v3.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v3.2.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <div id="nav-root"></div>
@@ -111,13 +111,13 @@
                 <div class="card-header">
                     <h2>System Roles</h2>
                     <button class="md-button filled" onclick="openCreateRoleModal()">
-                        <span class="material-icons">add</span>
+                        <span class="material-symbols-rounded">add</span>
                         Create Role
                     </button>
                 </div>
 
                 <div class="alert info">
-                    <span class="material-icons">info</span>
+                    <span class="material-symbols-rounded">info</span>
                     <div>
                         <strong>System roles</strong> cannot be deleted or modified. Create custom roles for specific user needs.
                     </div>
@@ -140,7 +140,7 @@
                 </div>
 
                 <div class="alert info">
-                    <span class="material-icons">info</span>
+                    <span class="material-symbols-rounded">info</span>
                     <div>
                         Permissions are organized by resource category. Select a role to manage its permissions.
                     </div>
@@ -191,7 +191,7 @@
             <div class="modal-header">
                 <h2 id="role-modal-title">Create Role</h2>
                 <button class="modal-close" onclick="closeRoleModal()">
-                    <span class="material-icons">close</span>
+                    <span class="material-symbols-rounded">close</span>
                 </button>
             </div>
 
@@ -215,7 +215,7 @@
                 <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
                     <button type="button" class="md-button outlined" onclick="closeRoleModal()">Cancel</button>
                     <button type="submit" class="md-button filled">
-                        <span class="material-icons">save</span>
+                        <span class="material-symbols-rounded">save</span>
                         Save Role
                     </button>
                 </div>
@@ -229,7 +229,7 @@
             <div class="modal-header">
                 <h2 id="permissions-modal-title">Edit Permissions</h2>
                 <button class="modal-close" onclick="closePermissionsModal()">
-                    <span class="material-icons">close</span>
+                    <span class="material-symbols-rounded">close</span>
                 </button>
             </div>
 
@@ -238,7 +238,7 @@
             <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
                 <button type="button" class="md-button outlined" onclick="closePermissionsModal()">Close</button>
                 <button type="button" class="md-button filled" onclick="savePermissions()">
-                    <span class="material-icons">save</span>
+                    <span class="material-symbols-rounded">save</span>
                     Save Permissions
                 </button>
             </div>
@@ -304,7 +304,7 @@
                     <div class="role-description">${escapeHtml(role.description || 'No description')}</div>
                     <div class="role-stats">
                         <div class="role-stat">
-                            <span class="material-icons">verified_user</span>
+                            <span class="material-symbols-rounded">verified_user</span>
                             ${role.permissions ? role.permissions.length : 0} permissions
                         </div>
                     </div>
@@ -356,7 +356,7 @@
                 <div class="permission-category">
                     <div class="category-header">
                         <div class="category-title">
-                            <span class="material-icons">${getCategoryIcon(category)}</span>
+                            <span class="material-symbols-rounded">${getCategoryIcon(category)}</span>
                             ${category.charAt(0).toUpperCase() + category.slice(1)}
                         </div>
                         <div class="category-count">${perms.length}</div>
@@ -408,7 +408,7 @@
                 <div class="permission-category">
                     <div class="category-header">
                         <div class="category-title">
-                            <span class="material-icons">${getCategoryIcon(category)}</span>
+                            <span class="material-symbols-rounded">${getCategoryIcon(category)}</span>
                             ${category.charAt(0).toUpperCase() + category.slice(1)}
                         </div>
                     </div>
@@ -795,7 +795,7 @@ let roles = [];
                     <div class="role-description">${escapeHtml(role.description || 'No description')}</div>
                     <div class="role-stats">
                         <div class="role-stat">
-                            <span class="material-icons">verified_user</span>
+                            <span class="material-symbols-rounded">verified_user</span>
                             ${role.permissions ? role.permissions.length : 0} permissions
                         </div>
                     </div>
@@ -847,7 +847,7 @@ let roles = [];
                 <div class="permission-category">
                     <div class="category-header">
                         <div class="category-title">
-                            <span class="material-icons">${getCategoryIcon(category)}</span>
+                            <span class="material-symbols-rounded">${getCategoryIcon(category)}</span>
                             ${category.charAt(0).toUpperCase() + category.slice(1)}
                         </div>
                         <div class="category-count">${perms.length}</div>
@@ -899,7 +899,7 @@ let roles = [];
                 <div class="permission-category">
                     <div class="category-header">
                         <div class="category-title">
-                            <span class="material-icons">${getCategoryIcon(category)}</span>
+                            <span class="material-symbols-rounded">${getCategoryIcon(category)}</span>
                             ${category.charAt(0).toUpperCase() + category.slice(1)}
                         </div>
                     </div>

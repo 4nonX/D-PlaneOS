@@ -21,13 +21,14 @@ type AuditEvent struct {
 
 // BufferedLogger implements batched audit logging for high-performance SQLite
 type BufferedLogger struct {
-	db          *sql.DB
-	buffer      []AuditEvent
-	bufferMutex sync.Mutex
-	flushTicker *time.Ticker
-	stopChan    chan struct{}
-	maxBuffer   int
+	db            *sql.DB
+	buffer        []AuditEvent
+	bufferMutex   sync.Mutex
+	flushTicker   *time.Ticker
+	stopChan      chan struct{}
+	maxBuffer     int
 	flushInterval time.Duration
+	hmacKey       []byte // 32-byte key for audit chain integrity; nil = chain disabled
 }
 
 // NewBufferedLogger creates a new buffered audit logger
@@ -40,7 +41,7 @@ type BufferedLogger struct {
 // Example: Moving 10,000 files generates 10,000 audit events
 // Without buffering: 10,000 individual SQLite INSERTs → slow!
 // With buffering: 1-2 batch INSERTs → fast!
-func NewBufferedLogger(db *sql.DB, maxBuffer int, flushInterval time.Duration) *BufferedLogger {
+func NewBufferedLogger(db *sql.DB, maxBuffer int, flushInterval time.Duration, hmacKey []byte) *BufferedLogger {
 	if maxBuffer <= 0 {
 		maxBuffer = 100
 	}
@@ -54,6 +55,7 @@ func NewBufferedLogger(db *sql.DB, maxBuffer int, flushInterval time.Duration) *
 		maxBuffer:     maxBuffer,
 		flushInterval: flushInterval,
 		stopChan:      make(chan struct{}),
+		hmacKey:       hmacKey,
 	}
 
 	return bl
@@ -137,19 +139,30 @@ func (bl *BufferedLogger) writeDirect(events []AuditEvent) error {
 	}
 	defer tx.Rollback()
 
+	// Fetch prev_hash to continue the chain for security events.
+	var prevHash string
+	if bl.hmacKey != nil {
+		_ = tx.QueryRow(
+			`SELECT COALESCE(row_hash,'') FROM audit_logs ORDER BY id DESC LIMIT 1`,
+		).Scan(&prevHash)
+	}
+
 	stmt, err := tx.Prepare(`INSERT INTO audit_logs
-		(timestamp, user, action, resource, details, ip_address, success)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		(timestamp, user, action, resource, details, ip_address, success, prev_hash, row_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("audit direct write: prepare: %w", err)
 	}
 	defer stmt.Close()
 
 	for _, e := range events {
-		_, err := stmt.Exec(e.Timestamp, e.User, e.Action, e.Resource, e.Details, e.IPAddress, e.Success)
+		rowHash := computeRowHash(bl.hmacKey, prevHash, e)
+		_, err := stmt.Exec(e.Timestamp, e.User, e.Action, e.Resource, e.Details, e.IPAddress, e.Success, prevHash, rowHash)
 		if err != nil {
 			log.Printf("audit direct write: exec: %v", err)
+			continue
 		}
+		prevHash = rowHash
 	}
 	return tx.Commit()
 }
@@ -181,19 +194,30 @@ func (bl *BufferedLogger) Flush() error {
 	}
 	defer tx.Rollback()
 
+	// Fetch the row_hash of the most recent row to start the chain.
+	// Run inside the transaction so we see a consistent snapshot.
+	var prevHash string
+	if bl.hmacKey != nil {
+		_ = tx.QueryRow(
+			`SELECT COALESCE(row_hash,'') FROM audit_logs ORDER BY id DESC LIMIT 1`,
+		).Scan(&prevHash)
+	}
+
 	// Prepare statement (reused for all inserts)
 	stmt, err := tx.Prepare(`
 		INSERT INTO audit_logs (
-			timestamp, user, action, resource, details, ip_address, success
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
+			timestamp, user, action, resource, details, ip_address, success,
+			prev_hash, row_hash
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
 	defer stmt.Close()
 
-	// Insert all events in batch
+	// Insert all events in batch, threading the HMAC chain.
 	for _, event := range events {
+		rowHash := computeRowHash(bl.hmacKey, prevHash, event)
 		_, err := stmt.Exec(
 			event.Timestamp,
 			event.User,
@@ -202,11 +226,15 @@ func (bl *BufferedLogger) Flush() error {
 			event.Details,
 			event.IPAddress,
 			event.Success,
+			prevHash,
+			rowHash,
 		)
 		if err != nil {
 			// Log error but continue with other events
 			log.Printf("Failed to insert audit event: %v", err)
+			continue
 		}
+		prevHash = rowHash // advance chain
 	}
 
 	// Commit transaction

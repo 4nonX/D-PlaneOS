@@ -1,945 +1,500 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><style></style>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-
+<head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cloud Sync - D-PlaneOS</title>
-    <link rel="stylesheet" href="/assets/css/design-tokens.css">
-    <link rel="stylesheet" href="/assets/css/dplaneos-ui-complete.css">
+<link rel="stylesheet" href="/assets/css/design-tokens.css">
+<link rel="stylesheet" href="/assets/css/dplaneos-ui-complete.css">
 <link rel="stylesheet" href="/assets/css/m3-tokens.css">
 <link rel="stylesheet" href="/assets/css/m3-components.css">
 <link rel="stylesheet" href="/assets/css/m3-icons.css">
-  <link rel="stylesheet" href="/assets/css/enhanced-ui.css">
+<link rel="stylesheet" href="/assets/css/enhanced-ui.css">
 <link rel="stylesheet" href="/assets/css/m3-animations.css">
-<style>
-.logo { font-size: 20px; font-weight: 800; color: var(--primary); letter-spacing: -0.5px; cursor: pointer; }
-
-
-.nav-link:hover, 
-.main { max-width: 1600px; margin: 140px auto 60px; padding: 0 40px; }
-.page-header { margin-bottom: 48px; }
-.page-title { font-size: 32px; font-weight: 700; letter-spacing: -1.5px; margin-bottom: 12px; }
-.page-subtitle { font-size: 18px; color: rgba(255,255,255,0.6); }
-.pool-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-xl); padding: 32px; margin-bottom: 24px; border-left: 4px solid var(--primary); }
-.pool-header { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
-.pool-icon { font-size: 32px; color: var(--primary); }
-.pool-info { flex: 1; }
-.pool-name { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
-.pool-details { font-size: 15px; color: rgba(255,255,255,0.6); }
-.capacity-bar { height: 12px; background: rgba(255,255,255,0.05); border-radius: 24px; overflow: hidden; margin: 20px 0; }
-.capacity-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--primary)); border-radius: 24px; transition: width 0.5s; }
-/* Badge styles are in m3-components.css */
-.icon-btn { width: 40px; height: 40px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.8); cursor: pointer; transition: all 0.3s; border: none; }
-.icon-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
-.btn { background: rgba(255,255,255,0.1); color: var(--text); padding: 12px 24px; border-radius: 10px; font-weight: 500; font-size: 14px; border: none; cursor: pointer; transition: all 0.3s; }
-.btn:hover { background: rgba(255,255,255,0.15); }
-.btn-primary { background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); }
-.btn-primary:hover { box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4); }
-.fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: var(--text); }
-.fab:hover { transform: translateY(-4px); box-shadow: 0 12px 48px rgba(102, 126, 234, 0.6); }
-</style>
-<style type="text/css" id="operaUserStyle"></style><link rel="stylesheet" href="/assets/css/ui-components.css">
+<link rel="stylesheet" href="/assets/css/ui-components.css">
+<link rel="stylesheet" href="/assets/css/material-symbols-local.css">
+<link rel="stylesheet" href="/assets/css/ui-consistency.css">
+<link rel="stylesheet" href="/assets/css/ui-polish.css">
 <script src="/assets/js/core.js"></script>
 <script src="/assets/js/nav-flyout.js"></script>
 <script src="/assets/js/hybrid-router.js"></script>
-  <script src="/assets/js/enhanced-ui.js"></script>
-  <script src="/assets/js/connection-monitor.js"></script>
-  <script src="/assets/js/keyboard-shortcuts.js"></script>
-  <script src="/assets/js/form-validator.js"></script>
-  <link rel="stylesheet" href="/assets/css/material-symbols-local.css">
-  <link rel="stylesheet" href="/assets/css/ui-consistency.css">
-  <link rel="stylesheet" href="/assets/css/ui-polish.css">
-  <script src="/assets/js/daemon-api.js"></script>
+<script src="/assets/js/enhanced-ui.js"></script>
+<script src="/assets/js/connection-monitor.js"></script>
+<script src="/assets/js/keyboard-shortcuts.js"></script>
+<script src="/assets/js/form-validator.js"></script>
+<script src="/assets/js/daemon-api.js"></script>
 <style>
-.main { max-width: 1600px; margin: 140px auto 60px; padding: 0 40px; }
-.page-header { margin-bottom: 48px; }
-.page-title { font-size: 32px; font-weight: 700; letter-spacing: -1.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; }
-.page-subtitle { font-size: 18px; color: var(--text-dim); }
-
-.status-banner { background: var(--surface-variant); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 32px; display: flex; align-items: center; gap: 20px; }
-.status-banner.online { background: var(--success-bg); border-color: var(--success-border); }
-.status-banner.offline { background: var(--error-bg); border-color: var(--error-border); }
-
-.section { margin-bottom: 48px; }
-.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-.section-title { font-size: 20px; font-weight: 700; }
-
-.remote-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-.remote-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; transition: all 0.2s; }
-.remote-card:hover { background: var(--surface-hover); transform: translateY(-2px); }
-.remote-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-.remote-icon { font-size: 32px; }
-.remote-info { flex: 1; }
-.remote-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-.remote-type { font-size: 13px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
-.remote-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; padding: 16px; background: var(--surface-variant); border-radius: 12px; }
-.remote-stat { text-align: center; }
-.remote-stat-value { font-size: 18px; font-weight: 700; color: var(--primary); }
-.remote-stat-label { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-.remote-actions { display: flex; gap: 8px; }
-.remote-btn { flex: 1; background: var(--surface-variant); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
-.remote-btn:hover { background: var(--surface-hover); }
-.remote-btn.danger { border-color: var(--error-border); color: var(--error); }
-.remote-btn.danger:hover { background: var(--error-bg); }
-
-.fab { position: fixed; bottom: 32px; right: 32px; width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-active) 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(138, 156, 255, 0.4); cursor: pointer; transition: all 0.3s; border: none; color: var(--text-on-primary); }
-.fab:hover { transform: translateY(-4px); box-shadow: 0 12px 48px rgba(138, 156, 255, 0.6); }
-
-.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; overflow-y: auto; }
-.modal.active { display: flex; }
-.modal-content { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 20px; padding: 32px; max-width: 600px; width: 90%; margin: 40px auto; }
-.modal-header { margin-bottom: 24px; }
-.modal-title { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
-.modal-subtitle { font-size: 14px; color: var(--text-dim); }
-.modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 24px; }
-
-.wizard-steps { display: flex; gap: 12px; margin-bottom: 32px; }
-.wizard-step { flex: 1; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-dim); transition: all 0.2s; }
-.wizard-step.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); }
-.wizard-step.completed { background: var(--success-bg); border-color: var(--success-border); color: var(--success); }
-
-.wizard-content { min-height: 300px; }
-.wizard-page { display: none; }
-.wizard-page.active { display: block; }
-
-.provider-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
-.provider-card { background: var(--surface); border: 2px solid var(--border); border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.2s; text-align: center; }
-.provider-card:hover { background: var(--surface-hover); border-color: var(--primary); }
-.provider-card.selected { background: var(--primary-bg); border-color: var(--primary); }
-.provider-icon { font-size: 48px; margin-bottom: 12px; }
-.provider-name { font-size: 13px; font-weight: 600; }
-.provider-popular { display: inline-block; background: var(--warning); color: var(--text-on-primary); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-top: 6px; }
-
-.form-group { margin-bottom: 20px; }
-.form-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-.form-input { width: 100%; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; transition: all 0.2s; }
-.form-input:focus { outline: none; border-color: var(--primary); background: var(--surface-hover); }
-.form-help { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
-
-.btn-group { display: flex; gap: 12px; margin-top: 24px; }
-.btn { padding: 12px 24px; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: none; }
-.btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
-.btn-secondary:hover { background: var(--surface-hover); }
-.btn-primary { background: var(--primary); color: var(--text-on-primary); }
-.btn-primary:hover { background: var(--primary-hover); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.job-list { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
-.job-item { border-bottom: 1px solid var(--border-subtle); padding: 16px 0; display: flex; align-items: center; gap: 16px; }
-.job-item:last-child { border-bottom: none; }
-.job-icon { font-size: 32px; color: var(--primary); }
-.job-info { flex: 1; }
-.job-command { font-size: 14px; font-weight: 600; margin-bottom: 4px; font-family: 'Courier New', monospace; }
-.job-status { font-size: 12px; color: var(--text-dim); }
-.job-pid { background: var(--surface-variant); padding: 4px 8px; border-radius: 6px; font-size: 12px; font-family: 'Courier New', monospace; }
-
-.empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
-.empty-state-icon { font-size: 64px; margin-bottom: 16px; opacity: 0.3; }
-.empty-state-message { font-size: 16px; margin-bottom: 8px; }
-.empty-state-hint { font-size: 14px; color: var(--text-dimmer); }
-
-.loading { text-align: center; padding: 40px; }
-.spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 16px 24px; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); z-index: 1001; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
-.toast.show { opacity: 1; pointer-events: auto; }
-.toast.success { border-color: var(--success-border); background: var(--success-bg); }
-.toast.error { border-color: var(--error-border); background: var(--error-bg); }
-
-.test-result { margin-top: 16px; padding: 16px; background: var(--surface-variant); border: 1px solid var(--border); border-radius: 12px; }
-.test-result.success { background: var(--success-bg); border-color: var(--success-border); }
-.test-result.error { background: var(--error-bg); border-color: var(--error-border); }
+.main{max-width:1400px;margin:140px auto 80px;padding:0 40px}
+.page-header{margin-bottom:40px}
+.page-title{font-size:32px;font-weight:700;letter-spacing:-1px;margin-bottom:8px;display:flex;align-items:center;gap:14px}
+.page-subtitle{font-size:16px;color:var(--text-dim)}
+.status-banner{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:32px;display:flex;align-items:center;gap:16px}
+.status-banner.online{background:var(--success-bg);border-color:var(--success-border)}
+.status-banner.offline{background:var(--error-bg);border-color:var(--error-border)}
+.status-banner-text{flex:1}
+.status-banner-title{font-weight:700;font-size:15px}
+.status-banner-sub{font-size:13px;color:var(--text-dim);margin-top:2px}
+.section{margin-bottom:40px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.section-title{font-size:19px;font-weight:700}
+.remote-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.remote-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;transition:all 0.18s;position:relative}
+.remote-card:hover{background:var(--surface-hover);transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,0,0,.15)}
+.remote-card-header{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.remote-icon{width:44px;height:44px;border-radius:12px;background:var(--primary-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.remote-icon .material-symbols-rounded{font-size:22px;color:var(--primary)}
+.remote-name{font-size:16px;font-weight:700}
+.remote-type{font-size:12px;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.remote-actions{display:flex;gap:8px}
+.remote-btn{flex:1;background:var(--surface-variant);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;justify-content:center;gap:5px;color:var(--text)}
+.remote-btn:hover{background:var(--surface-hover)}
+.remote-btn.danger{border-color:var(--error-border);color:var(--error)}
+.remote-btn.danger:hover{background:var(--error-bg)}
+.remote-btn .material-symbols-rounded{font-size:16px}
+.empty-state{text-align:center;padding:60px 40px;color:var(--text-dim);border:1px dashed var(--border);border-radius:16px}
+.empty-state .material-symbols-rounded{font-size:48px;margin-bottom:16px;display:block}
+.empty-state h3{font-size:18px;font-weight:700;margin-bottom:8px;color:var(--text)}
+.empty-state p{font-size:14px;max-width:380px;margin:0 auto 24px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.active{display:flex}
+.modal{background:var(--bg-elevated);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;position:relative}
+.modal-header{margin-bottom:24px}
+.modal-title{font-size:22px;font-weight:700;margin-bottom:6px}
+.modal-subtitle{font-size:14px;color:var(--text-dim)}
+.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--text-dim);cursor:pointer;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.modal-close:hover{background:var(--surface-hover);color:var(--text)}
+.modal-footer{display:flex;gap:12px;justify-content:flex-end;margin-top:28px}
+.wizard-steps{display:flex;gap:8px;margin-bottom:28px}
+.wizard-step{flex:1;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;text-align:center;font-size:12px;font-weight:600;color:var(--text-dim);transition:all .18s}
+.wizard-step.active{background:var(--primary-bg);border-color:var(--primary);color:var(--primary)}
+.wizard-step.done{background:var(--success-bg);border-color:var(--success-border);color:var(--success)}
+.wizard-pane{display:none}
+.wizard-pane.active{display:block}
+.provider-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.provider-card{padding:16px 12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;cursor:pointer;transition:all .15s;text-align:center}
+.provider-card:hover{background:var(--surface-hover)}
+.provider-card.selected{background:var(--primary-bg);border-color:var(--primary)}
+.provider-card .material-symbols-rounded{font-size:28px;color:var(--primary);display:block;margin-bottom:8px}
+.provider-card span.name{font-size:12px;font-weight:600}
+.form-group{margin-bottom:18px}
+.form-label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+.form-label .req{color:var(--error);margin-left:2px}
+.form-input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;transition:border-color .15s;box-sizing:border-box}
+.form-input:focus{outline:none;border-color:var(--primary)}
+.form-help{font-size:12px;color:var(--text-dim);margin-top:5px}
+.test-result{padding:14px 16px;border-radius:12px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px;margin-top:12px}
+.test-result.ok{background:var(--success-bg);border:1px solid var(--success-border);color:var(--success)}
+.test-result.fail{background:var(--error-bg);border:1px solid var(--error-border);color:var(--error)}
+.sync-direction{display:flex;gap:12px;margin-bottom:20px}
+.sync-dir-btn{flex:1;padding:14px;border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:center;transition:all .15s;background:var(--surface)}
+.sync-dir-btn:hover{background:var(--surface-hover)}
+.sync-dir-btn.selected{background:var(--primary-bg);border-color:var(--primary)}
+.sync-dir-btn .material-symbols-rounded{font-size:24px;color:var(--primary);display:block;margin-bottom:6px}
+.sync-dir-btn span{font-size:13px;font-weight:600}
+.fab{position:fixed;bottom:32px;right:32px;width:60px;height:60px;background:var(--primary);border-radius:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 24px rgba(0,0,0,.3);cursor:pointer;border:none;color:var(--text-on-primary);transition:all .2s}
+.fab:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(0,0,0,.4)}
+.fab .material-symbols-rounded{font-size:26px}
+.loading-row{display:flex;align-items:center;justify-content:center;gap:12px;padding:40px;color:var(--text-dim)}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.output-terminal{background:#0d0d0d;border:1px solid var(--border);border-radius:12px;padding:16px;font-family:monospace;font-size:13px;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:#a0e090;margin-top:16px}
+.btn{background:var(--surface-variant);color:var(--text);padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;border:1px solid var(--border);cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--surface-hover)}
+.btn-primary{background:var(--primary);color:var(--text-on-primary);border-color:var(--primary)}
+.btn-primary:hover{opacity:.9}
+.btn:disabled{opacity:.5;cursor:not-allowed}
 </style>
 </head>
 <body>
-
 <div id="nav-root"></div>
-
 <div class="main">
   <div class="page-header">
     <div class="page-title">
-      <span class="material-symbols-rounded" style="font-size: 40px;">cloud_sync</span>
+      <span class="material-symbols-rounded" style="font-size:36px;color:var(--primary)">cloud_sync</span>
       Cloud Sync
     </div>
-    <div class="page-subtitle">Automated cloud backup and sync via rclone</div>
+    <div class="page-subtitle">Connect cloud storage providers and sync your NAS data with rclone</div>
   </div>
 
-  <!-- Status Banner -->
   <div id="statusBanner" class="status-banner">
-    <div class="loading">
-      <div class="spinner"></div>
-    </div>
+    <div class="spinner"></div>
+    <div class="status-banner-text"><div class="status-banner-title">Checking rclone…</div></div>
   </div>
 
-  <!-- Configured Remotes -->
   <div class="section">
     <div class="section-header">
-      <div class="section-title">Configured Remotes</div>
-      <span id="remoteCount" style="font-size: 14px; color: var(--text-dim);"></span>
-    </div>
-    
-    <div class="loading" id="remotesLoading">
-      <div class="spinner"></div>
-    </div>
-    
-    <div class="remote-grid" id="remoteGrid" style="display: none;"></div>
-    
-    <div class="empty-state" id="remotesEmpty" style="display: none;">
-      <div class="material-symbols-rounded empty-state-icon">cloud_off</div>
-      <div class="empty-state-message">No cloud remotes configured</div>
-      <div class="empty-state-hint">Click the + button to add your first cloud storage</div>
-    </div>
-  </div>
-
-  <!-- Active Jobs -->
-  <div class="section">
-    <div class="section-header">
-      <div class="section-title">Active Sync Jobs</div>
-      <button class="remote-btn" onclick="loadJobs()">
-        <span class="material-symbols-rounded">refresh</span>
-        Refresh
+      <div class="section-title">Cloud Remotes</div>
+      <button class="btn btn-primary" onclick="openAddRemote()" id="addBtn" style="display:none">
+        <span class="material-symbols-rounded" style="font-size:18px">add</span> Add Remote
       </button>
     </div>
-    
-    <div class="job-list">
-      <div class="loading" id="jobsLoading">
-        <div class="spinner"></div>
-      </div>
-      <div id="jobList" style="display: none;"></div>
-      <div class="empty-state" id="jobsEmpty" style="display: none;">
-        <div class="material-symbols-rounded empty-state-icon">assignment</div>
-        <div class="empty-state-message">No active sync jobs</div>
-      </div>
+    <div id="remotesLoading" class="loading-row"><div class="spinner"></div> Loading remotes…</div>
+    <div id="remotesEmpty" class="empty-state" style="display:none">
+      <span class="material-symbols-rounded">cloud_off</span>
+      <h3>No cloud remotes configured</h3>
+      <p>Add a remote to connect your NAS to Amazon S3, Backblaze B2, SFTP servers, and more.</p>
+      <button class="btn btn-primary" onclick="openAddRemote()">
+        <span class="material-symbols-rounded" style="font-size:18px">add</span> Add Your First Remote
+      </button>
     </div>
+    <div id="remoteGrid" class="remote-grid" style="display:none"></div>
   </div>
 </div>
 
-<!-- Add Remote FAB -->
-<button class="fab" onclick="openAddRemoteWizard()">
-  <span class="material-symbols-rounded" style="font-size: 32px;">add</span>
+<button class="fab" onclick="openAddRemote()" id="fab" style="display:none" title="Add Remote">
+  <span class="material-symbols-rounded">add</span>
 </button>
 
-<!-- Add Remote Wizard -->
-<div id="addRemoteModal" class="modal">
-  <div class="modal-content">
+<!-- ADD REMOTE MODAL -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeAddModal()"><span class="material-symbols-rounded">close</span></button>
     <div class="modal-header">
       <div class="modal-title">Add Cloud Remote</div>
-      <div class="modal-subtitle">Connect to your cloud storage provider</div>
+      <div class="modal-subtitle">Connect a cloud storage provider</div>
     </div>
-
     <div class="wizard-steps">
-      <div class="wizard-step active" data-step="1">1. Provider</div>
-      <div class="wizard-step" data-step="2">2. Configure</div>
-      <div class="wizard-step" data-step="3">3. Test</div>
-      <div class="wizard-step" data-step="4">4. Name</div>
+      <div class="wizard-step active" id="si1">1. Provider</div>
+      <div class="wizard-step" id="si2">2. Configure</div>
+      <div class="wizard-step" id="si3">3. Test &amp; Save</div>
     </div>
-
-    <div class="wizard-content">
-      <!-- Step 1: Select Provider -->
-      <div class="wizard-page active" data-page="1">
-        <div class="form-label">Select Provider</div>
-        <div class="form-help" style="margin-bottom: 16px;">Choose your cloud storage provider</div>
-        
-        <div id="popularProviders"></div>
-        <div style="margin: 24px 0; text-align: center; color: var(--text-dim); font-size: 13px;">More Providers</div>
-        <div id="allProviders"></div>
-      </div>
-
-      <!-- Step 2: Configure -->
-      <div class="wizard-page" data-page="2">
-        <div id="configForm"></div>
-      </div>
-
-      <!-- Step 3: Test Connection -->
-      <div class="wizard-page" data-page="3">
-        <div style="text-align: center; padding: 40px;">
-          <div class="material-symbols-rounded" style="font-size: 64px; color: var(--primary); margin-bottom: 16px;">cloud_done</div>
-          <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Test Connection</div>
-          <div style="font-size: 14px; color: var(--text-dim); margin-bottom: 24px;">
-            Click below to verify connection to <span id="testProviderName"></span>
-          </div>
-          <button class="btn btn-primary" onclick="testConnection()">
-            <span class="material-symbols-rounded" style="margin-right: 8px;">play_arrow</span>
-            Test Connection
-          </button>
-          <div id="testResult"></div>
-        </div>
-      </div>
-
-      <!-- Step 4: Name & Save -->
-      <div class="wizard-page" data-page="4">
-        <div class="form-group">
-          <label class="form-label">Remote Name</label>
-          <input type="text" id="remoteName" class="form-input" placeholder="my-backup">
-          <div class="form-help">A short name for this remote (letters, numbers, dashes, underscores only)</div>
-        </div>
+    <div class="wizard-pane active" id="sp1">
+      <div id="providerGrid" class="provider-grid">
+        <div class="loading-row" style="grid-column:1/-1"><div class="spinner"></div> Loading…</div>
       </div>
     </div>
-
-    <div class="btn-group">
-      <button class="btn btn-secondary" onclick="closeWizard()">Cancel</button>
-      <button class="btn btn-secondary" id="wizardBack" onclick="wizardBack()" style="display: none;">Back</button>
-      <button class="btn btn-primary" id="wizardNext" onclick="wizardNext()">Next</button>
-      <button class="btn btn-primary" id="wizardSave" onclick="saveRemote()" style="display: none;">Save</button>
+    <div class="wizard-pane" id="sp2">
+      <div class="form-group">
+        <label class="form-label">Remote Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="remoteName" placeholder="my-b2-backup" oninput="validateRName(this)">
+        <div class="form-help">Letters, digits, hyphens, underscores only</div>
+        <div id="rnError" style="font-size:12px;color:var(--error);display:none"></div>
+      </div>
+      <div id="dynFields"></div>
+    </div>
+    <div class="wizard-pane" id="sp3">
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:20px">Test the connection to confirm your credentials before saving.</p>
+      <div id="testResultDiv" style="display:none"></div>
+      <button class="btn" onclick="testConn()" id="testBtn" style="width:100%;justify-content:center;margin-bottom:16px">
+        <span class="material-symbols-rounded" style="font-size:18px">wifi_tethering</span> Test Connection
+      </button>
+      <div class="form-group">
+        <label class="form-label">Configuration Summary</label>
+        <div id="cfgSummary" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;font-family:monospace;color:var(--text-dim);white-space:pre-wrap"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="wBack()" id="wBackBtn" style="display:none">Back</button>
+      <button class="btn btn-primary" onclick="wNext()" id="wNextBtn" disabled>Next</button>
     </div>
   </div>
 </div>
 
-<!-- Delete Confirmation Modal -->
-<div id="deleteModal" class="modal">
-  <div class="modal-content">
+<!-- SYNC MODAL -->
+<div class="modal-overlay" id="syncModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeSyncModal()"><span class="material-symbols-rounded">close</span></button>
     <div class="modal-header">
-      <div class="modal-title">Delete Remote?</div>
-      <div class="modal-subtitle">This action cannot be undone</div>
+      <div class="modal-title" id="syncTitle">Sync Remote</div>
+      <div class="modal-subtitle">Synchronize between NAS and cloud</div>
     </div>
-    <div style="padding: 20px 0;">
-      Are you sure you want to delete remote "<span id="deleteRemoteName"></span>"?
+    <div class="sync-direction">
+      <div class="sync-dir-btn selected" id="du" onclick="setDir('upload')">
+        <span class="material-symbols-rounded">cloud_upload</span><span>Upload to Cloud</span>
+      </div>
+      <div class="sync-dir-btn" id="dd" onclick="setDir('download')">
+        <span class="material-symbols-rounded">cloud_download</span><span>Download from Cloud</span>
+      </div>
     </div>
-    <div class="btn-group">
-      <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
-      <button class="btn" style="background: var(--error); color: white;" onclick="confirmDelete()">Delete</button>
+    <div class="form-group">
+      <label class="form-label">Local Path <span class="req">*</span></label>
+      <input type="text" class="form-input" id="syncPath" placeholder="/mnt/tank/backups">
+      <div class="form-help">Must be under /mnt/, /data/, or /tank/</div>
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">
+        <input type="checkbox" id="syncDry">
+        Dry run — preview changes without applying them
+      </label>
+    </div>
+    <div id="syncOut" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeSyncModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doSync()" id="syncBtn">
+        <span class="material-symbols-rounded" style="font-size:18px">sync</span> Start Sync
+      </button>
     </div>
   </div>
 </div>
 
-<!-- Toast -->
-<div id="toast" class="toast">
-  <span class="material-symbols-rounded" id="toastIcon">check_circle</span>
-  <span id="toastMessage">Success</span>
+<!-- DELETE CONFIRM -->
+<div class="modal-overlay" id="delModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header"><div class="modal-title">Delete Remote</div></div>
+    <p style="font-size:14px;color:var(--text-dim)">Delete remote <strong id="delName" style="color:var(--text)"></strong>? Your cloud data is not affected — only the configuration is removed.</p>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeDelModal()">Cancel</button>
+      <button class="btn" style="background:var(--error);color:#fff;border-color:var(--error)" onclick="doDelete()">Delete</button>
+    </div>
+  </div>
 </div>
 
 <script>
-function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-}
+const API='/api/cloud-sync';
+let providers=[],selProvider=null,wStep=1,syncRemote=null,syncDir='upload',delTarget=null;
 
-// Navigation behavior
-function navigateToSection(section) {
-  if (section === 'dashboard') {
-    window.location.href = 'index.html';
-  }
-}
+document.addEventListener('DOMContentLoaded',()=>{loadStatus();loadRemotes();});
 
-function toggleSubNav(section, button) {
-  // Remove active from all nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active to clicked button
-  if (button) {
-    button.classList.add('active');
-  }
-  
-  // Hide all sub-navs
-  document.querySelectorAll('.nav-sub').forEach(sub => {
-    sub.classList.remove('active');
-  });
-  
-  // Show selected sub-nav
-  const subNav = document.getElementById(`sub-${section}`);
-  if (subNav) {
-    subNav.classList.add('active');
-    document.body.classList.add('has-subnav');
-  }
+function csrfFetch(url,opts={}){
+  const tok=document.cookie.match(/csrf_token=([^;]+)/)?.[1]||'';
+  opts.headers={...(opts.headers||{}),'X-CSRF-Token':tok};
+  return fetch(url,opts);
 }
+async function apiGet(action){return(await csrfFetch(`${API}?action=${action}`)).json();}
+async function apiPost(action,body){return(await csrfFetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...body})})).json();}
 
-// Auto-detect current section and page on load
-(function() {
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-  
-  // Page to section mapping
-  const pageMap = {
-    'acl-manager.html': { section: 'storage', page: 'acl-manager' },
-    'audit.html': { section: 'security', page: 'audit' },
-    'certificates.html': { section: 'security', page: 'certificates' },
-    'cloud-sync.html': { section: 'storage', page: 'cloud-sync' },
-    'directory-service.html': { section: 'identity', page: 'directory-service' },
-    'docker.html': { section: 'compute', page: 'docker' },
-    'files-enhanced.html': { section: 'storage', page: 'files-enhanced' },
-    'files.html': { section: 'storage', page: 'files' },
-    'firewall.html': { section: 'security', page: 'firewall' },
-    'groups.html': { section: 'identity', page: 'groups' },
-    'hardware.html': { section: 'system', page: 'hardware' },
-    'index.html': { section: 'dashboard', page: null },
-    'ipmi.html': { section: 'system', page: 'ipmi' },
-    'logs.html': { section: 'system', page: 'logs' },
-    'modules.html': { section: 'compute', page: 'modules' },
-    'network-dns.html': { section: 'network', page: 'network-dns' },
-    'network-interfaces.html': { section: 'network', page: 'network-interfaces' },
-    'network-routing.html': { section: 'network', page: 'network-routing' },
-    'network.html': { section: 'network', page: 'network' },
-    'pools-advanced.html': { section: 'storage', page: 'pools-advanced' },
-    'pools.html': { section: 'storage', page: 'pools' },
-    'power-management.html': { section: 'system', page: 'power-management' },
-    'quotas.html': { section: 'storage', page: 'quotas' },
-    'rbac-management.html': { section: 'identity', page: 'rbac-management' },
-    'removable-media-ui.html': { section: 'system', page: 'removable-media-ui' },
-    'replication.html': { section: 'storage', page: 'replication' },
-    'reporting.html': { section: 'system', page: 'reporting' },
-    'security.html': { section: 'security', page: 'security' },
-    'settings.html': { section: 'system', page: 'settings' },
-    'shares.html': { section: 'storage', page: 'shares' },
-    'snapshot-scheduler.html': { section: 'storage', page: 'snapshot-scheduler' },
-    'system-monitoring.html': { section: 'system', page: 'system-monitoring' },
-    'system-settings.html': { section: 'system', page: 'system-settings' },
-    'ups.html': { section: 'system', page: 'ups' },
-    'users.html': { section: 'identity', page: 'users' },
-    'zfs-encryption.html': { section: 'storage', page: 'zfs-encryption' }
-  };
-  
-  const current = pageMap[currentPage];
-  if (current) {
-    // Activate section button
-    const sectionBtn = document.querySelector(`[data-section="${current.section}"]`);
-    if (sectionBtn) {
-      sectionBtn.classList.add('active');
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function toast(m,t='info'){if(window.ui)ui.toast(m,t);else console.log(t,m);}
+
+async function loadStatus(){
+  try{
+    const d=await apiGet('status');
+    const b=document.getElementById('statusBanner');
+    if(d.rclone_available){
+      b.className='status-banner online';
+      b.innerHTML=`<span class="material-symbols-rounded" style="font-size:28px;color:var(--success)">check_circle</span>
+        <div class="status-banner-text">
+          <div class="status-banner-title">rclone available</div>
+          <div class="status-banner-sub">${esc(d.version)} · ${d.remote_count} remote${d.remote_count!==1?'s':''} · Config: ${esc(d.config_path)}</div>
+        </div>`;
+      document.getElementById('addBtn').style.display='';
+      document.getElementById('fab').style.display='';
+    }else{
+      b.className='status-banner offline';
+      b.innerHTML=`<span class="material-symbols-rounded" style="font-size:28px;color:var(--error)">error</span>
+        <div class="status-banner-text">
+          <div class="status-banner-title">rclone not available</div>
+          <div class="status-banner-sub">${esc(d.message)}</div>
+        </div>`;
     }
-    
-    // Show and activate sub-nav if not dashboard
-    if (current.section !== 'dashboard') {
-      const subNav = document.getElementById(`sub-${current.section}`);
-      if (subNav) {
-        subNav.classList.add('active');
-        document.body.classList.add('has-subnav');
-        
-        // Activate current page in sub-nav
-        if (current.page) {
-          const pageLink = subNav.querySelector(`[data-page="${current.page}"]`);
-          if (pageLink) {
-            pageLink.classList.add('active');
-          }
-        }
-      }
-    }
-  }
-})();
-
-// Keyboard shortcuts
-function showKeyboardHelp() {
-  if (window.EnhancedUI) {
-    const shortcuts = `Keyboard Shortcuts:
-
-g + d → Dashboard
-g + s → Storage
-g + c → Compute
-g + n → Network
-g + u → Identity
-g + e → Security
-g + y → System
-
-r → Refresh page
-Esc → Close modals
-? → Show this help`;
-    EnhancedUI.toast(shortcuts, 'info', 8000);
-  }
+  }catch(e){console.error(e);}
 }
 
-// Enhanced keyboard shortcuts for sections
-(function() {
-  let keySequence = '';
-  let keyTimeout;
-  
-  document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    
-    keySequence += e.key;
-    clearTimeout(keyTimeout);
-    
-    const shortcuts = {
-      'gd': 'index.html',
-      'gs': () => toggleSubNav('storage', document.querySelector('[data-section="storage"]')),
-      'gc': () => toggleSubNav('compute', document.querySelector('[data-section="compute"]')),
-      'gn': () => toggleSubNav('network', document.querySelector('[data-section="network"]')),
-      'gu': () => toggleSubNav('identity', document.querySelector('[data-section="identity"]')),
-      'ge': () => toggleSubNav('security', document.querySelector('[data-section="security"]')),
-      'gy': () => toggleSubNav('system', document.querySelector('[data-section="system"]'))
-    };
-    
-    if (shortcuts[keySequence]) {
-      e.preventDefault();
-      const action = shortcuts[keySequence];
-      if (typeof action === 'function') {
-        action();
-      } else {
-        window.location.href = action;
-      }
-      keySequence = '';
-    } else if (e.key === '?') {
-      e.preventDefault();
-      showKeyboardHelp();
-    }
-    
-    keyTimeout = setTimeout(() => keySequence = '', 1000);
-  });
-})();
-
-// Connection status monitoring (integrates with existing connection-monitor.js)
-if (window.ConnectionMonitor) {
-  window.ConnectionMonitor.on('statusChange', (online) => {
-    const status = document.getElementById('navConnectionStatus');
-    if (status) {
-      if (online) {
-        status.classList.remove('offline');
-        status.classList.add('online');
-        status.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-      } else {
-        status.classList.remove('online');
-        status.classList.add('offline');
-        status.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
-      }
-    }
-  });
-}
-</script>
-
-<script>
-const API_BASE = '/api/backup/rsync';
-let providers = {};
-let selectedProvider = null;
-let currentStep = 1;
-let remoteToDelete = null;
-let wizardConfig = {};
-
-function getCSRFToken() {
-  const match = document.cookie.match(/csrf_token=([^;]+)/);
-  return match ? match[1] : '';
+async function loadRemotes(){
+  const loading=document.getElementById('remotesLoading');
+  const empty=document.getElementById('remotesEmpty');
+  const grid=document.getElementById('remoteGrid');
+  loading.style.display='flex';empty.style.display='none';grid.style.display='none';
+  try{
+    const d=await apiGet('remotes');
+    loading.style.display='none';
+    if(!d.success){toast('Failed to load remotes','error');empty.style.display='block';return;}
+    if(!d.remotes||d.remotes.length===0){empty.style.display='block';return;}
+    grid.innerHTML=d.remotes.map(r=>remoteCard(r)).join('');
+    grid.style.display='grid';
+  }catch(e){loading.style.display='none';empty.style.display='block';toast('Failed to load remotes','error');}
 }
 
-function showToast(message, type = 'success') {
-  const toast = document.getElementById('toast');
-  const icon = document.getElementById('toastIcon');
-  const msg = document.getElementById('toastMessage');
-  
-  toast.className = 'toast show ' + type;
-  icon.textContent = type === 'success' ? 'check_circle' : 'error';
-  msg.textContent = message;
-  
-  setTimeout(() => toast.classList.remove('show'), 3000);
-}
+function provIcon(t){return{s3:'cloud',b2:'backup',azureblob:'cloud_queue',sftp:'terminal',ftp:'lan',webdav:'http',drive:'storage',dropbox:'folder_special',onedrive:'cloud_sync'}[t]||'storage';}
 
-async function checkStatus() {
-  try {
-    const response = await fetch(`${API_BASE}?action=status`);
-    const data = await response.json();
-    
-    const banner = document.getElementById('statusBanner');
-    banner.innerHTML = data.rclone_available ? 
-      `<span class="material-symbols-rounded" style="font-size: 32px; color: var(--success);">check_circle</span>
-       <div style="flex: 1;">
-         <div style="font-size: 18px; font-weight: 700;">rclone available</div>
-         <div style="font-size: 14px; color: var(--text-dim);">${data.message}</div>
-       </div>` :
-      `<span class="material-symbols-rounded" style="font-size: 32px; color: var(--error);">error</span>
-       <div style="flex: 1;">
-         <div style="font-size: 18px; font-weight: 700;">rclone not available</div>
-         <div style="font-size: 14px; color: var(--text-dim);">${data.message}</div>
-       </div>`;
-    
-    banner.className = `status-banner ${data.rclone_available ? 'online' : 'offline'}`;
-    
-    if (data.rclone_available) {
-      loadProviders();
-      loadRemotes();
-      loadJobs();
-    }
-  } catch (error) {
-    console.error('Failed to check status:', error);
-  }
-}
-
-async function loadProviders() {
-  try {
-    const response = await fetch(`${API_BASE}?action=providers`);
-    const data = await response.json();
-    if (data.success) {
-      providers = data.providers;
-    }
-  } catch (error) {
-    console.error('Failed to load providers:', error);
-  }
-}
-
-async function loadRemotes() {
-  const loading = document.getElementById('remotesLoading');
-  const grid = document.getElementById('remoteGrid');
-  const empty = document.getElementById('remotesEmpty');
-  
-  try {
-    const response = await fetch(`${API_BASE}?action=remotes`);
-    const data = await response.json();
-    
-    loading.style.display = 'none';
-    
-    if (data.success && data.remotes && data.remotes.length > 0) {
-      document.getElementById('remoteCount').textContent = `${data.count} remote${data.count !== 1 ? 's' : ''}`;
-      grid.style.display = 'grid';
-      grid.innerHTML = data.remotes.map(remote => `
-        <div class="remote-card">
-          <div class="remote-header">
-            <span class="remote-icon">${getProviderIcon(remote.type)}</span>
-            <div class="remote-info">
-              <div class="remote-name">${remote.name}</div>
-              <div class="remote-type">${remote.type}</div>
-            </div>
-          </div>
-          <div class="remote-stats">
-            <div class="remote-stat">
-              <div class="remote-stat-value">${remote.size_human}</div>
-              <div class="remote-stat-label">Size</div>
-            </div>
-            <div class="remote-stat">
-              <div class="remote-stat-value">${remote.file_count.toLocaleString()}</div>
-              <div class="remote-stat-label">Files</div>
-            </div>
-          </div>
-          <div class="remote-actions">
-            <button class="remote-btn" onclick="testRemote('"+JSON.stringify(remote.name)+"')">
-              <span class="material-symbols-rounded">verified</span>
-              Test
-            </button>
-            <button class="remote-btn danger" onclick="deleteRemote('"+JSON.stringify(remote.name)+"')">
-              <span class="material-symbols-rounded">delete</span>
-              Delete
-            </button>
-          </div>
-        </div>
-      `).join('');
-    } else {
-      empty.style.display = 'block';
-    }
-  } catch (error) {
-    console.error('Failed to load remotes:', error);
-    loading.style.display = 'none';
-    empty.style.display = 'block';
-  }
-}
-
-async function loadJobs() {
-  const loading = document.getElementById('jobsLoading');
-  const list = document.getElementById('jobList');
-  const empty = document.getElementById('jobsEmpty');
-  
-  try {
-    const response = await fetch(`${API_BASE}?action=jobs`);
-    const data = await response.json();
-    
-    loading.style.display = 'none';
-    
-    if (data.success && data.jobs && data.jobs.length > 0) {
-      list.style.display = 'block';
-      list.innerHTML = data.jobs.map(job => `
-        <div class="job-item">
-          <span class="material-symbols-rounded job-icon">sync</span>
-          <div class="job-info">
-            <div class="job-command">${job.command}</div>
-            <div class="job-status">Status: ${job.status}</div>
-          </div>
-          <span class="job-pid">PID: ${job.pid}</span>
-        </div>
-      `).join('');
-    } else {
-      empty.style.display = 'block';
-    }
-  } catch (error) {
-    console.error('Failed to load jobs:', error);
-    loading.style.display = 'none';
-    empty.style.display = 'block';
-  }
-}
-
-function getProviderIcon(type) {
-  const icons = {
-    's3': '☁️',
-    'b2': '💾',
-    'drive': '📁',
-    'dropbox': '📦',
-    'onedrive': '☁️',
-    'azureblob': '🔷',
-    'gcs': '🔴',
-    'mega': '🔒',
-    'pcloud': '☁️',
-    'box': '📦',
-    'sftp': '🔐',
-    'ftp': '📡',
-    'webdav': '🌐'
-  };
-  return icons[type] || '☁️';
-}
-
-function openAddRemoteWizard() {
-  document.getElementById('addRemoteModal').classList.add('active');
-  currentStep = 1;
-  renderProviderSelection();
-}
-
-function renderProviderSelection() {
-  const popular = Object.entries(providers).filter(([k, v]) => v.popular);
-  const others = Object.entries(providers).filter(([k, v]) => !v.popular);
-  
-  document.getElementById('popularProviders').innerHTML = `
-    <div class="provider-grid">
-      ${popular.map(([type, info]) => `
-        <div class="provider-card" onclick="selectProvider('"+JSON.stringify(type)+"')">
-          <div class="provider-icon">${info.icon}</div>
-          <div class="provider-name">${info.name}</div>
-          <span class="provider-popular">POPULAR</span>
-        </div>
-      `).join('')}
+function remoteCard(r){
+  return`<div class="remote-card">
+    <div class="remote-card-header">
+      <div class="remote-icon"><span class="material-symbols-rounded">${provIcon(r.type)}</span></div>
+      <div><div class="remote-name">${esc(r.name)}</div><div class="remote-type">${esc(r.type||'unknown')}</div></div>
     </div>
-  `;
-  
-  document.getElementById('allProviders').innerHTML = `
-    <div class="provider-grid">
-      ${others.map(([type, info]) => `
-        <div class="provider-card" onclick="selectProvider('"+JSON.stringify(type)+"')">
-          <div class="provider-icon">${info.icon}</div>
-          <div class="provider-name">${info.name}</div>
-        </div>
-      `).join('')}
+    <div class="remote-actions">
+      <button class="remote-btn" onclick="openSync('${esc(r.name)}')"><span class="material-symbols-rounded">sync</span>Sync</button>
+      <button class="remote-btn" onclick="testExisting('${esc(r.name)}')"><span class="material-symbols-rounded">wifi_tethering</span>Test</button>
+      <button class="remote-btn danger" onclick="openDel('${esc(r.name)}')"><span class="material-symbols-rounded">delete</span></button>
     </div>
-  `;
+  </div>`;
 }
 
-function selectProvider(type) {
-  selectedProvider = type;
-  document.querySelectorAll('.provider-card').forEach(card => card.classList.remove('selected'));
-  event.target.closest('.provider-card').classList.add('selected');
-}
-
-function wizardNext() {
-  if (currentStep === 1) {
-    if (!selectedProvider) {
-      showToast('Please select a provider', 'error');
-      return;
-    }
-    renderConfigForm();
-  } else if (currentStep === 2) {
-    const form = document.getElementById('configForm');
-    const inputs = form.querySelectorAll('input[required]');
-    let valid = true;
-    
-    wizardConfig = {};
-    inputs.forEach(input => {
-      if (!input.value) {
-        valid = false;
-        input.style.borderColor = 'var(--error)';
-      } else {
-        wizardConfig[input.name] = input.value;
-        input.style.borderColor = '';
-      }
-    });
-    
-    if (!valid) {
-      showToast('Please fill all required fields', 'error');
-      return;
-    }
-  } else if (currentStep === 3) {
-    // Skip test if not performed
+// — Wizard —
+async function openAddRemote(){
+  wStep=1;selProvider=null;
+  document.getElementById('remoteName').value='';
+  document.getElementById('dynFields').innerHTML='';
+  document.getElementById('testResultDiv').style.display='none';
+  document.getElementById('cfgSummary').textContent='';
+  updateW();
+  document.getElementById('addModal').classList.add('active');
+  if(providers.length===0){
+    try{const d=await apiGet('providers');providers=d.providers||[];}
+    catch(e){toast('Failed to load providers','error');}
   }
-  
-  currentStep++;
-  updateWizardUI();
+  renderProviders();
 }
+function closeAddModal(){document.getElementById('addModal').classList.remove('active');}
 
-function wizardBack() {
-  currentStep--;
-  updateWizardUI();
+function renderProviders(){
+  document.getElementById('providerGrid').innerHTML=providers.map((p,i)=>`
+    <div class="provider-card ${selProvider===i?'selected':''}" onclick="selectProv(${i})">
+      <span class="material-symbols-rounded">${provIcon(p.id)}</span>
+      <span class="name">${esc(p.name)}</span>
+    </div>`).join('');
 }
+function selectProv(i){selProvider=i;renderProviders();document.getElementById('wNextBtn').disabled=false;}
 
-function updateWizardUI() {
-  document.querySelectorAll('.wizard-step').forEach((step, idx) => {
-    step.classList.toggle('active', idx + 1 === currentStep);
-    step.classList.toggle('completed', idx + 1 < currentStep);
-  });
-  
-  document.querySelectorAll('.wizard-page').forEach((page, idx) => {
-    page.classList.toggle('active', idx + 1 === currentStep);
-  });
-  
-  document.getElementById('wizardBack').style.display = currentStep > 1 ? 'inline-block' : 'none';
-  document.getElementById('wizardNext').style.display = currentStep < 4 ? 'inline-block' : 'none';
-  document.getElementById('wizardSave').style.display = currentStep === 4 ? 'inline-block' : 'none';
-  
-  if (currentStep === 3) {
-    document.getElementById('testProviderName').textContent = providers[selectedProvider].name;
+function updateW(){
+  for(let i=1;i<=3;i++){
+    document.getElementById(`sp${i}`).classList.toggle('active',i===wStep);
+    const s=document.getElementById(`si${i}`);
+    s.className='wizard-step'+(i===wStep?' active':i<wStep?' done':'');
   }
+  document.getElementById('wBackBtn').style.display=wStep>1?'':'none';
+  document.getElementById('wNextBtn').textContent=wStep===3?'Save Remote':'Next';
+  document.getElementById('wNextBtn').disabled=wStep===1&&selProvider===null;
 }
 
-function renderConfigForm() {
-  const configs = {
-    's3': [
-      {name: 'access_key_id', label: 'Access Key ID', type: 'text', required: true},
-      {name: 'secret_access_key', label: 'Secret Access Key', type: 'password', required: true},
-      {name: 'region', label: 'Region', type: 'text', placeholder: 'us-east-1'},
-      {name: 'endpoint', label: 'Endpoint (optional)', type: 'text'}
-    ],
-    'b2': [
-      {name: 'account', label: 'Account ID', type: 'text', required: true},
-      {name: 'key', label: 'Application Key', type: 'password', required: true}
-    ],
-    'drive': [
-      {name: 'client_id', label: 'Client ID', type: 'text', required: true},
-      {name: 'client_secret', label: 'Client Secret', type: 'password', required: true}
-    ],
-    'dropbox': [
-      {name: 'token', label: 'Access Token', type: 'password', required: true}
-    ]
-  };
-  
-  const fields = configs[selectedProvider] || [];
-  const form = document.getElementById('configForm');
-  
-  form.innerHTML = fields.map(field => `
+async function wNext(){
+  if(wStep===1){if(selProvider===null){toast('Select a provider','warning');return;}wStep=2;renderFields();document.getElementById('wNextBtn').disabled=false;}
+  else if(wStep===2){if(!validateStep2())return;wStep=3;renderSummary();}
+  else{await saveRemote();return;}
+  updateW();
+}
+function wBack(){if(wStep>1){wStep--;updateW();if(wStep===1)renderProviders();}}
+
+function renderFields(){
+  const p=providers[selProvider];
+  document.getElementById('dynFields').innerHTML=p.fields.map(f=>`
     <div class="form-group">
-      <label class="form-label">${field.label}${field.required ? ' *' : ''}</label>
-      <input type="${field.type}" name="${field.name}" class="form-input" 
-             placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''}>
-    </div>
-  `).join('');
+      <label class="form-label">${esc(f.label)}${f.required?'<span class="req">*</span>':''}</label>
+      <input type="${f.type==='password'?'password':'text'}" class="form-input" id="f_${f.key}" data-key="${f.key}" data-req="${f.required}" placeholder="${esc(f.placeholder||'')}" autocomplete="${f.type==='password'?'new-password':'off'}">
+      ${f.help?`<div class="form-help">${esc(f.help)}</div>`:''}
+    </div>`).join('');
 }
 
-async function testConnection() {
-  const testResult = document.getElementById('testResult');
-  testResult.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-  
-  try {
-    // Create temporary remote for testing
-    const response = await fetch(`${API_BASE}?action=test&remote=temp_test`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCSRFToken()
-      }
-    });
-    
-    const data = await response.json();
-    
-    testResult.innerHTML = `
-      <div class="test-result ${data.success ? 'success' : 'error'}">
-        <span class="material-symbols-rounded">${data.success ? 'check_circle' : 'error'}</span>
-        ${escapeHtml(data.message || (data.success ? 'Connection successful!' : 'Connection failed'))}
-      </div>
-    `;
-  } catch (error) {
-    testResult.innerHTML = `
-      <div class="test-result error">
-        <span class="material-symbols-rounded">error</span>
-        Test failed: ${escapeHtml(error.message)}
-      </div>
-    `;
+function validateStep2(){
+  const name=document.getElementById('remoteName').value.trim();
+  if(!name){toast('Remote name is required','warning');return false;}
+  if(!/^[a-zA-Z0-9_-]+$/.test(name)){toast('Invalid remote name','warning');return false;}
+  const p=providers[selProvider];
+  for(const f of p.fields){
+    const el=document.getElementById(`f_${f.key}`);
+    if(f.required&&el&&!el.value.trim()){toast(f.label+' is required','warning');el.focus();return false;}
   }
+  return true;
 }
 
-async function saveRemote() {
-  const name = document.getElementById('remoteName').value.trim();
-  
-  if (!name) {
-    showToast('Please enter a remote name', 'error');
-    return;
+function validateRName(el){
+  const err=document.getElementById('rnError');
+  if(el.value&&!/^[a-zA-Z0-9_-]+$/.test(el.value)){err.textContent='Invalid characters';err.style.display='';}
+  else err.style.display='none';
+}
+
+function renderSummary(){
+  const p=providers[selProvider];
+  const name=document.getElementById('remoteName').value.trim();
+  const lines=[`Remote: ${name}`,`Type: ${p.name} (${p.id})`];
+  for(const f of p.fields){
+    const el=document.getElementById(`f_${f.key}`);
+    if(el&&el.value.trim())lines.push(`${f.label}: ${f.type==='password'?'••••••••':el.value.trim()}`);
   }
-  
-  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-    showToast('Invalid remote name (alphanumeric, dashes, underscores only)', 'error');
-    return;
-  }
-  
-  try {
-    const response = await fetch(`${API_BASE}?action=configure`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCSRFToken()
-      },
-      body: JSON.stringify({
-        name: name,
-        type: selectedProvider,
-        config: wizardConfig
-      })
-    });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      showToast('Remote added successfully!', 'success');
-      closeWizard();
-      loadRemotes();
-    } else {
-      showToast(data.error || 'Failed to add remote', 'error');
+  document.getElementById('cfgSummary').textContent=lines.join('\n');
+  document.getElementById('testResultDiv').style.display='none';
+}
+
+function getConfig(){
+  const p=providers[selProvider],cfg={};
+  for(const f of p.fields){const el=document.getElementById(`f_${f.key}`);if(el&&el.value.trim())cfg[f.key]=el.value.trim();}
+  return cfg;
+}
+
+async function doSave(name,showMsg=true){
+  const p=providers[selProvider];
+  try{
+    const d=await apiPost('configure',{name,type:p.id,config:getConfig()});
+    if(!d.success){toast('Save failed: '+(d.error||''),'error');return false;}
+    if(showMsg)toast(`Remote '${name}' saved`,'success');
+    return true;
+  }catch(e){toast('Save error: '+e.message,'error');return false;}
+}
+
+async function testConn(){
+  const name=document.getElementById('remoteName').value.trim();
+  if(!name){toast('Enter a remote name first','warning');return;}
+  const div=document.getElementById('testResultDiv');
+  div.style.display='flex';div.className='test-result';div.innerHTML='<div class="spinner" style="width:16px;height:16px"></div> Testing…';
+  const btn=document.getElementById('testBtn');btn.disabled=true;
+  try{
+    await doSave(name,false); // save first so rclone can test it
+    const d=await apiPost('test',{remote:name});
+    if(d.success&&d.connected){
+      div.className='test-result ok';
+      div.innerHTML='<span class="material-symbols-rounded">check_circle</span> Connection successful';
+    }else{
+      div.className='test-result fail';
+      div.innerHTML=`<span class="material-symbols-rounded">error</span>${esc(d.error||'Connection failed')}`;
     }
-  } catch (error) {
-    showToast('Failed to save remote: ' + escapeHtml(error.message), 'error');
-  }
+  }catch(e){div.className='test-result fail';div.innerHTML=`<span class="material-symbols-rounded">error</span>${esc(e.message)}`;}
+  btn.disabled=false;
 }
 
-function closeWizard() {
-  document.getElementById('addRemoteModal').classList.remove('active');
-  selectedProvider = null;
-  currentStep = 1;
-  wizardConfig = {};
+async function saveRemote(){
+  const name=document.getElementById('remoteName').value.trim();
+  const btn=document.getElementById('wNextBtn');
+  btn.disabled=true;btn.textContent='Saving…';
+  const ok=await doSave(name,true);
+  if(ok){closeAddModal();await loadRemotes();await loadStatus();}
+  else{btn.disabled=false;btn.textContent='Save Remote';}
 }
 
-async function testRemote(name) {
-  try {
-    const response = await fetch(`${API_BASE}?action=test&remote=${name}`);
-    const data = await response.json();
-    
-    showToast(data.success ? 
-      `Remote "${name}" is accessible` : 
-      `Failed to connect to "${name}"`,
-      data.success ? 'success' : 'error'
-    );
-  } catch (error) {
-    showToast('Test failed: ' + escapeHtml(error.message), 'error');
-  }
+async function testExisting(name){
+  toast(`Testing ${name}…`,'info');
+  try{
+    const d=await apiPost('test',{remote:name});
+    if(d.success&&d.connected)toast(`✓ ${name}: connected`,'success');
+    else toast(`✗ ${name}: ${d.error||'failed'}`,'error');
+  }catch(e){toast(`Test error: ${e.message}`,'error');}
 }
 
-function deleteRemote(name) {
-  remoteToDelete = name;
-  document.getElementById('deleteRemoteName').textContent = name;
-  document.getElementById('deleteModal').classList.add('active');
+// — Sync —
+function openSync(name){
+  syncRemote=name;syncDir='upload';
+  document.getElementById('syncTitle').textContent='Sync: '+name;
+  document.getElementById('syncPath').value='';
+  document.getElementById('syncDry').checked=false;
+  document.getElementById('syncOut').style.display='none';
+  setDir('upload');
+  document.getElementById('syncModal').classList.add('active');
 }
+function closeSyncModal(){document.getElementById('syncModal').classList.remove('active');}
+function setDir(d){syncDir=d;document.getElementById('du').classList.toggle('selected',d==='upload');document.getElementById('dd').classList.toggle('selected',d==='download');}
 
-async function confirmDelete() {
-  if (!remoteToDelete) return;
-  
-  try {
-    const response = await fetch(`${API_BASE}?action=delete&remote=${remoteToDelete}`, {
-      method: 'POST',
-      headers: {
-        'X-CSRF-Token': getCSRFToken()
-      }
-    });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      showToast('Remote deleted successfully', 'success');
-      closeDeleteModal();
-      loadRemotes();
-    } else {
-      showToast(data.error || 'Failed to delete remote', 'error');
+async function doSync(){
+  const path=document.getElementById('syncPath').value.trim();
+  if(!path){toast('Local path is required','warning');return;}
+  const btn=document.getElementById('syncBtn');
+  btn.disabled=true;btn.innerHTML='<div class="spinner" style="width:16px;height:16px;display:inline-block"></div> Syncing…';
+  const out=document.getElementById('syncOut');out.style.display='none';
+  try{
+    const d=await apiPost('sync',{remote:syncRemote,local_path:path,direction:syncDir,dry_run:document.getElementById('syncDry').checked});
+    out.style.display='block';
+    if(d.success){
+      out.innerHTML=`<div class="test-result ok"><span class="material-symbols-rounded">check_circle</span>Sync complete${document.getElementById('syncDry').checked?' (dry run)':''}</div>${d.output?`<div class="output-terminal">${esc(d.output)}</div>`:''}`;
+      toast('Sync completed','success');
+    }else{
+      out.innerHTML=`<div class="test-result fail"><span class="material-symbols-rounded">error</span>Sync failed</div>${d.error?`<div class="output-terminal" style="color:#ff8080">${esc(d.error)}</div>`:''}`;
+      toast('Sync failed','error');
     }
-  } catch (error) {
-    showToast('Delete failed: ' + escapeHtml(error.message), 'error');
-  }
+  }catch(e){toast('Sync error: '+e.message,'error');}
+  btn.disabled=false;btn.innerHTML='<span class="material-symbols-rounded" style="font-size:18px">sync</span> Start Sync';
 }
 
-function closeDeleteModal() {
-  document.getElementById('deleteModal').classList.remove('active');
-  remoteToDelete = null;
+// — Delete —
+function openDel(name){delTarget=name;document.getElementById('delName').textContent=name;document.getElementById('delModal').classList.add('active');}
+function closeDelModal(){document.getElementById('delModal').classList.remove('active');delTarget=null;}
+async function doDelete(){
+  if(!delTarget)return;
+  try{
+    const d=await apiPost('delete',{remote:delTarget});
+    if(d.success){toast(`Remote '${delTarget}' deleted`,'success');closeDelModal();await loadRemotes();await loadStatus();}
+    else toast('Delete failed: '+(d.error||''),'error');
+  }catch(e){toast('Delete error: '+e.message,'error');}
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-  checkStatus();
-  setInterval(loadJobs, 5000); // Refresh jobs every 5 seconds
-});
 </script>
-
-    <script src="/assets/js/nav-flyout.js"></script>
-    <script src="/assets/js/nav-shared.js"></script>
+<script src="/assets/js/nav-shared.js"></script>
 </body>
 </html>

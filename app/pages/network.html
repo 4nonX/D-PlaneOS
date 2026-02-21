@@ -46,7 +46,7 @@
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v3.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v3.2.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <div id="nav-root"></div>
@@ -522,7 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Slaves</label>
           <input id="bond-slaves" type="text" placeholder="eth0,eth1" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
         <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Mode</label>
-          <select id="bond-mode" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;appearance:none;">
+          <select class="form-input" id="bond-mode" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;appearance:none;">
             <option value="802.3ad">802.3ad (LACP)</option>
             <option value="active-backup">Active-Backup</option>
             <option value="balance-rr">Balance Round-Robin</option>

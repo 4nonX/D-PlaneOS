@@ -24,7 +24,7 @@
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v3.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v3.2.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <div id="nav-root"></div>
@@ -225,6 +225,7 @@ if (window.ConnectionMonitor) {
   <button class="consolidation-tab" data-tab="monitoring" onclick="switchConsolidatedTab('monitoring')">Live Health</button>
   <button class="consolidation-tab" data-tab="hardware" onclick="switchConsolidatedTab('hardware')">Hardware</button>
   <button class="consolidation-tab" data-tab="logs" onclick="switchConsolidatedTab('logs')">Logs</button>
+  <button class="consolidation-tab" data-tab="prometheus" onclick="switchConsolidatedTab('prometheus')">Prometheus</button>
 </div>
 
 <div id="tab-metrics" class="consolidation-content active">
@@ -412,7 +413,7 @@ if (window.ConnectionMonitor) {
 <div class="page-header">
   <h1 class="page-title">Reporting</h1>
   <div class="page-actions">
-    <select id="reportPeriod" onchange="loadHistory()" style="padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;">
+    <select class="form-input" id="reportPeriod" onchange="loadHistory()" style="padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;">
       <option value="day">Last 24 Hours</option>
       <option value="week">Last 7 Days</option>
     </select>
@@ -1482,8 +1483,108 @@ if (window.ConnectionMonitor) {
 <script src="/assets/js/ui-components.js"></script>
 </div>
 
+<div id="tab-prometheus" class="consolidation-content">
+<div style="max-width:900px;margin:0 auto;padding:32px 0">
+  <h2 style="font-size:22px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+    <span class="material-symbols-rounded">monitoring</span> Prometheus Metrics Exporter
+  </h2>
+  <p style="color:rgba(255,255,255,0.5);margin-bottom:28px">
+    D-PlaneOS exposes a Prometheus-compatible scrape endpoint at <code>/metrics</code>.
+    No authentication is required on the endpoint (restrict via firewall/network policy).
+  </p>
+
+  <!-- Scrape config -->
+  <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px;margin-bottom:20px">
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+      <span class="material-symbols-rounded" style="font-size:18px">code</span> prometheus.yml Scrape Config
+    </h3>
+    <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px;font-family:monospace;font-size:13px;color:rgba(255,255,255,0.75);line-height:1.7;position:relative" id="scrapeConfigBox">
+<span style="color:#7e57c2">scrape_configs:</span>
+  - <span style="color:#81c784">job_name</span>: <span style="color:#ffb74d">'dplaneos'</span>
+    <span style="color:#81c784">static_configs</span>:
+      - <span style="color:#81c784">targets</span>: [<span style="color:#ffb74d" id="scrapeTarget">'&lt;your-nas-ip&gt;:80'</span>]
+    <span style="color:#81c784">metrics_path</span>: <span style="color:#ffb74d">'/metrics'</span>
+    <span style="color:#81c784">scrape_interval</span>: <span style="color:#ffb74d">'30s'</span>
+    </div>
+    <button onclick="copyScrapeConfig()" style="margin-top:12px;padding:8px 16px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);cursor:pointer;font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px">
+      <span class="material-symbols-rounded" style="font-size:16px">content_copy</span>Copy Config
+    </button>
+  </div>
+
+  <!-- Live metrics preview -->
+  <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;flex:1;margin:0">
+        <span class="material-symbols-rounded" style="font-size:18px">preview</span> Live Metrics Preview
+      </h3>
+      <button onclick="loadMetricsPreview()" style="padding:6px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);cursor:pointer;font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px">
+        <span class="material-symbols-rounded" style="font-size:16px">refresh</span>Refresh
+      </button>
+    </div>
+    <div id="metricsPreview" style="font-family:monospace;font-size:12px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:16px;max-height:380px;overflow-y:auto;color:rgba(255,255,255,0.65);line-height:1.7;white-space:pre">
+      Click Refresh to load live /metrics output…
+    </div>
+  </div>
+
+  <!-- Available metrics list -->
+  <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+      <span class="material-symbols-rounded" style="font-size:18px">list</span> Available Metrics
+    </h3>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+          <th style="text-align:left;padding:8px 12px;font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.08em">Metric</th>
+          <th style="text-align:left;padding:8px 12px;font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.08em">Type</th>
+          <th style="text-align:left;padding:8px 12px;font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.08em">Description</th>
+        </tr>
+      </thead>
+      <tbody style="font-size:13px">
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_memory_total_bytes</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">Total physical memory</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_memory_used_bytes</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">Used memory (total − available)</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_memory_available_bytes</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">Available (uncommitted) memory</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_zfs_arc_size_bytes</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">ZFS ARC current size</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_zfs_arc_max_bytes</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">ZFS ARC maximum allowed size</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_zfs_pool_healthy{pool}</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">1 = ONLINE, 0 = degraded/faulted</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_zfs_pool_size_bytes{pool}</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">Pool total size in bytes</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_zfs_pool_alloc_bytes{pool}</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">Allocated (used) bytes in pool</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_zfs_pool_free_bytes{pool}</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">Free bytes in pool</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_cpu_iowait_ratio</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">CPU I/O wait fraction (0–1)</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)"><code>dplaneos_load_1 / _5 / _15</code></td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:rgba(255,255,255,0.5)">System load averages</td></tr>
+        <tr><td style="padding:10px 12px"><code>dplaneos_inotify_max_watches</code></td><td style="padding:10px 12px;color:rgba(102,126,234,0.8)">gauge</td><td style="padding:10px 12px;color:rgba(255,255,255,0.5)">inotify max_user_watches kernel limit</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+
 </main>
 <script>
+
+function init_prometheus() { loadMetricsPreview(); }
+async function loadMetricsPreview() {
+  const el = document.getElementById('metricsPreview');
+  if (!el) return;
+  el.textContent = 'Loading…';
+  try {
+    const r = await fetch('/metrics');
+    const text = await r.text();
+    // Colorize metric names and values
+    el.textContent = text;
+  } catch(e) {
+    el.textContent = 'Error: ' + e.message;
+  }
+}
+function copyScrapeConfig() {
+  const ip = window.location.hostname + ':' + window.location.port;
+  const cfg = `scrape_configs:\n  - job_name: 'dplaneos'\n    static_configs:\n      - targets: ['${ip}']\n    metrics_path: '/metrics'\n    scrape_interval: '30s'`;
+  navigator.clipboard.writeText(cfg).then(() => {
+    const b = event.currentTarget;
+    b.textContent = '✓ Copied!';
+    setTimeout(() => { b.innerHTML = '<span class="material-symbols-rounded" style="font-size:16px">content_copy</span>Copy Config'; }, 2000);
+  });
+}
+
 function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(function(c){c.classList.remove('active')});document.querySelectorAll('.consolidation-tab').forEach(function(b){b.classList.remove('active')});var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
 document.addEventListener('DOMContentLoaded', () => {
   const main = document.querySelector('.main');

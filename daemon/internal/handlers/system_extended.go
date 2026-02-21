@@ -535,9 +535,17 @@ func (h *FirewallHandler) SetRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.LogAction("firewall", user, fmt.Sprintf("ufw %s", strings.Join(args, " ")), true, duration)
+
+	// On NixOS: persist firewall state to dplane-generated.nix
+	// ufw is not used on NixOS; we translate allow/deny rules to NixOS port lists
+	if NixWriter != nil && NixWriter.IsNixOS() {
+		persistFirewallFromRequest(req.Action, req.Port)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "output": string(output)})
 }
+
 
 // ============================================================
 // SSL/TLS CERTIFICATES
@@ -1035,4 +1043,56 @@ func (h *PowerMgmtHandler) SpindownNow(w http.ResponseWriter, r *http.Request) {
 	audit.LogAction("power_spindown_now", user, fmt.Sprintf("Spindown %s", req.Device), true, 0)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+}
+
+// SyncFirewallToNix reads current ufw rules, extracts simple allow rules,
+// and writes the port list to dplane-generated.nix.
+// POST /api/network/firewall/sync
+// Called by UI after any firewall change to keep NixOS in sync.
+func (h *FirewallHandler) SyncFirewallToNix(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if NixWriter == nil || !NixWriter.IsNixOS() {
+		respondOK(w, map[string]interface{}{
+			"success": true,
+			"message": "Not on NixOS — sync is a no-op",
+		})
+		return
+	}
+
+	// Accept explicit port list from request body (preferred — UI knows the desired state)
+	var req struct {
+		TCPPorts []int `json:"tcp_ports"` // complete desired TCP allow list
+		UDPPorts []int `json:"udp_ports"` // complete desired UDP allow list
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondErrorSimple(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Validate port numbers
+	for _, p := range append(req.TCPPorts, req.UDPPorts...) {
+		if p < 1 || p > 65535 {
+			respondErrorSimple(w, fmt.Sprintf("Invalid port number: %d", p), http.StatusBadRequest)
+			return
+		}
+	}
+
+	if err := NixWriter.SetFirewallPorts(req.TCPPorts, req.UDPPorts); err != nil {
+		respondOK(w, map[string]interface{}{
+			"success": false,
+			"error":   "Failed to write Nix firewall fragment: " + err.Error(),
+		})
+		return
+	}
+
+	log.Printf("[nixwriter] firewall synced: tcp=%v udp=%v", req.TCPPorts, req.UDPPorts)
+	respondOK(w, map[string]interface{}{
+		"success":   true,
+		"tcp_ports": req.TCPPorts,
+		"udp_ports": req.UDPPorts,
+		"message":   "Firewall ports written to dplane-generated.nix — run nixos-rebuild switch to apply",
+	})
 }

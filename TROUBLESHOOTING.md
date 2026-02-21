@@ -181,7 +181,7 @@ sudo systemctl restart dplaneos
 - Background: Docker trying to pull images from DockerHub but failing
 
 ### Root Cause
-System is behind strict firewall or requires HTTP proxy. Docker daemon cannot reach DockerHub. The GUI has no download progress indicator in v5.1.
+System is behind strict firewall or requires HTTP proxy. Docker daemon cannot reach DockerHub. The GUI has no download progress indicator in v3.2.0.
 
 ### Diagnosis
 ```bash
@@ -248,7 +248,7 @@ docker pull <image-name>
 
 This tests Docker Hub connectivity and warns if unreachable.
 
-### Future Fix (v5.2)
+### Future Fix (v3.3.0)
 - Download progress indicator in GUI
 - Better error messages
 - Retry logic with exponential backoff
@@ -259,14 +259,14 @@ This tests Docker Hub connectivity and warns if unreachable.
 ## 4️⃣ Service Worker Cache Mismatch (LOW)
 
 ### Symptom
-- Upgrade from v4.x to v5.1
-- Browser still open from v4.x session
+- Upgrade from v3.0.x to v3.2.0
+- Browser still open from a previous v3.x session
 - After upgrade: Page layout "tears apart"
 - Buttons don't work
 - White screen or mixed v4/v5 UI elements
 
 ### Root Cause
-Service Worker (`sw.js`) cached v4.x assets. Browser tries to mix old v4 CSS/JS with new v5.1 HTML.
+Service Worker (`sw.js`) cached older assets. Browser tries to mix old CSS/JS with new HTML.
 
 ### Diagnosis
 ```bash
@@ -330,7 +330,7 @@ Application → Service Workers
 nano /var/www/dplaneos/app/sw.js
 
 # Change CACHE_NAME
-const CACHE_NAME = 'dplaneos-v5.1.1';  // Increment version
+const CACHE_NAME = 'dplaneos-v3.2.0';  // Increment version on each release
 
 # Users will auto-update on next visit
 ```
@@ -340,7 +340,7 @@ const CACHE_NAME = 'dplaneos-v5.1.1';  // Increment version
 ```
 ⚠️  CRITICAL: Browser Cache
 
-If you're upgrading from v4.x:
+If you're upgrading from v3.0.x or v3.1.x:
 YOU MUST CLEAR YOUR BROWSER CACHE!
 
 Chrome:  Ctrl+Shift+R
@@ -350,7 +350,7 @@ Safari:  Cmd+Option+R
 Why? Service Worker cache mismatch will break the UI
 ```
 
-### Future Fix (v5.2)
+### Future Fix (v3.3.0)
 - Service Worker version check on page load
 - Auto-prompt user to refresh if cache mismatch detected
 - Graceful degradation without Service Worker

@@ -1,132 +1,65 @@
-# D-PlaneOS v3.0.0 — Security Policy
+# Security Policy
 
 ## Supported Versions
 
 | Version | Supported |
 |---------|-----------|
-| v3.0.0  | ✅ Current release |
-| v2.2.0 | ⚠️ Legacy — critical fixes only |
-| v2.1.0 | ⚠️ Legacy — critical fixes only |
-| v2.0.0-OMEGA | ⚠️ Legacy — critical fixes only |
-| < v1.14.0 | ❌ End of life |
+| 3.x     | ✅ Yes — active development |
+| 2.x     | ⚠️ Critical fixes only |
+| < 2.0   | ❌ No — upgrade required |
 
 ## Reporting a Vulnerability
 
-**Do not open a public GitHub issue for security vulnerabilities.**
+**Please do not report security vulnerabilities via GitHub Issues.**
 
-Create a GitHub issue with the `security` label and mark it confidential, or contact via the repository's security advisory feature.
+Security issues in D-PlaneOS are taken seriously. If you discover a vulnerability, please report it privately so we can address it before public disclosure.
 
-Response times:
-- **Critical** (RCE, auth bypass, data exposure): 24 hours
-- **High** (privilege escalation, injection): 72 hours
-- **Medium/Low** (information disclosure, DoS): 1 week
+### How to Report
 
-## Architecture Overview
+**Email:** Create a GitHub Security Advisory at:
+`https://github.com/YOUR_ORG/dplaneos/security/advisories/new`
 
-D-PlaneOS v2.1.0 runs as a single Go binary (`dplaned`) under systemd. There is no PHP, no Apache, no Node.js in the runtime stack.
+Or email the maintainer directly (see profile). Please include:
 
-```
-Client (Browser)
-    │
-    ├── HTTPS (reverse proxy: nginx/caddy)
-    │
-    └── HTTP :9000 (localhost only)
-            │
-        ┌───┴───┐
-        │ dplaned │  ← single Go binary
-        └───┬───┘
-            │
-    ┌───────┼───────────┐
-    │       │           │
-  SQLite  exec.Command  WebSocket
-  (WAL)   (validated)   (/ws/monitor)
-```
+1. **Description** of the vulnerability
+2. **Affected component** (daemon, nginx config, frontend, etc.)
+3. **Steps to reproduce** with minimal working example
+4. **Impact assessment** — what an attacker could achieve
+5. **Suggested fix** (optional but appreciated)
 
-## Security Model
+### What to Expect
 
-### 1. Authentication
+- **Acknowledgement within 48 hours** of your report
+- **Status update within 7 days** — confirming the issue and our planned timeline
+- **Fix within 30 days** for critical issues, 90 days for others
+- **Credit in the changelog** if you'd like (opt-in)
 
-Every API request (except `/health`) requires two headers:
-- `X-Session-ID` — session token (20–100 chars, alphanumeric)
-- `X-User` — username
+### Safe Harbour
 
-The session middleware validates:
-1. Both headers present → else 401
-2. Token format valid → else 401
-3. Token exists in `sessions` table and not expired → else 401
-4. `X-User` matches session owner → else 401
+We will not pursue legal action against researchers who:
+- Report issues privately before public disclosure
+- Do not access, modify, or delete data beyond what is needed to demonstrate the issue
+- Do not disrupt service availability
+- Give us reasonable time (30–90 days) to patch before disclosing
 
-**Fail-closed**: any database error during validation rejects the request. There is no fallback to permissive mode.
+## Security Architecture
 
-### 2. Authorization (RBAC)
+D-PlaneOS is designed as an internal network appliance. **It is not designed to be exposed directly to the public internet.** Key security properties:
 
-Four built-in roles: `admin`, `operator`, `user`, `viewer`.
-
-Permissions are resource-action pairs (e.g., `storage:write`, `docker:delete`). The RBAC middleware checks permissions before handler execution. Permission cache uses a TTL to avoid per-request DB queries.
-
-Role assignments support expiry dates. Expired assignments are ignored at query time.
-
-### 3. Input Validation (Command Injection Prevention)
-
-All arguments passed to `exec.Command` are validated by dedicated functions:
-
-| Validator | Blocks |
-|-----------|--------|
-| `ValidatePoolName` | shell metacharacters, spaces, path separators |
-| `ValidateDatasetName` | same + must match `pool/dataset` format |
-| `ValidateDevicePath` | must start with `/dev/`, no `..`, no metacharacters |
-| `ValidateMountPoint` | must be under `/mnt/` or `/media/`, no `..` |
-| `ValidateIP` | must pass `net.ParseIP` |
-| `IsValidSessionToken` | alphanumeric, 20–100 chars |
-
-These validators use **allowlists** (valid characters), not blocklists. Any input that doesn't match is rejected with HTTP 400 before any command is constructed.
-
-Go's `exec.Command(name, arg1, arg2, ...)` passes arguments as an array, not a shell string. There is no shell interpolation.
-
-### 4. Database Security
-
-- **WAL mode** with `FULL` synchronous — crash-safe writes
-- **64 MB page cache** — reduces disk I/O
-- **30-second busy timeout** — prevents "database locked" during WAL checkpoints
-- **Periodic WAL checkpoint** — every 5 minutes to prevent WAL bloat
-- **Daily VACUUM INTO** — creates clean backup copy, configurable to off-pool path
-- **Prepared statements** throughout — no string-concatenated SQL
-- **Startup schema init** — `CREATE TABLE IF NOT EXISTS` on every boot, idempotent
-
-### 5. Network Security
-
-- `dplaned` listens on `127.0.0.1:9000` by default (localhost only)
-- External access requires a reverse proxy (nginx, caddy, Pangolin)
-- No `Access-Control-Allow-Origin: *` headers
-- Rate limiting middleware on all endpoints
-- WebSocket endpoint validates session before upgrade
-
-### 6. Process Security
-
-- Runs as root (required for ZFS, disk, network operations)
-- systemd `MemoryMax=512M` prevents OOM from runaway operations
-- `Restart=always` with 5-second delay
-- Graceful shutdown on SIGTERM — drains active connections
-- All command executions logged to audit trail
-
-### 7. Audit Logging
-
-Every state-changing operation is logged:
-- Timestamp, user, action, resource, details, IP address, success/failure
-- Buffered writer (100 events, 5-second flush) prevents I/O bottlenecks
-- Stored in `audit_logs` SQLite table
+- **Authentication:** bcrypt-hashed passwords, rate-limited login with exponential backoff
+- **Sessions:** 32-byte random session tokens, stored hashed in SQLite
+- **CSRF:** HMAC-SHA256 double-submit tokens on all mutating requests
+- **2FA:** TOTP (RFC 6238) with ±1 window clock drift tolerance, bcrypt-hashed backup codes
+- **API Tokens:** SHA-256 hashed, prefixed `dpl_`, scope-limited (read/write/admin)
+- **RBAC:** 4 roles (viewer, operator, admin, system) enforced at handler level
+- **Command execution:** Whitelist-only via `internal/security/whitelist.go` — no shell interpolation
+- **Input validation:** Allowlist regexes on all user-supplied strings before syscall/exec
+- **XSS:** All HTML output escaped; `Content-Security-Policy` via nginx
+- **Transport:** nginx TLS termination recommended; see `nginx-dplaneos.conf`
 
 ## Known Limitations
 
-- **Root execution**: `dplaned` runs as root because ZFS, disk management, and network configuration require it. Privilege separation via capabilities is a future goal.
-- **No TLS termination**: `dplaned` serves HTTP. TLS must be handled by a reverse proxy.
-- **Session tokens in headers**: tokens are sent via `X-Session-ID` header, not cookies. The frontend stores them in memory (not localStorage).
-
-## Hardening Checklist
-
-- [ ] Place behind TLS-terminating reverse proxy
-- [ ] Restrict firewall to only necessary ports
-- [ ] Use `-backup-path` flag pointing to a different disk
-- [ ] Review audit logs regularly (`/api/system/logs`)
-- [ ] Set up Telegram notifications for critical events
-- [ ] Keep host OS updated (ZFS, kernel, systemd)
+- **ZFS delegation** (`zfs allow`) is complex; review carefully before enabling
+- **rclone credentials** are stored in `/etc/dplaneos/rclone.conf` — restrict file permissions
+- **Docker socket** is accessible to the daemon — containers with host mounts can escalate
+- **LDAP bind password** is stored in SQLite — use a dedicated read-only LDAP account

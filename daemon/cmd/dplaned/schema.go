@@ -163,6 +163,10 @@ func initSchema(db *sql.DB) error {
 
 		// Migration: Add last_activity if missing (idempotent)
 		`ALTER TABLE sessions ADD COLUMN last_activity INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE sessions ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`,
+		`ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`,
 
 		// ── Git Sync ──
 		`CREATE TABLE IF NOT EXISTS git_sync_config (
@@ -224,6 +228,67 @@ func initSchema(db *sql.DB) error {
 			ssh_key     TEXT NOT NULL DEFAULT '',
 			notes       TEXT NOT NULL DEFAULT '',
 			created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// API Tokens — long-lived bearer tokens for automation/CLI
+		`CREATE TABLE IF NOT EXISTS api_tokens (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name        TEXT NOT NULL,
+			token_hash  TEXT NOT NULL UNIQUE,
+			token_prefix TEXT NOT NULL,
+			scopes      TEXT NOT NULL DEFAULT 'read',
+			last_used   DATETIME,
+			expires_at  DATETIME,
+			created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(user_id, name)
+		)`,
+
+		// TOTP 2FA secrets
+		`CREATE TABLE IF NOT EXISTS totp_secrets (
+			user_id     INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+			secret      TEXT NOT NULL,
+			enabled     INTEGER NOT NULL DEFAULT 0,
+			backup_codes TEXT NOT NULL DEFAULT '',
+			created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+			verified_at DATETIME
+		)`,
+
+		// ── Phase 1: Pre-upgrade snapshots ──
+		`CREATE TABLE IF NOT EXISTS pre_upgrade_snapshots (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			snapshot    TEXT NOT NULL,
+			pool        TEXT NOT NULL,
+			created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+			nixos_apply TEXT NOT NULL DEFAULT '',
+			success     INTEGER NOT NULL DEFAULT 1,
+			error       TEXT NOT NULL DEFAULT ''
+		)`,
+
+		// ── Phase 1: Webhook alerting ──
+		`CREATE TABLE IF NOT EXISTS webhook_configs (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			name          TEXT NOT NULL UNIQUE,
+			url           TEXT NOT NULL,
+			secret_header TEXT NOT NULL DEFAULT '',
+			secret_value  TEXT NOT NULL DEFAULT '',
+			enabled       INTEGER NOT NULL DEFAULT 1,
+			events        TEXT NOT NULL DEFAULT '[]',
+			created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+		)`,
+
+		// ── Phase 1: Audit HMAC chain columns ──
+		`ALTER TABLE audit_logs ADD COLUMN prev_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE audit_logs ADD COLUMN row_hash  TEXT NOT NULL DEFAULT ''`,
+
+		// ── Phase 3: GitOps approvals ──
+		`CREATE TABLE IF NOT EXISTS gitops_approvals (
+			kind        TEXT NOT NULL,
+			name        TEXT NOT NULL,
+			reason      TEXT NOT NULL DEFAULT '',
+			approved_at TEXT NOT NULL DEFAULT (datetime('now')),
+			PRIMARY KEY (kind, name)
 		)`,
 
 		`CREATE INDEX IF NOT EXISTS idx_git_repos_name ON git_sync_repos(name)`,

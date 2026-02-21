@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## v3.2.0 (2026-02-21) — **"networkd Persistence"**
+
+### ⚡ Architecture: systemd-networkd file writer (networkdwriter)
+- New package `internal/networkdwriter`: writes `/etc/systemd/network/50-dplane-*.{network,netdev}`
+- All network changes now survive reboots AND `nixos-rebuild switch` — no extra steps required
+- `networkctl reload` used for zero-downtime live reload (< 1 second)
+- Works on every systemd distro: NixOS, Debian, Ubuntu, Arch
+- nixwriter scope reduced to NixOS-only settings (firewall ports, Samba globals)
+- hostname/timezone/NTP already persistent via OS-level tool calls — no nixwriter needed
+
+### ✅ Completeness
+- All 12 nixwriter methods fully wired; all 9 stanzas covered
+- New `/api/firewall/sync` endpoint for explicit NixOS firewall port sync
+- DNS now has POST handler (`action: set_dns`) + `SetGlobalDNS` via resolved dropin
+- `HandleSettings` runtime POST wires hostname + timezone persist calls
+- `/etc/systemd/network` added to `ReadWritePaths` in `module.nix`
+
+---
+
+## v3.1.0 (2026-02-21) — **"NixOS Architecture Hardening"**
+
+### ⚡ Architecture: Static musl binary + nixwriter + boot reconciler
+- Static musl binary via `pkgsStatic`: glibc-independent, survives NixOS upgrades
+- `internal/nixwriter`: writes `dplane-generated.nix` fragments for persistent NixOS config
+- Boot reconciler: re-applies VLANs/bonds/static IPs from SQLite DB on non-NixOS systems
+- Samba persistence: declarative NixOS ownership + imperative share management via include bridge
+- `/etc/systemd/network` naming convention: NixOS owns `10-`/`20-` prefix, D-PlaneOS owns `50-dplane-`
+
+### ✅ Security & Stability
+- SSH hardening: PasswordAuthentication=false, PermitRootLogin=no
+- Support bundle: `POST /api/system/support-bundle` streams diagnostic .tar.gz
+- Pre-upgrade ZFS snapshots: automatic `@pre-upgrade-<timestamp>` before every rebuild
+- Firewall sync endpoint: `POST /api/firewall/sync` for NixOS port list persistence
+
+---
+
 ## v3.0.0 (2026-02-18) — **"Native Docker API"**
 
 ### ⚡ Major: Docker exec.Command → stdlib REST client (see previous session)
@@ -299,7 +335,7 @@ When ZFS mounts seconds later, those writes are lost or inaccessible — **silen
 - `INSTALLATION-GUIDE.md`: new ECC recommendation section with clear home-vs-business guidance
 - `NON-ECC-WARNING.md`: updated mitigations to reflect v2.1.1 actual implementations
   (ARC limiting, weekly scrub scheduling, WAL FULL sync, dashboard advisory)
-- Version references fixed throughout (was erroneously citing v5.x)
+- Version references corrected throughout all documentation files
 
 ### 🟡 Notification Debouncing (Flooding Fix)
 - `monitoring/background.go` completely rewritten with proper debounce/hysteresis:

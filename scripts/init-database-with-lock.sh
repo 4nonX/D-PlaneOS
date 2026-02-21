@@ -109,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_log(user_id);
 
 -- Insert default settings
 INSERT OR IGNORE INTO settings (key, value) VALUES ('initialized', '1');
-INSERT OR IGNORE INTO settings (key, value) VALUES ('version', '5.1.0');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('version', '3.2.0');
 EOF
     
     # Set proper permissions

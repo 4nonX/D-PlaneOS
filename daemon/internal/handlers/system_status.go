@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type SystemStatusHandler struct {
@@ -22,7 +24,7 @@ type SystemStatusHandler struct {
 }
 
 func NewSystemStatusHandler(db *sql.DB) *SystemStatusHandler {
-	return &SystemStatusHandler{db: db, startTime: time.Now(), version: "2.1.0"}
+	return &SystemStatusHandler{db: db, startTime: time.Now(), version: "3.2.0"}
 }
 
 func (h *SystemStatusHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
@@ -75,12 +77,16 @@ func (h *SystemStatusHandler) HandleSetupComplete(w http.ResponseWriter, r *http
 		if _, err := cmdutil.RunFast("hostnamectl", "set-hostname", body.Hostname); err != nil {
 			log.Printf("WARN: hostnamectl: %v", err)
 		}
+		// Persist to Nix fragment (NixOS: networking.hostName)
+		persistHostname(body.Hostname)
 	}
 	if body.Timezone != "" {
 		h.db.Exec(`INSERT OR REPLACE INTO system_config (key, value) VALUES ('timezone', ?)`, body.Timezone)
 		if _, err := cmdutil.RunFast("timedatectl", "set-timezone", body.Timezone); err != nil {
 			log.Printf("WARN: timedatectl: %v", err)
 		}
+		// Persist to Nix fragment (NixOS: time.timeZone)
+		persistTimezone(body.Timezone)
 	}
 	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "message": "Setup completed"})
 }
@@ -159,6 +165,19 @@ func (h *SystemStatusHandler) HandleSettings(w http.ResponseWriter, r *http.Requ
 		var body map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil { respondErrorSimple(w, "Invalid request", http.StatusBadRequest); return }
 		for k, v := range body { h.db.Exec(`INSERT OR REPLACE INTO system_config (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, k, v) }
+		// Persist system-level changes to Nix fragment so they survive nixos-rebuild
+		if hn, ok := body["hostname"]; ok && hn != "" {
+			if _, err := cmdutil.RunFast("hostnamectl", "set-hostname", hn); err != nil {
+				log.Printf("WARN: hostnamectl runtime: %v", err)
+			}
+			persistHostname(hn)
+		}
+		if tz, ok := body["timezone"]; ok && tz != "" {
+			if _, err := cmdutil.RunFast("timedatectl", "set-timezone", tz); err != nil {
+				log.Printf("WARN: timedatectl runtime: %v", err)
+			}
+			persistTimezone(tz)
+		}
 		respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "message": fmt.Sprintf("%d settings saved", len(body))})
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -368,4 +387,89 @@ func splitValueUnit(raw string) (string, string) {
 		return raw, ""
 	}
 	return value, unit
+}
+
+// HandleSetupAdmin — POST /api/system/setup-admin
+// Sets the admin password during initial setup. Only works before setup is marked complete.
+// This endpoint is public (no session required) but is gated by setup_complete flag.
+func (h *SystemStatusHandler) HandleSetupAdmin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Gate: only allow if setup is NOT yet complete
+	var setupDone int
+	h.db.QueryRow(`SELECT COUNT(*) FROM system_config WHERE key = 'setup_complete' AND value = '1'`).Scan(&setupDone)
+	if setupDone > 0 {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"success": false, "error": "Setup already completed",
+		})
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false, "error": "Invalid request body",
+		})
+		return
+	}
+
+	if req.Username == "" || req.Password == "" {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false, "error": "Username and password are required",
+		})
+		return
+	}
+	if len(req.Password) < 8 {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false, "error": "Password must be at least 8 characters",
+		})
+		return
+	}
+
+	// Hash the password
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"success": false, "error": "Failed to hash password",
+		})
+		return
+	}
+
+	// Update the seeded admin user's password (created with empty hash at startup)
+	// If username differs from "admin", rename too
+	result, err := h.db.Exec(
+		`UPDATE users SET password_hash = ?, username = ?, must_change_password = 0 WHERE username = 'admin'`,
+		string(hash), req.Username,
+	)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"success": false, "error": "Failed to set admin credentials",
+		})
+		return
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		// Admin user doesn't exist yet — insert fresh
+		_, err = h.db.Exec(
+			`INSERT INTO users (username, password_hash, email, role, active) VALUES (?, ?, 'admin@localhost', 'admin', 1)`,
+			req.Username, string(hash),
+		)
+		if err != nil {
+			respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"success": false, "error": "Failed to create admin user",
+			})
+			return
+		}
+	}
+
+	log.Printf("SETUP: admin credentials configured for user '%s'", req.Username)
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true, "message": "Admin credentials configured",
+	})
 }

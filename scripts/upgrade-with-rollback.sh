@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# D-PlaneOS v4.0.4 - Safe Upgrade with Automatic Rollback
+# D-PlaneOS v3.2.0 - Safe Upgrade with Automatic Rollback
 #
-# Purpose: Upgrade from v2.x/v3.x to v4.0.4 with automatic backup and rollback
+# Purpose: Upgrade from v3.1.x to v3.2.0 with automatic backup and rollback
 # Usage: sudo ./upgrade-with-rollback.sh
 #
 # Features:
@@ -56,7 +56,7 @@ error() {
 # Header
 clear
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║       D-PlaneOS v4.0.4 - Safe Upgrade with Rollback         ║"
+echo "║       D-PlaneOS v3.2.0 - Safe Upgrade with Rollback         ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -138,7 +138,7 @@ cat > "$BACKUP_PATH/rollback.sh" <<'ROLLBACK_SCRIPT'
 set -euo pipefail
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║              D-PlaneOS v4.0.4 - Rollback                     ║"
+echo "║              D-PlaneOS v3.2.0 - Rollback                     ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -239,9 +239,9 @@ fi
 info "Starting upgrade..."
 echo ""
 
-if [ -f ./install-v4.sh ]; then
+if [ -f ./install.sh ]; then
     # Run installer and capture result
-    if ./install-v4.sh; then
+    if ./install.sh; then
         echo ""
         success "Upgrade completed successfully!"
         echo ""
@@ -268,6 +268,6 @@ if [ -f ./install-v4.sh ]; then
         exit 1
     fi
 else
-    error "install-v4.sh not found in current directory!"
+    error "install.sh not found in current directory!"
     exit 1
 fi

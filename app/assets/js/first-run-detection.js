@@ -22,12 +22,11 @@
             const response = await fetch('/api/system/status');
             const data = await response.json();
             
-            // If not configured, redirect to wizard
-            if (!data.configured) {
-                console.log('System not configured, redirecting to setup wizard...');
+            // Use server-side fields (setup_complete = system_config key, has_users = user count > 0)
+            const isConfigured = data.setup_complete || (data.has_users && data.has_pools);
+            if (!isConfigured) {
                 window.location.href = '/pages/setup-wizard.html';
             } else {
-                // System is configured, set flag to avoid future checks
                 localStorage.setItem('dplaneos_setup_completed', 'true');
             }
             

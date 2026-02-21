@@ -12,7 +12,7 @@ Documentation=https://github.com/4nonX/homelab
 Type=simple
 ExecStartPre=/bin/mkdir -p /var/run/dplaneos /var/lib/dplaneos /var/log/dplaneos /etc/dplaneos
 ExecStartPre=/bin/chmod 755 /var/run/dplaneos
-ExecStart=/opt/dplaneos/daemon/dplaned -db /var/lib/dplaneos/dplaneos.db -listen 127.0.0.1:9000
+ExecStart=/opt/dplaneos/daemon/dplaned -db /var/lib/dplaneos/dplaneos.db -listen 127.0.0.1:9000 -smb-conf /var/lib/dplaneos/smb-shares.conf
 WorkingDirectory=/opt/dplaneos
 Restart=always
 RestartSec=5
@@ -38,7 +38,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/log/dplaneos /var/lib/dplaneos /opt/dplaneos /etc/dplaneos /run/dplaneos /etc/crontab /etc/exports /etc/samba
+ReadWritePaths=/var/log/dplaneos /var/lib/dplaneos /opt/dplaneos /etc/dplaneos /run/dplaneos /etc/crontab /etc/exports
+# Note: /etc/samba removed — NixOS owns smb.conf via modules/samba.nix
+# Daemon writes per-share config to /var/lib/dplaneos/smb-shares.conf
 
 # Capabilities (ZFS requires SYS_ADMIN, network config requires NET_ADMIN)
 AmbientCapabilities=CAP_SYS_ADMIN CAP_NET_ADMIN CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER

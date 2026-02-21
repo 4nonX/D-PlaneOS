@@ -24,7 +24,7 @@
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v3.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v3.2.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <div id="nav-root"></div>
@@ -241,11 +241,11 @@ if (window.ConnectionMonitor) {
     <div style="display:grid;gap:16px;">
       <div>
         <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Dataset</label>
-        <select id="schedDataset" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;"></select>
+        <select class="form-input" id="schedDataset" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;"></select>
       </div>
       <div>
         <label style="display:block;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:6px;">Frequency</label>
-        <select id="schedFreq" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
+        <select class="form-input" id="schedFreq" style="width:100%;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:14px;">
           <option value="hourly">Hourly</option>
           <option value="daily" selected>Daily (2:00 AM)</option>
           <option value="weekly">Weekly (Sunday 3:00 AM)</option>

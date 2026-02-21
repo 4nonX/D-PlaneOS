@@ -423,5 +423,10 @@ func (h *ShareCRUDHandler) regenerateSMBConf() {
 	if _, err := cmdutil.RunFast("smbcontrol", "all", "reload-config"); err != nil {
 		log.Printf("WARN: smbcontrol reload: %v", err)
 	}
+
+	// On NixOS: also update dplane-generated.nix with global SMB settings
+	// so they survive the next nixos-rebuild switch.
+	persistSambaGlobals(h.db)
+
 	log.Printf("SMB config regenerated and reloaded (VFS: tm=%d sc=%d rb=%d)", globalTimeMachine, globalShadowCopy, globalRecycleBin)
 }

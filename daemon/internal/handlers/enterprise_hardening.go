@@ -204,6 +204,63 @@ func (h *NixOSGuardHandler) DiffGenerations(w http.ResponseWriter, r *http.Reque
 		"diff":    strings.TrimSpace(output),
 	})
 }
+// ═══════════════════════════════════════════════════════════════════════════════
+//  PRE-UPGRADE ZFS SNAPSHOT
+//  Called before every nixos-rebuild switch. Best-effort: failure is logged
+//  but never blocks the apply.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// snapshotAllPoolsPreUpgrade creates a named ZFS snapshot on every ONLINE pool
+// immediately before a NixOS config apply. Results are persisted to DB so they
+// are visible in the UI and can be used for data recovery.
+//
+// Returns (snapshotNames, errorMessages). Partial success is normal.
+func snapshotAllPoolsPreUpgrade(db *sql.DB, applyTarget string) ([]string, []string) {
+	ts := time.Now().UTC().Format("20060102T150405Z")
+
+	poolOut, err := executeCommandWithTimeout(TimeoutFast, "/usr/sbin/zpool", []string{
+		"list", "-H", "-o", "name",
+	})
+	if err != nil {
+		return nil, []string{fmt.Sprintf("zpool list failed: %v", err)}
+	}
+
+	var snapshots, errs []string
+	for _, pool := range strings.Split(strings.TrimSpace(poolOut), "\n") {
+		pool = strings.TrimSpace(pool)
+		if pool == "" {
+			continue
+		}
+		snapName := fmt.Sprintf("%s@pre-upgrade-%s", pool, ts)
+
+		_, snapErr := executeCommandWithTimeout(TimeoutMedium, "/usr/sbin/zfs", []string{
+			"snapshot", snapName,
+		})
+
+		success := 1
+		errMsg := ""
+		if snapErr != nil {
+			success = 0
+			errMsg = snapErr.Error()
+			errs = append(errs, fmt.Sprintf("pool %s: %v", pool, snapErr))
+			log.Printf("pre-upgrade snapshot WARN pool=%s err=%v", pool, snapErr)
+		} else {
+			snapshots = append(snapshots, snapName)
+			log.Printf("pre-upgrade snapshot OK: %s", snapName)
+		}
+
+		if db != nil {
+			if _, dbErr := db.Exec(
+				`INSERT INTO pre_upgrade_snapshots (snapshot, pool, nixos_apply, success, error) VALUES (?, ?, ?, ?, ?)`,
+				snapName, pool, applyTarget, success, errMsg,
+			); dbErr != nil {
+				log.Printf("pre-upgrade snapshot DB insert error: %v", dbErr)
+			}
+		}
+	}
+	return snapshots, errs
+}
+
 
 // ═══════════════════════════════════════════════════════════════
 //  NIXOS BOOT WATCHDOG
@@ -252,6 +309,16 @@ func (h *NixOSGuardHandler) ApplyWithWatchdog(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// ── Pre-upgrade ZFS snapshots (best-effort, never blocks apply) ──────
+	applyTarget := flakePath
+	if _, statErr := os.Stat(flakePath + "/flake.nix"); statErr != nil {
+		applyTarget = "traditional"
+	}
+	preSnapshots, preSnapErrs := snapshotAllPoolsPreUpgrade(h.db, applyTarget)
+	if len(preSnapErrs) > 0 {
+		log.Printf("pre-upgrade snapshot warnings (non-fatal): %v", preSnapErrs)
+	}
+
 	// Apply the new config
 	var output string
 	var err error
@@ -269,9 +336,11 @@ func (h *NixOSGuardHandler) ApplyWithWatchdog(w http.ResponseWriter, r *http.Req
 
 	if err != nil {
 		respondOK(w, map[string]interface{}{
-			"success": false,
-			"error":   fmt.Sprintf("Apply failed: %v", err),
-			"output":  output,
+			"success":          false,
+			"error":            fmt.Sprintf("Apply failed: %v", err),
+			"output":           output,
+			"pre_snapshots":    preSnapshots,
+			"snapshot_errors":  preSnapErrs,
 		})
 		return
 	}
@@ -303,6 +372,8 @@ func (h *NixOSGuardHandler) ApplyWithWatchdog(w http.ResponseWriter, r *http.Req
 		"watchdog_active":  true,
 		"confirm_before":   watchdogDeadline.Format(time.RFC3339),
 		"timeout_seconds":  req.TimeoutSeconds,
+		"pre_snapshots":    preSnapshots,
+		"snapshot_errors":  preSnapErrs,
 		"message":          fmt.Sprintf("Config applied. Confirm within %d seconds or auto-rollback.", req.TimeoutSeconds),
 	})
 }
@@ -461,7 +532,7 @@ func (h *AuditRotationHandler) RotateAuditLogs(w http.ResponseWriter, r *http.Re
 	countBefore := "unknown"
 	if out, err := executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
 		"/var/lib/dplaneos/dplaneos.db",
-		"SELECT COUNT(*) FROM audit_log;",
+		"SELECT COUNT(*) FROM audit_logs;",
 	}); err == nil {
 		countBefore = strings.TrimSpace(out)
 	}
@@ -472,7 +543,7 @@ func (h *AuditRotationHandler) RotateAuditLogs(w http.ResponseWriter, r *http.Re
 	var err error
 	if dbErr == nil {
 		defer rotDB.Close()
-		_, err = rotDB.Exec("DELETE FROM audit_log WHERE timestamp < ?", cutoff)
+		_, err = rotDB.Exec("DELETE FROM audit_logs WHERE timestamp < ?", cutoff)
 	} else {
 		err = dbErr
 	}
@@ -488,7 +559,7 @@ func (h *AuditRotationHandler) RotateAuditLogs(w http.ResponseWriter, r *http.Re
 	countAfter := "unknown"
 	if out, err := executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
 		"/var/lib/dplaneos/dplaneos.db",
-		"SELECT COUNT(*) FROM audit_log;",
+		"SELECT COUNT(*) FROM audit_logs;",
 	}); err == nil {
 		countAfter = strings.TrimSpace(out)
 	}
@@ -509,21 +580,21 @@ func (h *AuditRotationHandler) GetAuditStats(w http.ResponseWriter, r *http.Requ
 
 	count := "0"
 	if out, err := executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
-		dbPath, "SELECT COUNT(*) FROM audit_log;",
+		dbPath, "SELECT COUNT(*) FROM audit_logs;",
 	}); err == nil {
 		count = strings.TrimSpace(out)
 	}
 
 	oldest := "N/A"
 	if out, err := executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
-		dbPath, "SELECT MIN(timestamp) FROM audit_log;",
+		dbPath, "SELECT MIN(timestamp) FROM audit_logs;",
 	}); err == nil {
 		oldest = strings.TrimSpace(out)
 	}
 
 	newest := "N/A"
 	if out, err := executeCommandWithTimeout(TimeoutFast, "/usr/bin/sqlite3", []string{
-		dbPath, "SELECT MAX(timestamp) FROM audit_log;",
+		dbPath, "SELECT MAX(timestamp) FROM audit_logs;",
 	}); err == nil {
 		newest = strings.TrimSpace(out)
 	}

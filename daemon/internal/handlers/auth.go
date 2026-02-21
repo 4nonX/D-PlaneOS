@@ -247,12 +247,39 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionID := hex.EncodeToString(tokenBytes)
 
+	// Check if user has TOTP enabled
+	var totpEnabled int
+	h.db.QueryRow(`SELECT COALESCE(totp_enabled, 0) FROM users WHERE id = ?`, userID).Scan(&totpEnabled)
+
 	// Session expires in 24 hours
 	expiresAt := time.Now().Add(24 * time.Hour).Unix()
 
-	// Insert session
+	if totpEnabled == 1 {
+		// Create a short-lived pending session (5 minutes) for TOTP verification
+		pendingExpiry := time.Now().Add(5 * time.Minute).Unix()
+		_, err = h.db.Exec(
+			`INSERT INTO sessions (session_id, user_id, username, expires_at, status) VALUES (?, ?, ?, ?, 'pending_totp')`,
+			sessionID, userID, req.Username, pendingExpiry,
+		)
+		if err != nil {
+			log.Printf("AUTH ERROR: failed to create pending session: %v", err)
+			respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"success": false, "error": "Internal error",
+			})
+			return
+		}
+		log.Printf("AUTH PENDING TOTP: %q from %s", req.Username, r.RemoteAddr)
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success":        true,
+			"requires_totp":  true,
+			"pending_token":  sessionID,
+		})
+		return
+	}
+
+	// Insert full active session
 	_, err = h.db.Exec(
-		`INSERT INTO sessions (session_id, user_id, username, expires_at) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO sessions (session_id, user_id, username, expires_at, status) VALUES (?, ?, ?, ?, 'active')`,
 		sessionID, userID, req.Username, expiresAt,
 	)
 	if err != nil {

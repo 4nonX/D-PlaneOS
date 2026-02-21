@@ -51,11 +51,13 @@
     <a href="zfs-encryption.html" class="sub-link" data-page="zfs-encryption"><span class="material-symbols-rounded">enhanced_encryption</span> Encryption</a>
     <a href="files-enhanced.html" class="sub-link" data-page="files-enhanced"><span class="material-symbols-rounded">upload_file</span> File Upload</a>
     <a href="cloud-sync.html" class="sub-link" data-page="cloud-sync"><span class="material-symbols-rounded">cloud_sync</span> Cloud Sync</a>
+    <a href="iscsi.html" class="sub-link" data-page="iscsi"><span class="material-symbols-rounded">storage</span> iSCSI Targets</a>
   </div></div>
 
   <div id="sub-compute" class="nav-sub"><div class="nav-sub-inner">
     <a href="docker.html" class="sub-link" data-page="docker"><span class="material-symbols-rounded">dns</span> Docker Containers</a>
     <a href="git-sync.html" class="sub-link" data-page="git-sync"><span class="material-symbols-rounded">sync</span> Git Sync</a>
+    <a href="gitops.html" class="sub-link" data-page="gitops"><span class="material-symbols-rounded">account_tree</span> GitOps State</a>
     <a href="modules.html" class="sub-link" data-page="modules"><span class="material-symbols-rounded">extension</span> App Modules</a>
   </div></div>
 
@@ -82,6 +84,7 @@
 
   <div id="sub-system" class="nav-sub"><div class="nav-sub-inner">
     <a href="settings.html" class="sub-link" data-page="settings"><span class="material-symbols-rounded">tune</span> General Settings</a>
+    <a href="system-updates.html" class="sub-link" data-page="system-updates"><span class="material-symbols-rounded">upgrade</span> System Updates</a>
     <a href="logs.html" class="sub-link" data-page="logs"><span class="material-symbols-rounded">description</span> System Logs</a>
     <a href="ups.html" class="sub-link" data-page="ups"><span class="material-symbols-rounded">battery_charging_full</span> UPS Management</a>
     <a href="reporting.html" class="sub-link" data-page="reporting"><span class="material-symbols-rounded">monitoring</span> Reporting</a>
@@ -91,6 +94,9 @@
     <a href="hardware.html" class="sub-link" data-page="hardware"><span class="material-symbols-rounded">developer_board</span> Hardware</a>
     <a href="ipmi.html" class="sub-link" data-page="ipmi"><span class="material-symbols-rounded">memory</span> IPMI</a>
     <a href="removable-media-ui.html" class="sub-link" data-page="removable-media-ui"><span class="material-symbols-rounded">usb</span> Removable Media</a>
+    <a href="ha-cluster.html" class="sub-link" data-page="ha-cluster"><span class="material-symbols-rounded">device_hub</span> HA Cluster</a>
+    <a href="alerts.html" class="sub-link" data-page="alerts"><span class="material-symbols-rounded">notifications_active</span> Alerts</a>
+    <a href="support.html" class="sub-link" data-page="support"><span class="material-symbols-rounded">support_agent</span> Support &amp; Diagnostics</a>
   </div></div>
 </nav>`;
 })();
@@ -127,9 +133,11 @@ function toggleSubNav(section, button) {
     'audit.html':                 { section: 'security',  page: 'audit' },
     'certificates.html':          { section: 'security',  page: 'certificates' },
     'cloud-sync.html':            { section: 'storage',   page: 'cloud-sync' },
+    'iscsi.html':                 { section: 'storage',   page: 'iscsi' },
     'directory-service.html':     { section: 'identity',  page: 'directory-service' },
     'docker.html':                { section: 'compute',   page: 'docker' },
     'docker-containers-ui.html':  { section: 'compute',   page: 'docker' },
+    'docker-pull-ui.html':        { section: 'compute',   page: 'docker' },
     'files-enhanced.html':        { section: 'storage',   page: 'files-enhanced' },
     'files.html':                 { section: 'storage',   page: 'files' },
     'firewall.html':              { section: 'security',  page: 'firewall' },
@@ -149,6 +157,10 @@ function toggleSubNav(section, button) {
     'quotas.html':                { section: 'storage',   page: 'quotas' },
     'rbac-management.html':       { section: 'identity',  page: 'rbac-management' },
     'removable-media-ui.html':    { section: 'system',    page: 'removable-media-ui' },
+    'ha-cluster.html':            { section: 'system',    page: 'ha-cluster' },
+    'alerts.html':                { section: 'system',    page: 'alerts' },
+    'support.html':               { section: 'system',    page: 'support' },
+    'system-updates.html':         { section: 'system',    page: 'system-updates' },
     'replication.html':           { section: 'storage',   page: 'replication' },
     'reporting.html':             { section: 'system',    page: 'reporting' },
     'security.html':              { section: 'security',  page: 'security' },

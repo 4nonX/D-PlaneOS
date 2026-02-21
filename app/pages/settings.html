@@ -50,7 +50,7 @@
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v3.0.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v3.2.0 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <div id="nav-root"></div>
@@ -245,6 +245,7 @@ if (window.ConnectionMonitor) {
   <button class="consolidation-tab active" data-tab="general" onclick="switchConsolidatedTab('general')">General</button>
   <button class="consolidation-tab" data-tab="config" onclick="switchConsolidatedTab('config')">Configuration</button>
   <button class="consolidation-tab" data-tab="power" onclick="switchConsolidatedTab('power')">Power</button>
+  <button class="consolidation-tab" data-tab="webhooks" onclick="switchConsolidatedTab('webhooks')">Webhooks</button>
 </div>
 
 <div id="tab-general" class="consolidation-content active">
@@ -447,7 +448,7 @@ if (window.ConnectionMonitor) {
 <span class="material-symbols-rounded setting-icon">update</span>
 <div class="setting-info">
 <div class="setting-name">System Version</div>
-<div class="setting-desc">D-PlaneOS v3.0.0</div>
+<div class="setting-desc">D-PlaneOS v3.2.0</div>
 </div>
 <button class="icon-btn" onclick="checkUpdates()"><span class="material-symbols-rounded">refresh</span></button>
 </div>
@@ -720,7 +721,7 @@ document.addEventListener('DOMContentLoaded', loadTelegramConfig);
         <!-- Live Status Overview -->
         <div class="settings-card">
             <div class="card-header">
-                <span class="material-icons">dashboard</span>
+                <span class="material-symbols-rounded">dashboard</span>
                 <h2>Live System Status</h2>
             </div>
             
@@ -769,7 +770,7 @@ document.addEventListener('DOMContentLoaded', loadTelegramConfig);
         <!-- Inotify Settings -->
         <div class="settings-card">
             <div class="card-header">
-                <span class="material-icons">visibility</span>
+                <span class="material-symbols-rounded">visibility</span>
                 <h2>File Monitoring (Inotify)</h2>
             </div>
 
@@ -809,7 +810,7 @@ document.addEventListener('DOMContentLoaded', loadTelegramConfig);
         <!-- Memory Settings -->
         <div class="settings-card">
             <div class="card-header">
-                <span class="material-icons">memory</span>
+                <span class="material-symbols-rounded">memory</span>
                 <h2>Memory Management</h2>
             </div>
 
@@ -844,7 +845,7 @@ document.addEventListener('DOMContentLoaded', loadTelegramConfig);
         <!-- Monitoring Settings -->
         <div class="settings-card">
             <div class="card-header">
-                <span class="material-icons">notifications</span>
+                <span class="material-symbols-rounded">notifications</span>
                 <h2>Alert Thresholds</h2>
             </div>
 
@@ -903,15 +904,15 @@ document.addEventListener('DOMContentLoaded', loadTelegramConfig);
         <div class="settings-card">
             <div class="button-group">
                 <button class="md-button filled" onclick="saveSettings()">
-                    <span class="material-icons">save</span>
+                    <span class="material-symbols-rounded">save</span>
                     Save Settings
                 </button>
                 <button class="md-button outlined" onclick="resetToDefaults()">
-                    <span class="material-icons">restore</span>
+                    <span class="material-symbols-rounded">restore</span>
                     Reset to Defaults
                 </button>
                 <button class="md-button outlined" onclick="runPreFlight()">
-                    <span class="material-icons">check_circle</span>
+                    <span class="material-symbols-rounded">check_circle</span>
                     Run Pre-Flight Check
                 </button>
             </div>
@@ -1532,6 +1533,80 @@ document.addEventListener('DOMContentLoaded', loadTelegramConfig);
 </script>
   <script src="/assets/js/realtime-client.js"></script>
 <!-- v3.0.0: NixOS Configuration Guard -->
+<div id="tab-webhooks" class="consolidation-content">
+<div style="max-width:900px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+    <div>
+      <h2 style="font-size:22px;font-weight:700;margin-bottom:6px;">Webhook Notifications</h2>
+      <p style="color:rgba(255,255,255,0.5);font-size:14px;">Send HTTP POST payloads to external endpoints on system events.</p>
+    </div>
+    <button class="btn btn-primary" onclick="showAddWebhook()"
+      data-permission="system:write" data-permission-mode="disable">
+      <span class="material-symbols-rounded" style="font-size:16px;vertical-align:-3px;">add</span>
+      Add Webhook
+    </button>
+  </div>
+
+  <div id="webhookList" style="display:flex;flex-direction:column;gap:12px;">
+    <div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">Loading webhooks...</div>
+  </div>
+
+  <!-- Add/Edit modal structure (inline) -->
+  <div id="webhookModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);
+    z-index:9000;display:flex;align-items:center;justify-content:center;" class="hidden">
+    <div style="background:#1a1a2e;border:1px solid rgba(255,255,255,0.12);border-radius:20px;
+      padding:32px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+      <h3 id="webhookModalTitle" style="font-size:18px;font-weight:700;margin-bottom:24px;">Add Webhook</h3>
+
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div>
+          <label style="font-size:13px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Name *</label>
+          <input id="wh-name" type="text" placeholder="My Webhook" style="width:100%;box-sizing:border-box;
+            background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:10px;
+            padding:10px 14px;color:#fff;font-size:14px;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">URL *</label>
+          <input id="wh-url" type="url" placeholder="https://hooks.example.com/..." style="width:100%;box-sizing:border-box;
+            background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:10px;
+            padding:10px 14px;color:#fff;font-size:14px;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">
+            Secret Header Name <span style="color:rgba(255,255,255,0.3)">(optional)</span>
+          </label>
+          <input id="wh-secret-header" type="text" placeholder="X-Webhook-Secret" style="width:100%;box-sizing:border-box;
+            background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:10px;
+            padding:10px 14px;color:#fff;font-size:14px;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">
+            Secret Value <span style="color:rgba(255,255,255,0.3)">(optional, sent as header value)</span>
+          </label>
+          <input id="wh-secret-value" type="password" placeholder="••••••••" style="width:100%;box-sizing:border-box;
+            background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:10px;
+            padding:10px 14px;color:#fff;font-size:14px;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:rgba(255,255,255,0.5);display:block;margin-bottom:10px;">Events</label>
+          <div id="wh-events" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input id="wh-enabled" type="checkbox" checked style="width:16px;height:16px;">
+          <span style="font-size:14px;">Enabled</span>
+        </label>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:24px;justify-content:flex-end;">
+        <button class="btn" onclick="closeWebhookModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveWebhook()" id="wh-save-btn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
 <script>
 function switchConsolidatedTab(t){document.querySelectorAll('.consolidation-content').forEach(function(c){c.classList.remove('active')});document.querySelectorAll('.consolidation-tab').forEach(function(b){b.classList.remove('active')});var el=document.getElementById('tab-'+t);var btn=document.querySelector('[data-tab="'+t+'"]');if(el)el.classList.add('active');if(btn)btn.classList.add('active');if(typeof window['init_'+t]==='function')window['init_'+t]();}window.addEventListener('load',function(){var h=window.location.hash.replace('#','');if(h&&document.getElementById('tab-'+h))switchConsolidatedTab(h);});
 document.addEventListener('DOMContentLoaded', () => {
@@ -1834,7 +1909,7 @@ var __config_init=false;function init_config(){if(__config_init)return;__config_
             
             container.innerHTML = alerts.map(alert => `
                 <div class="alert ${alert.type}">
-                    <span class="material-icons">${alert.icon}</span>
+                    <span class="material-symbols-rounded">${alert.icon}</span>
                     <div class="alert-content">
                         <h3>${alert.title}</h3>
                         <p>${alert.message}</p>
@@ -2069,4 +2144,177 @@ setInterval(loadDisks,30000);}
 </script>
     <script src="/assets/js/nav-flyout.js"></script>
     <script src="/assets/js/nav-shared.js"></script>
+
+<script>
+// ═══════════════════════════ WEBHOOK MANAGEMENT ═══════════════════════════════
+
+const WEBHOOK_EVENTS = [
+  'pool.degraded', 'pool.faulted', 'pool.imported',
+  'capacity.warning', 'capacity.critical', 'capacity.emergency',
+  'zfs.scrub_complete', 'zfs.scrub_error',
+  'docker.container_stopped', 'docker.container_error',
+  'auth.login_failed', 'auth.brute_force',
+  'system.startup', 'system.shutdown',
+  'gitops.drift', 'gitops.apply_failed',
+];
+
+let editingWebhookId = null;
+
+function init_webhooks() { loadWebhooks(); }
+
+async function loadWebhooks() {
+  const el = document.getElementById('webhookList');
+  if (!el) return;
+  try {
+    const r = await csrfFetch('/api/alerts/webhooks');
+    const d = await r.json();
+    if (!d.success) { el.innerHTML = '<div style="color:#ef9a9a;padding:20px;">'+esc(d.error||'Failed')+'</div>'; return; }
+    const hooks = d.webhooks || [];
+    if (hooks.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">No webhooks configured. Add one to receive HTTP notifications for system events.</div>';
+      return;
+    }
+    el.innerHTML = hooks.map(h => webhookCard(h)).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:#ef9a9a;padding:20px;">Network error: '+esc(e.message)+'</div>';
+  }
+}
+
+function webhookCard(h) {
+  const events = safeParseEvents(h.events);
+  const eventsText = events.length ? events.slice(0,3).join(', ') + (events.length > 3 ? ` +${events.length-3} more` : '') : 'All events';
+  return `<div style="padding:20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
+    border-radius:14px;display:flex;align-items:center;gap:16px;">
+    <div style="width:10px;height:10px;border-radius:50%;flex-shrink:0;
+      background:${h.enabled ? '#4caf50' : 'rgba(255,255,255,0.2)'}"></div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:15px;font-weight:600;margin-bottom:4px;">${esc(h.name)}</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.url)}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:4px;">${esc(eventsText)}</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" onclick="testWebhook(${h.id})" style="padding:8px 14px;font-size:13px;">Test</button>
+      <button class="btn" onclick="editWebhook(${h.id})" style="padding:8px 14px;font-size:13px;"
+        data-permission="system:write" data-permission-mode="disable">Edit</button>
+      <button class="btn btn-danger" onclick="deleteWebhook(${h.id},'${esc(h.name)}')" 
+        style="padding:8px 14px;font-size:13px;background:rgba(244,67,54,0.1);color:#ef9a9a;
+        border:1px solid rgba(244,67,54,0.2);"
+        data-permission="system:write" data-permission-mode="disable">Delete</button>
+    </div>
+  </div>`;
+}
+
+function safeParseEvents(eventsStr) {
+  if (!eventsStr) return [];
+  try { return JSON.parse(eventsStr); } catch(_) { return []; }
+}
+
+function showAddWebhook() {
+  editingWebhookId = null;
+  document.getElementById('webhookModalTitle').textContent = 'Add Webhook';
+  document.getElementById('wh-name').value = '';
+  document.getElementById('wh-url').value = '';
+  document.getElementById('wh-secret-header').value = '';
+  document.getElementById('wh-secret-value').value = '';
+  document.getElementById('wh-enabled').checked = true;
+  renderEventCheckboxes([]);
+  document.getElementById('webhookModal').classList.remove('hidden');
+  document.getElementById('webhookModal').style.display = 'flex';
+}
+
+async function editWebhook(id) {
+  try {
+    const r = await csrfFetch('/api/alerts/webhooks');
+    const d = await r.json();
+    const hook = (d.webhooks||[]).find(h => h.id === id);
+    if (!hook) { alert('Webhook not found'); return; }
+    editingWebhookId = id;
+    document.getElementById('webhookModalTitle').textContent = 'Edit Webhook';
+    document.getElementById('wh-name').value = hook.name || '';
+    document.getElementById('wh-url').value = hook.url || '';
+    document.getElementById('wh-secret-header').value = hook.secret_header || '';
+    document.getElementById('wh-secret-value').value = '';
+    document.getElementById('wh-enabled').checked = hook.enabled === 1;
+    renderEventCheckboxes(safeParseEvents(hook.events));
+    document.getElementById('webhookModal').classList.remove('hidden');
+    document.getElementById('webhookModal').style.display = 'flex';
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+function renderEventCheckboxes(selected) {
+  const sel = new Set(selected);
+  document.getElementById('wh-events').innerHTML = WEBHOOK_EVENTS.map(ev =>
+    `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0;">
+      <input type="checkbox" value="${ev}" ${sel.has(ev)?'checked':''} style="width:14px;height:14px;">
+      <span style="color:rgba(255,255,255,0.7);">${ev}</span>
+    </label>`
+  ).join('');
+}
+
+function closeWebhookModal() {
+  document.getElementById('webhookModal').style.display = 'none';
+  document.getElementById('webhookModal').classList.add('hidden');
+}
+
+async function saveWebhook() {
+  const name = document.getElementById('wh-name').value.trim();
+  const url  = document.getElementById('wh-url').value.trim();
+  if (!name || !url) { alert('Name and URL are required'); return; }
+
+  const selectedEvents = [...document.querySelectorAll('#wh-events input:checked')].map(i => i.value);
+  const payload = {
+    name, url,
+    secret_header: document.getElementById('wh-secret-header').value.trim(),
+    secret_value:  document.getElementById('wh-secret-value').value,
+    enabled: document.getElementById('wh-enabled').checked ? 1 : 0,
+    events: JSON.stringify(selectedEvents),
+  };
+  if (editingWebhookId) payload.id = editingWebhookId;
+
+  const btn = document.getElementById('wh-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await csrfFetch('/api/alerts/webhooks', {method:'POST', body:JSON.stringify(payload)});
+    const d = await r.json();
+    if (d.success) {
+      closeWebhookModal();
+      loadWebhooks();
+      if (window.ui) ui.toast('Webhook saved', 'success');
+    } else {
+      alert('Save failed: ' + (d.error || 'Unknown error'));
+    }
+  } catch(e) { alert('Error: '+e.message); }
+  finally { btn.disabled=false; btn.textContent='Save'; }
+}
+
+async function deleteWebhook(id, name) {
+  if (!confirm('Delete webhook "' + name + '"?')) return;
+  try {
+    const r = await csrfFetch('/api/alerts/webhooks/'+id, {method:'DELETE'});
+    const d = await r.json();
+    if (d.success) { loadWebhooks(); if(window.ui) ui.toast('Webhook deleted','success'); }
+    else alert('Delete failed: '+(d.error||'error'));
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+async function testWebhook(id) {
+  const btn = event.target;
+  btn.disabled=true; btn.textContent='Sending…';
+  try {
+    const r = await csrfFetch('/api/alerts/webhooks/'+id+'/test', {method:'POST'});
+    const d = await r.json();
+    if (d.success) { if(window.ui) ui.toast('Test sent successfully','success'); else alert('Test sent!'); }
+    else alert('Test failed: '+(d.error||'error'));
+  } catch(e) { alert('Error: '+e.message); }
+  finally { btn.disabled=false; btn.textContent='Test'; }
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Close modal on backdrop click
+document.getElementById('webhookModal').addEventListener('click', function(e) {
+  if (e.target === this) closeWebhookModal();
+});
+</script>
+
 </body></html>

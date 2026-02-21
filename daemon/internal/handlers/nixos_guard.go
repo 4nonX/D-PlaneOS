@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,10 +13,12 @@ import (
 
 // NixOSGuardHandler provides NixOS configuration validation and management
 // These endpoints only function on NixOS systems
-type NixOSGuardHandler struct{}
+type NixOSGuardHandler struct {
+	db *sql.DB
+}
 
-func NewNixOSGuardHandler() *NixOSGuardHandler {
-	return &NixOSGuardHandler{}
+func NewNixOSGuardHandler(db *sql.DB) *NixOSGuardHandler {
+	return &NixOSGuardHandler{db: db}
 }
 
 // isNixOS checks if we're running on NixOS
@@ -238,5 +241,46 @@ func (h *NixOSGuardHandler) RollbackGeneration(w http.ResponseWriter, r *http.Re
 		"generation":  req.Generation,
 		"output":      output,
 		"duration_ms": duration.Milliseconds(),
+	})
+}
+
+// ListPreUpgradeSnapshots returns all pre-upgrade ZFS snapshots recorded in DB.
+// GET /api/nixos/pre-upgrade-snapshots
+func (h *NixOSGuardHandler) ListPreUpgradeSnapshots(w http.ResponseWriter, r *http.Request) {
+	type snap struct {
+		ID          int64  `json:"id"`
+		Snapshot    string `json:"snapshot"`
+		Pool        string `json:"pool"`
+		CreatedAt   string `json:"created_at"`
+		NixOSApply  string `json:"nixos_apply"`
+		Success     int    `json:"success"`
+		Error       string `json:"error,omitempty"`
+	}
+
+	rows, err := h.db.Query(`
+		SELECT id, snapshot, pool, created_at, nixos_apply, success, error
+		FROM pre_upgrade_snapshots
+		ORDER BY id DESC
+		LIMIT 100
+	`)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to query snapshots", err)
+		return
+	}
+	defer rows.Close()
+
+	var snaps []snap
+	for rows.Next() {
+		var s snap
+		if err := rows.Scan(&s.ID, &s.Snapshot, &s.Pool, &s.CreatedAt, &s.NixOSApply, &s.Success, &s.Error); err != nil {
+			continue
+		}
+		snaps = append(snaps, s)
+	}
+
+	respondOK(w, map[string]interface{}{
+		"success":   true,
+		"snapshots": snaps,
+		"count":     len(snaps),
 	})
 }

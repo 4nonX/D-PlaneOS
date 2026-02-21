@@ -1,43 +1,62 @@
-# D-PlaneOS v2.0.0 — .gitignore
+# D-PlaneOS .gitignore
 
-# Go build artifacts
-build/dplaned
+# ── Compiled binaries ─────────────────────────────────────────────────────────
+daemon/dplaned
+daemon/dplaned-*
 *.exe
-*.test
 *.out
 
-# Go module cache (vendor is committed)
-# daemon/vendor/ is committed for offline builds
+# ── Go build artifacts ────────────────────────────────────────────────────────
+daemon/vendor/
+# Note: go.sum IS committed (reproducible builds)
 
-# SQLite runtime databases
+# ── Database files ────────────────────────────────────────────────────────────
 *.db
-*.db-wal
 *.db-shm
+*.db-wal
 *.db.backup
+*.sqlite
+*.sqlite3
 
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
+# ── Release tarballs ──────────────────────────────────────────────────────────
+*.tar.gz
+*.tar.xz
+*.zip
+dplaneos-v*.tar.*
+release*/
+dist/
 
-# IDE / Editor
-.idea/
+# ── rclone config (contains credentials) ─────────────────────────────────────
+/etc/dplaneos/rclone.conf
+rclone.conf
+
+# ── Local dev / IDE ───────────────────────────────────────────────────────────
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
-.project
-.settings/
+.DS_Store
+Thumbs.db
 
-# Temporary files
-tmp/
-*.tmp
+# ── Logs ─────────────────────────────────────────────────────────────────────
 *.log
+logs/
 
-# Legacy v1.x packages (too large for git)
-legacy/offline-packages/
-legacy/backend/
-legacy/frontend-built/
+# ── Test artifacts ────────────────────────────────────────────────────────────
+/tmp/
+coverage.out
+coverage.html
 
-# Node (not used in v2.0.0, but just in case)
-node_modules/
+# ── NixOS build outputs ───────────────────────────────────────────────────────
+nixos/result
+nixos/result-*
+
+# ── SSH keys / secrets ────────────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+id_rsa
+id_ed25519
+*.p12
+*.pfx

@@ -13,7 +13,7 @@ ERRORS=0
 WARNINGS=0
 
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║         D-PlaneOS v5.5.0 Pre-Flight Check                 ║"
+echo "║         D-PlaneOS v3.2.0 Pre-Flight Check                 ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 

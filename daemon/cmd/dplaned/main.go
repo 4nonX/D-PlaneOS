@@ -15,19 +15,23 @@ import (
 	"time"
 
 	"dplaned/internal/audit"
+	"dplaned/internal/ha"
 	"dplaned/internal/middleware"
 	"dplaned/internal/alerts"
 	"dplaned/internal/handlers"
 	"dplaned/internal/monitoring"
 	"dplaned/internal/security"
 	"dplaned/internal/websocket"
+	"dplaned/internal/networkdwriter"
+	"dplaned/internal/nixwriter"
+	"dplaned/internal/reconciler"
 	"dplaned/internal/zfs"
 	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-	Version = "2.1.0"
+	Version = "3.2.0"
 )
 
 func main() {
@@ -39,6 +43,9 @@ func main() {
 	backupPath := flag.String("backup-path", "", "External path for DB backup (e.g., /mnt/usb/dplaneos-backup.db). If empty, backs up next to main DB.")
 	configDir := flag.String("config-dir", "/etc/dplaneos", "Config directory (for NixOS: /var/lib/dplaneos/config)")
 	smbConfPath := flag.String("smb-conf", "/etc/samba/smb.conf", "Path to write SMB config (for NixOS: /var/lib/dplaneos/smb-shares.conf)")
+	haLocalID   := flag.String("ha-local-id", "", "Unique ID for this cluster node (default: /etc/machine-id prefix)")
+	haLocalAddr := flag.String("ha-local-addr", "", "HTTP address peers use to reach this daemon, e.g. http://10.0.0.1:5050")
+	gitopsStatePath := flag.String("gitops-state", "/var/lib/dplaneos/gitops/state.yaml", "Path to GitOps state.yaml (managed by git repo)")
 	flag.Parse()
 
 	// Set configurable paths for NixOS compatibility
@@ -65,6 +72,39 @@ func main() {
 	if err := initSchema(db); err != nil {
 		log.Fatalf("Database schema initialization failed: %v", err)
 	}
+
+	// Ensure reconciler tables exist (network state persistence for non-NixOS)
+	if err := reconciler.EnsureSchema(db); err != nil {
+		log.Printf("WARNING: reconciler schema failed: %v", err)
+	}
+
+	// networkdwriter: writes /etc/systemd/network/50-dplane-*.{network,netdev}
+	// These files survive reboots AND nixos-rebuild switch with zero extra steps.
+	// Works on every systemd distro: NixOS, Debian, Ubuntu, Arch, RHEL.
+	netWriter := networkdwriter.Default()
+	if netWriter.IsNetworkd() {
+		log.Printf("systemd-networkd active — networkd file writer enabled (%s)", networkdwriter.DefaultNetworkDir)
+	} else {
+		log.Printf("systemd-networkd not active — networkd files written, reload deferred")
+	}
+	handlers.SetNetWriter(netWriter)
+
+	// nixwriter: NixOS-only, ONLY for settings with no networkd equivalent:
+	//   - networking.firewall (firewall ports)
+	//   - services.dplaneos.samba (samba globals)
+	// All network config (IPs, VLANs, bonds, DNS) now goes through networkdwriter.
+	nixWriter := nixwriter.DefaultWriter()
+	_ = nixWriter.LoadFromDisk()
+	if nixWriter.IsNixOS() {
+		log.Printf("NixOS detected — Nix fragment writer active for firewall+samba: %s", nixwriter.DefaultFragmentPath)
+	}
+	handlers.SetNixWriter(nixWriter)
+	handlers.SetReconcilerDB(db)
+
+	// Boot reconciler: fallback for systems where networkd was not active when
+	// files were written, or for Debian/Ubuntu with NetworkManager instead of networkd.
+	// On NixOS + networkd: this is a no-op (networkd already read the files at boot).
+	go reconciler.Run(db)
 
 	// Periodic WAL checkpoint every 5 minutes — safety net against WAL bloat
 	// on systems with high audit logging rates (e.g., runaway container producing errors)
@@ -105,8 +145,15 @@ func main() {
 		}
 	}()
 
+	// Load or create the HMAC key for audit chain integrity (Phase 1.5)
+	auditKey, err := audit.LoadOrCreateAuditKey("/var/lib/dplaneos/audit.key")
+	if err != nil {
+		log.Printf("WARNING: audit HMAC key unavailable (%v) — chain disabled", err)
+		auditKey = nil
+	}
+
 	// Initialize buffered audit logging (non-blocking)
-	bufferedLogger := audit.NewBufferedLogger(db, 100, 5*time.Second)
+	bufferedLogger := audit.NewBufferedLogger(db, 100, 5*time.Second, auditKey)
 	bufferedLogger.Start()
 	defer bufferedLogger.Stop()
 
@@ -115,6 +162,20 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer security.CloseDatabase()
+
+	// ── HA cluster manager ──
+	haID := *haLocalID
+	if haID == "" {
+		haID = handlers.LocalNodeID()
+	}
+	haAddr := *haLocalAddr
+	if haAddr == "" {
+		haAddr = "http://" + *listenAddr
+	}
+	clusterMgr := ha.NewManager(db, haID, haAddr, Version)
+	clusterMgr.Start()
+	defer clusterMgr.Stop()
+	haHandler := handlers.NewHAHandler(clusterMgr)
 
 	// Initialize Telegram alerts (from flags OR database)
 	if *telegramBot != "" && *telegramChat != "" {
@@ -194,6 +255,15 @@ func main() {
 	r.HandleFunc("/api/auth/change-password", authHandler.ChangePassword).Methods("POST")
 	r.HandleFunc("/api/csrf", authHandler.CSRFToken).Methods("GET")
 
+	// TOTP 2FA
+	totpHandler := handlers.NewTOTPHandler(db)
+	r.HandleFunc("/api/auth/totp/setup", totpHandler.HandleTOTPSetup).Methods("GET", "POST", "DELETE")
+	r.HandleFunc("/api/auth/totp/verify", totpHandler.HandleTOTPVerify).Methods("POST")
+
+	// API Tokens
+	apiTokenHandler := handlers.NewAPITokenHandler(db)
+	r.HandleFunc("/api/auth/tokens", apiTokenHandler.HandleTokens).Methods("GET", "POST", "DELETE")
+
 	// Session cleanup goroutine
 	go func() {
 		ticker := time.NewTicker(15 * time.Minute)
@@ -230,9 +300,9 @@ func main() {
 	// Docker handlers
 	dockerHandler := handlers.NewDockerHandler()
 	r.HandleFunc("/api/docker/containers", dockerHandler.ListContainers).Methods("GET")
-	r.HandleFunc("/api/docker/action", dockerHandler.ContainerAction).Methods("POST")
+	r.Handle("/api/docker/action", permRoute("docker","write",dockerHandler.ContainerAction)).Methods("POST")
 	r.HandleFunc("/api/docker/logs", dockerHandler.ContainerLogs).Methods("GET")
-	// v2.1.0: Docker enhanced
+	// v3.0.0: Docker enhanced
 	r.HandleFunc("/api/docker/update", dockerHandler.SafeUpdate).Methods("POST")
 	r.HandleFunc("/api/docker/pull", dockerHandler.PullImage).Methods("POST")
 	r.HandleFunc("/api/docker/remove", dockerHandler.RemoveContainer).Methods("POST")
@@ -241,65 +311,66 @@ func main() {
 	r.HandleFunc("/api/docker/compose/down", dockerHandler.ComposeDown).Methods("POST")
 	r.HandleFunc("/api/docker/compose/status", dockerHandler.ComposeStatus).Methods("GET")
 
-	// v2.1.0: ZFS Snapshots CRUD
+	// v3.0.0: ZFS Snapshots CRUD
 	snapshotCRUDHandler := handlers.NewZFSSnapshotHandler()
 	r.HandleFunc("/api/zfs/snapshots", snapshotCRUDHandler.ListSnapshots).Methods("GET")
 	r.HandleFunc("/api/zfs/snapshots", snapshotCRUDHandler.CreateSnapshot).Methods("POST")
 	r.HandleFunc("/api/zfs/snapshots", snapshotCRUDHandler.DestroySnapshot).Methods("DELETE")
 	r.HandleFunc("/api/zfs/snapshots/rollback", snapshotCRUDHandler.RollbackSnapshot).Methods("POST")
 
-	// v2.1.0: ZFS Replication (remote send/recv)
+	// v3.0.0: ZFS Replication (remote send/recv)
 	replicationRemoteHandler := handlers.NewReplicationHandler()
 	r.HandleFunc("/api/replication/remote", replicationRemoteHandler.ReplicateToRemote).Methods("POST")
 	r.HandleFunc("/api/replication/test", replicationRemoteHandler.TestRemoteConnection).Methods("POST")
 
-	// v2.1.0: ZFS Time Machine (browse snapshots, restore single files)
+	// v3.0.0: ZFS Time Machine (browse snapshots, restore single files)
 	timeMachineHandler := handlers.NewZFSTimeMachineHandler()
 	r.HandleFunc("/api/timemachine/versions", timeMachineHandler.ListSnapshotVersions).Methods("GET")
 	r.HandleFunc("/api/timemachine/browse", timeMachineHandler.BrowseSnapshot).Methods("GET")
 	r.HandleFunc("/api/timemachine/restore", timeMachineHandler.RestoreFile).Methods("POST")
 
-	// v2.1.0: ZFS Sandbox (ephemeral Docker environments via ZFS clone)
+	// v3.0.0: ZFS Sandbox (ephemeral Docker environments via ZFS clone)
 	sandboxHandler := handlers.NewZFSSandboxHandler()
 	r.HandleFunc("/api/sandbox/create", sandboxHandler.CreateSandbox).Methods("POST")
 	r.HandleFunc("/api/sandbox/list", sandboxHandler.ListSandboxes).Methods("GET")
 	r.HandleFunc("/api/sandbox/destroy", sandboxHandler.DestroySandbox).Methods("DELETE", "POST")
 
-	// v2.1.0: NixOS Config Guard (only active on NixOS systems)
-	nixosGuardHandler := handlers.NewNixOSGuardHandler()
+	// v3.0.0: NixOS Config Guard (only active on NixOS systems)
+	nixosGuardHandler := handlers.NewNixOSGuardHandler(db)
 	r.HandleFunc("/api/nixos/detect", nixosGuardHandler.DetectNixOS).Methods("GET")
 	r.HandleFunc("/api/nixos/validate", nixosGuardHandler.ValidateConfig).Methods("POST")
 	r.HandleFunc("/api/nixos/generations", nixosGuardHandler.ListGenerations).Methods("GET")
-	r.HandleFunc("/api/nixos/rollback", nixosGuardHandler.RollbackGeneration).Methods("POST")
+	r.Handle("/api/nixos/rollback", permRoute("system","admin",nixosGuardHandler.RollbackGeneration)).Methods("POST")
 
-	// v2.1.0: ZFS Health Predictor (deep monitoring, heatmap data)
+	// v3.0.0: ZFS Health Predictor (deep monitoring, heatmap data)
 	healthHandler := handlers.NewZFSHealthHandler()
 	r.HandleFunc("/api/zfs/health", healthHandler.GetPoolHealth).Methods("GET")
 	r.HandleFunc("/api/zfs/iostat", healthHandler.GetIOStats).Methods("GET")
 	r.HandleFunc("/api/zfs/events", healthHandler.GetPoolEvents).Methods("GET")
 	r.HandleFunc("/api/zfs/smart", healthHandler.GetSMARTHealth).Methods("GET")
 
-	// v2.1.0: Pool Capacity Guardian (prevents ZFS full freeze)
+	// v3.0.0: Pool Capacity Guardian (prevents ZFS full freeze)
 	capacityHandler := handlers.NewCapacityGuardianHandler()
 	r.HandleFunc("/api/zfs/capacity", capacityHandler.GetCapacityStatus).Methods("GET")
 	r.HandleFunc("/api/zfs/capacity/reserve", capacityHandler.SetupReserve).Methods("POST")
 	r.HandleFunc("/api/zfs/capacity/release", capacityHandler.ReleaseReserve).Methods("POST")
 
-	// v2.1.0: Power-loss state locks
+	// v3.0.0: Power-loss state locks
 	stateLockHandler := handlers.NewStateLockHandler()
 	r.HandleFunc("/api/system/stale-locks", stateLockHandler.CheckStaleLocks).Methods("GET")
 	r.HandleFunc("/api/system/stale-locks/clear", stateLockHandler.ClearStaleLock).Methods("POST")
 
-	// v2.1.0: Sandbox orphan cleanup
+	// v3.0.0: Sandbox orphan cleanup
 	r.HandleFunc("/api/sandbox/cleanup", sandboxHandler.CleanOrphanVolumes).Methods("POST")
 
-	// v2.1.0: NixOS diff + watchdog
+	// v3.0.0: NixOS diff + watchdog
 	r.HandleFunc("/api/nixos/diff", nixosGuardHandler.DiffGenerations).Methods("GET")
-	r.HandleFunc("/api/nixos/apply", nixosGuardHandler.ApplyWithWatchdog).Methods("POST")
+	r.Handle("/api/nixos/apply", permRoute("system","admin",nixosGuardHandler.ApplyWithWatchdog)).Methods("POST")
 	r.HandleFunc("/api/nixos/confirm", nixosGuardHandler.ConfirmApply).Methods("POST")
 	r.HandleFunc("/api/nixos/watchdog", nixosGuardHandler.WatchdogStatus).Methods("GET")
+	r.HandleFunc("/api/nixos/pre-upgrade-snapshots", nixosGuardHandler.ListPreUpgradeSnapshots).Methods("GET")
 
-	// v2.1.0: Docker pre-flight check
+	// v3.0.0: Docker pre-flight check
 	r.HandleFunc("/api/docker/preflight", dockerHandler.PreFlightCheck).Methods("GET")
 
 	// ── Git Sync ──
@@ -328,30 +399,51 @@ func main() {
 	r.HandleFunc("/api/git-sync/repos/export", gitReposHandler.ExportToRepo).Methods("POST")
 	gitSyncHandler.StartAutoSync()
 
-	// v2.1.0: Audit log rotation
+	// v3.0.0: Audit log rotation
 	auditRotationHandler := handlers.NewAuditRotationHandler()
-	r.HandleFunc("/api/system/audit/rotate", auditRotationHandler.RotateAuditLogs).Methods("POST")
-	r.HandleFunc("/api/system/audit/stats", auditRotationHandler.GetAuditStats).Methods("GET")
+	r.Handle("/api/system/audit/rotate", permRoute("system","admin",auditRotationHandler.RotateAuditLogs)).Methods("POST")
+	r.Handle("/api/system/audit/stats", permRoute("audit","read",auditRotationHandler.GetAuditStats)).Methods("GET")
+	r.Handle("/api/system/audit/verify-chain", permRoute("audit","read",auditRotationHandler.VerifyAuditChain)).Methods("GET")
 
-	// v2.1.0: Zombie disk watcher
+	supportBundleHandler := handlers.NewSupportBundleHandler(db)
+	r.Handle("/api/system/support-bundle", permRoute("system","admin",supportBundleHandler.GenerateBundle)).Methods("POST")
+
+	webhookHandler := handlers.NewWebhookHandler(db)
+	r.HandleFunc("/api/alerts/webhooks", webhookHandler.ListWebhooks).Methods("GET")
+	r.Handle("/api/alerts/webhooks", permRoute("system","write",webhookHandler.SaveWebhook)).Methods("POST")
+	r.Handle("/api/alerts/webhooks/{id}", permRoute("system","write",webhookHandler.DeleteWebhook)).Methods("DELETE")
+	r.HandleFunc("/api/alerts/webhooks/{id}/test", webhookHandler.TestWebhook).Methods("POST")
+
+	// Phase 3: GitOps — declarative state reconciliation
+	gitopsHandler := handlers.NewGitOpsHandler(db, *gitopsStatePath, *smbConfPath, wsHub)
+	defer gitopsHandler.Stop()
+	r.HandleFunc("/api/gitops/status", gitopsHandler.Status).Methods("GET")
+	r.HandleFunc("/api/gitops/plan", gitopsHandler.Plan).Methods("GET")
+	r.Handle("/api/gitops/apply", permRoute("system","admin",gitopsHandler.Apply)).Methods("POST")
+	r.Handle("/api/gitops/approve", permRoute("system","admin",gitopsHandler.Approve)).Methods("POST")
+	r.HandleFunc("/api/gitops/check", gitopsHandler.Check).Methods("POST")
+	r.HandleFunc("/api/gitops/state", gitopsHandler.GetState).Methods("GET")
+	r.Handle("/api/gitops/state", permRoute("system","admin",gitopsHandler.PutState)).Methods("PUT")
+
+	// v3.0.0: Zombie disk watcher
 	zombieHandler := handlers.NewZombieWatcherHandler()
 	r.HandleFunc("/api/zfs/disk-latency", zombieHandler.CheckDiskLatency).Methods("GET")
 
-	// v2.1.0: LDAP Circuit Breaker
+	// v3.0.0: LDAP Circuit Breaker
 	r.HandleFunc("/api/ldap/circuit-breaker", handlers.GetCircuitBreakerStatus).Methods("GET")
 	r.HandleFunc("/api/ldap/circuit-breaker/reset", handlers.ResetCircuitBreaker).Methods("POST")
 
-	// v2.1.0: ZFS Scrub management
+	// v3.0.0: ZFS Scrub management
 	r.HandleFunc("/api/zfs/scrub/start", handlers.StartScrub).Methods("POST")
 	r.HandleFunc("/api/zfs/scrub/stop", handlers.StopScrub).Methods("POST")
 	r.HandleFunc("/api/zfs/scrub/status", handlers.GetScrubStatus).Methods("GET")
 
-	// v2.1.0: VDEV / Pool expansion
-	r.HandleFunc("/api/zfs/pool/add-vdev", handlers.AddVdevToPool).Methods("POST")
+	// v3.0.0: VDEV / Pool expansion
+	r.Handle("/api/zfs/pool/add-vdev", permRoute("storage","write",handlers.AddVdevToPool)).Methods("POST")
 	r.HandleFunc("/api/zfs/pool/remove-device", handlers.RemoveCacheOrLog).Methods("POST")
-	r.HandleFunc("/api/zfs/pool/replace", handlers.ReplaceDisk).Methods("POST")
+	r.Handle("/api/zfs/pool/replace", permRoute("storage","write",handlers.ReplaceDisk)).Methods("POST")
 
-	// v2.1.0: Dataset quotas
+	// v3.0.0: Dataset quotas
 	r.HandleFunc("/api/zfs/dataset/quota", handlers.SetDatasetQuota).Methods("POST")
 	r.HandleFunc("/api/zfs/dataset/quota", handlers.GetDatasetQuota).Methods("GET")
 
@@ -359,32 +451,34 @@ func main() {
 	r.HandleFunc("/api/zfs/quota/usergroup", handlers.GetUserGroupQuotas).Methods("GET")
 	r.HandleFunc("/api/zfs/quota/usergroup", handlers.SetUserGroupQuota).Methods("POST")
 
-	// v2.1.0: S.M.A.R.T. tests
+	// v3.0.0: S.M.A.R.T. tests
 	r.HandleFunc("/api/zfs/smart/test", handlers.RunSMARTTest).Methods("POST")
 	r.HandleFunc("/api/zfs/smart/results", handlers.GetSMARTTestResults).Methods("GET")
 
-	// v2.1.0: ZFS delegation (zfs allow)
+	// v3.0.0: ZFS delegation (zfs allow)
 	r.HandleFunc("/api/zfs/delegation", handlers.SetZFSDelegation).Methods("POST")
 	r.HandleFunc("/api/zfs/delegation", handlers.GetZFSDelegation).Methods("GET")
 	r.HandleFunc("/api/zfs/delegation/revoke", handlers.RevokeZFSDelegation).Methods("POST")
 
-	// v2.1.0: Network rollback
-	r.HandleFunc("/api/network/apply", handlers.ApplyNetworkWithRollback).Methods("POST")
+	// v3.0.0: Network rollback
+	r.Handle("/api/network/apply", permRoute("network","write",handlers.ApplyNetworkWithRollback)).Methods("POST")
 	r.HandleFunc("/api/network/confirm", handlers.ConfirmNetwork).Methods("POST")
 
-	// v2.1.0: SMB VFS modules
+	// v3.0.0: SMB VFS modules
 	r.HandleFunc("/api/smb/vfs", handlers.GetSMBVFSConfig).Methods("GET")
 	r.HandleFunc("/api/smb/vfs", handlers.SetSMBVFSConfig).Methods("POST")
 
-	// v2.1.0: VLAN management
+	// v3.0.0: VLAN management
 	r.HandleFunc("/api/network/vlan", handlers.ListVLANs).Methods("GET")
 	r.HandleFunc("/api/network/vlan", handlers.CreateVLAN).Methods("POST")
 	r.HandleFunc("/api/network/vlan", handlers.DeleteVLAN).Methods("DELETE")
 
-	// v2.1.0: Link Aggregation / Bonding
-	r.HandleFunc("/api/network/bond", handlers.CreateBond).Methods("POST")
+	// v3.0.0: Link Aggregation / Bonding
+	r.HandleFunc("/api/network/bond", handlers.ListBonds).Methods("GET")
+	r.Handle("/api/network/bond", permRoute("network","write",handlers.CreateBond)).Methods("POST")
+	r.Handle("/api/network/bond/{name}", permRoute("network","write",handlers.DeleteBond)).Methods("DELETE")
 
-	// v2.1.0: NTP configuration
+	// v3.0.0: NTP configuration
 	r.HandleFunc("/api/system/ntp", handlers.GetNTPStatus).Methods("GET")
 	r.HandleFunc("/api/system/ntp", handlers.SetNTPServers).Methods("POST")
 
@@ -397,16 +491,19 @@ func main() {
 	// Shares CRUD handlers
 	shareCRUDHandler := handlers.NewShareCRUDHandler(db, *smbConfPath)
 	r.HandleFunc("/api/shares/list", shareCRUDHandler.HandleShares).Methods("GET")
-	r.HandleFunc("/api/shares", shareCRUDHandler.HandleShares).Methods("GET", "POST")
+	r.HandleFunc("/api/shares", shareCRUDHandler.HandleShares).Methods("GET")
+	r.Handle("/api/shares", permRoute("shares","write",shareCRUDHandler.HandleShares)).Methods("POST")
 
 	// User & Group CRUD handlers
 	userGroupHandler := handlers.NewUserGroupHandler(db)
-	r.HandleFunc("/api/rbac/users", userGroupHandler.HandleUsers).Methods("GET", "POST")
+	r.HandleFunc("/api/rbac/users", userGroupHandler.HandleUsers).Methods("GET")
+	r.Handle("/api/rbac/users", permRoute("users","write",userGroupHandler.HandleUsers)).Methods("POST")
 	r.HandleFunc("/api/rbac/groups", userGroupHandler.HandleGroups).Methods("GET", "POST")
 	r.HandleFunc("/api/users/create", userGroupHandler.HandleUsers).Methods("POST")
 
 	// System status, profile, preflight, setup handlers
 	systemStatusHandler := handlers.NewSystemStatusHandler(db)
+	r.HandleFunc("/api/system/setup-admin", systemStatusHandler.HandleSetupAdmin).Methods("POST")
 	r.HandleFunc("/api/system/status", systemStatusHandler.HandleStatus).Methods("GET")
 	r.HandleFunc("/api/system/profile", systemStatusHandler.HandleProfile).Methods("GET")
 	r.HandleFunc("/api/system/settings", systemStatusHandler.HandleSettings).Methods("GET", "POST")
@@ -421,7 +518,7 @@ func main() {
 
 	// Disk discovery (setup wizard)
 	r.HandleFunc("/api/system/disks", handlers.HandleDiskDiscovery).Methods("GET")
-	r.HandleFunc("/api/system/pool/create", handlers.HandlePoolCreate).Methods("POST")
+	r.Handle("/api/system/pool/create", permRoute("storage","write",handlers.HandlePoolCreate)).Methods("POST")
 	
 	// Files handlers
 	filesHandler := handlers.NewFilesExtendedHandler()
@@ -437,6 +534,10 @@ func main() {
 	
 	// Backup handlers
 	r.HandleFunc("/api/backup/rsync", handlers.ExecuteRsync).Methods("GET", "POST")
+
+	// Cloud Sync (rclone-based)
+	cloudSyncHandler := handlers.NewCloudSyncHandler()
+	r.HandleFunc("/api/cloud-sync", cloudSyncHandler.HandleCloudSync).Methods("GET", "POST")
 	
 	// Replication handlers
 	r.HandleFunc("/api/replication/send", handlers.ZFSSend).Methods("POST")
@@ -446,8 +547,14 @@ func main() {
 	// Settings handlers
 	settingsHandler := handlers.NewSettingsHandler(db)
 	r.HandleFunc("/api/settings/telegram", settingsHandler.GetTelegramConfig).Methods("GET")
-	r.HandleFunc("/api/settings/telegram", settingsHandler.SaveTelegramConfig).Methods("POST")
+	r.Handle("/api/settings/telegram", permRoute("system","write",settingsHandler.SaveTelegramConfig)).Methods("POST")
 	r.HandleFunc("/api/settings/telegram/test", settingsHandler.TestTelegramConfig).Methods("POST")
+
+	// /api/alerts/telegram — aliases to settings handler (used by alerts.html)
+	r.HandleFunc("/api/alerts/telegram", settingsHandler.GetTelegramConfig).Methods("GET")
+	r.Handle("/api/alerts/telegram", permRoute("system","write",settingsHandler.SaveTelegramConfig)).Methods("POST")
+	r.HandleFunc("/api/alerts/telegram/test", settingsHandler.TestTelegramConfig).Methods("POST")
+
 	
 	// Removable Media handlers
 	removableHandler := handlers.NewRemovableMediaHandler()
@@ -463,7 +570,7 @@ func main() {
 	// LDAP / Active Directory handlers (v2.0.0)
 	ldapHandler := handlers.NewLDAPHandler(db)
 	r.HandleFunc("/api/ldap/config", ldapHandler.GetConfig).Methods("GET")
-	r.HandleFunc("/api/ldap/config", ldapHandler.SaveConfig).Methods("POST")
+	r.Handle("/api/ldap/config", permRoute("system","admin",ldapHandler.SaveConfig)).Methods("POST")
 	r.HandleFunc("/api/ldap/test", ldapHandler.TestConnection).Methods("POST")
 	r.HandleFunc("/api/ldap/status", ldapHandler.GetStatus).Methods("GET")
 	r.HandleFunc("/api/ldap/sync", ldapHandler.TriggerSync).Methods("POST")
@@ -474,19 +581,21 @@ func main() {
 	r.HandleFunc("/api/ldap/sync-log", ldapHandler.GetSyncLog).Methods("GET")
 
 	// RBAC routes
-	r.HandleFunc("/api/rbac/roles", handlers.HandleListRoles).Methods("GET")
-	r.HandleFunc("/api/rbac/roles", handlers.HandleCreateRole).Methods("POST")
-	r.HandleFunc("/api/rbac/roles/{id}", handlers.HandleGetRole).Methods("GET")
-	r.HandleFunc("/api/rbac/roles/{id}", handlers.HandleUpdateRole).Methods("PUT")
-	r.HandleFunc("/api/rbac/roles/{id}", handlers.HandleDeleteRole).Methods("DELETE")
-	r.HandleFunc("/api/rbac/roles/{id}/permissions", handlers.HandleGetRolePermissions).Methods("GET")
-	r.HandleFunc("/api/rbac/roles/{id}/permissions", handlers.HandleAssignPermissionToRole).Methods("POST")
-	r.HandleFunc("/api/rbac/roles/{id}/permissions/{permissionId}", handlers.HandleRemovePermissionFromRole).Methods("DELETE")
-	r.HandleFunc("/api/rbac/permissions", handlers.HandleListPermissions).Methods("GET")
-	r.HandleFunc("/api/rbac/users/{id}/roles", handlers.HandleGetUserRoles).Methods("GET")
-	r.HandleFunc("/api/rbac/users/{id}/roles", handlers.HandleAssignRoleToUser).Methods("POST")
-	r.HandleFunc("/api/rbac/users/{id}/roles/{roleId}", handlers.HandleRemoveRoleFromUser).Methods("DELETE")
-	r.HandleFunc("/api/rbac/users/{id}/permissions", handlers.HandleGetUserPermissions).Methods("GET")
+	// Read routes require "roles:read" permission (except /me/* which is self-service)
+	r.Handle("/api/rbac/roles", permRoute("roles","read",handlers.HandleListRoles)).Methods("GET")
+	r.Handle("/api/rbac/roles", permRoute("roles","write",handlers.HandleCreateRole)).Methods("POST")
+	r.Handle("/api/rbac/roles/{id}", permRoute("roles","read",handlers.HandleGetRole)).Methods("GET")
+	r.Handle("/api/rbac/roles/{id}", permRoute("roles","write",handlers.HandleUpdateRole)).Methods("PUT")
+	r.Handle("/api/rbac/roles/{id}", permRoute("roles","write",handlers.HandleDeleteRole)).Methods("DELETE")
+	r.Handle("/api/rbac/roles/{id}/permissions", permRoute("roles","read",handlers.HandleGetRolePermissions)).Methods("GET")
+	r.Handle("/api/rbac/roles/{id}/permissions", permRoute("roles","write",handlers.HandleAssignPermissionToRole)).Methods("POST")
+	r.Handle("/api/rbac/roles/{id}/permissions/{permissionId}", permRoute("roles","write",handlers.HandleRemovePermissionFromRole)).Methods("DELETE")
+	r.Handle("/api/rbac/permissions", permRoute("roles","read",handlers.HandleListPermissions)).Methods("GET")
+	r.Handle("/api/rbac/users/{id}/roles", permRoute("roles","read",handlers.HandleGetUserRoles)).Methods("GET")
+	r.Handle("/api/rbac/users/{id}/roles", permRoute("roles","write",handlers.HandleAssignRoleToUser)).Methods("POST")
+	r.Handle("/api/rbac/users/{id}/roles/{roleId}", permRoute("roles","write",handlers.HandleRemoveRoleFromUser)).Methods("DELETE")
+	r.Handle("/api/rbac/users/{id}/permissions", permRoute("roles","read",handlers.HandleGetUserPermissions)).Methods("GET")
+	// /me/* routes are self-service — authenticated users can always read their own permissions
 	r.HandleFunc("/api/rbac/me/permissions", handlers.HandleGetMyPermissions).Methods("GET")
 	r.HandleFunc("/api/rbac/me/roles", handlers.HandleGetMyRoles).Methods("GET")
 	r.HandleFunc("/api/rbac/check", handlers.HandleCheckPermission).Methods("GET")
@@ -510,13 +619,15 @@ func main() {
 	// Firewall (v2.0.0)
 	firewallHandler := handlers.NewFirewallHandler()
 	r.HandleFunc("/api/firewall/status", firewallHandler.GetStatus).Methods("GET")
-	r.HandleFunc("/api/firewall/rule", firewallHandler.SetRule).Methods("POST")
+	r.Handle("/api/firewall/rule", permRoute("firewall","write",firewallHandler.SetRule)).Methods("POST")
+	// NixOS only: sync full port list to dplane-generated.nix
+	r.Handle("/api/firewall/sync", permRoute("firewall","write",firewallHandler.SyncFirewallToNix)).Methods("POST")
 
 	// SSL/TLS Certificates (v2.0.0)
 	certHandler := handlers.NewCertHandler()
 	r.HandleFunc("/api/certs/list", certHandler.ListCerts).Methods("GET")
-	r.HandleFunc("/api/certs/generate", certHandler.GenerateSelfSigned).Methods("POST")
-	r.HandleFunc("/api/certs/activate", certHandler.ActivateCert).Methods("POST")
+	r.Handle("/api/certs/generate", permRoute("certificates","write",certHandler.GenerateSelfSigned)).Methods("POST")
+	r.Handle("/api/certs/activate", permRoute("certificates","write",certHandler.ActivateCert)).Methods("POST")
 
 	// Trash / Recycle Bin (v2.0.0)
 	trashHandler := handlers.NewTrashHandler()
@@ -533,7 +644,7 @@ func main() {
 
 	// SMTP Email Alerting
 	r.HandleFunc("/api/alerts/smtp", handlers.GetSMTPConfig).Methods("GET")
-	r.HandleFunc("/api/alerts/smtp", handlers.SaveSMTPConfig).Methods("POST")
+	r.Handle("/api/alerts/smtp", permRoute("system","write",handlers.SaveSMTPConfig)).Methods("POST")
 	r.HandleFunc("/api/alerts/smtp/test", handlers.TestSMTP).Methods("POST")
 
 	// ZFS Scrub Scheduler
@@ -543,9 +654,31 @@ func main() {
 	// Start background monitors
 	handlers.StartScrubMonitor()
 
+	// ── High Availability cluster endpoints ──
+	r.HandleFunc("/api/ha/status", haHandler.GetStatus).Methods("GET")
+	r.Handle("/api/ha/peers", permRoute("system","admin",haHandler.RegisterPeer)).Methods("POST")
+	r.Handle("/api/ha/peers/{id}", permRoute("system","admin",http.HandlerFunc(haHandler.RemovePeer))).Methods("DELETE")
+	r.Handle("/api/ha/peers/{id}/role", permRoute("system","admin",haHandler.SetPeerRole)).Methods("POST")
+	// /api/ha/heartbeat is deliberately PUBLIC (no session) so peer daemons can reach it
+	r.HandleFunc("/api/ha/heartbeat", haHandler.PeerHeartbeat).Methods("POST")
+	r.HandleFunc("/api/ha/local", haHandler.LocalNodeInfo).Methods("GET")
+
 	// WebSocket for real-time monitoring
 	wsHandler := handlers.NewWebSocketHandler(wsHub)
 	r.HandleFunc("/ws/monitor", wsHandler.HandleMonitor)
+
+	// v3.2.0: iSCSI target management (Phase 2)
+	r.HandleFunc("/api/iscsi/status", handlers.GetISCSIStatus).Methods("GET")
+	r.HandleFunc("/api/iscsi/targets", handlers.GetISCSITargets).Methods("GET")
+	r.Handle("/api/iscsi/targets", permRoute("storage","write",handlers.CreateISCSITarget)).Methods("POST")
+	r.Handle("/api/iscsi/targets/{iqn}", permRoute("storage","write",handlers.DeleteISCSITarget)).Methods("DELETE")
+	r.HandleFunc("/api/iscsi/acls", handlers.GetISCSIACLs).Methods("GET")
+	r.Handle("/api/iscsi/acls", permRoute("storage","write",handlers.AddISCSIACL)).Methods("POST")
+	r.Handle("/api/iscsi/acls", permRoute("storage","write",handlers.DeleteISCSIACL)).Methods("DELETE")
+	r.HandleFunc("/api/iscsi/zvols", handlers.GetISCSIZvolList).Methods("GET")
+
+	// v3.2.0: Prometheus metrics exporter (Phase 2)
+	r.HandleFunc("/metrics", handlers.HandlePrometheusMetrics).Methods("GET")
 
 	// Create server
 	srv := &http.Server{
@@ -686,14 +819,11 @@ func sessionMiddleware(next http.Handler) http.Handler {
 		// Validate session and get user details
 		sessionUser, err := security.ValidateSessionAndGetUser(sessionID)
 		if err != nil {
-			// Fall back to format validation only
-			if !security.IsValidSessionToken(sessionID) {
-				audit.LogSecurityEvent("Invalid session format", user, r.RemoteAddr)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-			// Token format OK but DB lookup failed — proceed without context user
-			next.ServeHTTP(w, r)
+			// DB error means we cannot verify the session — reject with 401
+			// (Do NOT fall through without user context: downstream RBAC handlers
+			//  depend on the context value being present and will panic/misbehave.)
+			audit.LogSecurityEvent("Session validation DB error: "+err.Error(), user, r.RemoteAddr)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -712,4 +842,10 @@ func sessionMiddleware(next http.Handler) http.Handler {
 		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// permRoute wraps a HandlerFunc with RequirePermission middleware.
+// Use this for all routes that modify system state or access sensitive data.
+func permRoute(resource, action string, fn http.HandlerFunc) http.Handler {
+	return middleware.RequirePermission(resource, action)(fn)
 }

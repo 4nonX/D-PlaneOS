@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# D-PlaneOS v5.2.0 - Post-Install Validation
+# D-PlaneOS v3.2.0 - Post-Install Validation
 # 
 # This script runs AFTER installation to verify everything works.
 # If ANY critical check fails, installation is considered failed.
@@ -29,7 +29,7 @@ ERRORS=0
 WARNINGS=0
 
 echo ""
-echo -e "${BOLD}${BLUE}D-PlaneOS v5.2.0 Post-Install Validation${NC}"
+echo -e "${BOLD}${BLUE}D-PlaneOS v3.2.0 Post-Install Validation${NC}"
 echo "==========================================="
 echo ""
 

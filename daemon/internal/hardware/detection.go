@@ -213,7 +213,7 @@ func detectKernel(p *SystemProfile) {
 	cmd := exec.Command("uname", "-r")
 	output, err := cmd.Output()
 	if err != nil {
-		p.KernelVersion = "unknown"
+		p.KernelVersion = "3.2.0"
 	} else {
 		p.KernelVersion = strings.TrimSpace(string(output))
 	}

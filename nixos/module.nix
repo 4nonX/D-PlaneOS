@@ -4,6 +4,9 @@
 
 { config, lib, pkgs, ... }:
 
+# Samba integration is provided by ./modules/samba.nix which is imported
+# separately in configuration.nix. This module focuses on the daemon itself.
+
 let
   cfg = config.services.dplaneos;
 in {
@@ -33,6 +36,17 @@ in {
       default = true;
       description = "Open TCP port 80 (and 443 if TLS is configured) in the firewall.";
     };
+
+    sshKeys = lib.mkOption {
+      type        = lib.types.listOf lib.types.str;
+      default     = [];
+      description = ''
+        SSH public keys authorised for the root user.
+        Password authentication is disabled; at least one key is required
+        for remote access after installation.
+        Example: [ "ssh-ed25519 AAAA... user@host" ]
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -43,7 +57,7 @@ in {
       docker-compose
       nginx
       sqlite
-      samba
+      # samba — now managed by modules/samba.nix (services.samba)
       nfs-utils
       smartmontools
       ipmitool          # optional: BMC/IPMI sensor readout
@@ -74,9 +88,12 @@ in {
     # ─── SSH ─────────────────────────────────────────────────────────────
     services.openssh = {
       enable                  = true;
-      settings.PasswordAuthentication = true;  # change to false after setup
-      settings.PermitRootLogin        = "yes";  # required for NAS management
+      settings.PasswordAuthentication = false;
+      settings.PermitRootLogin        = "no";
     };
+
+    # ─── SSH authorised keys (replaces password auth) ───────────────────
+    users.users.root.openssh.authorizedKeys.keys = cfg.sshKeys;
 
     # ─── Firewall ─────────────────────────────────────────────────────────
     networking.firewall = lib.mkIf cfg.openFirewall {
@@ -131,14 +148,22 @@ in {
         ProtectSystem         = "strict";
         ProtectHome           = true;
         ReadWritePaths        = [
+          # Daemon state — bind-mounted from /persist/dplaneos by impermanence.nix.
+          # All writes here physically land on the persist partition.
           "/var/log/dplaneos"
-          "/var/lib/dplaneos"
+          "/var/lib/dplaneos"   # dplaneos.db, audit.db, audit.key, gitops/
+          # OS config files the daemon manages (NixOS owns /etc; daemon owns subtrees)
           "/opt/dplaneos"
           "/etc/dplaneos"
           "/run/dplaneos"
           "/etc/crontab"
           "/etc/exports"
-          "/etc/samba"
+          # networkdwriter: D-PlaneOS writes 50-dplane-*.{network,netdev} here
+          # These files survive nixos-rebuild — NixOS only manages its own prefixed files
+          "/etc/systemd/network"
+          "/etc/systemd/resolved.conf.d"
+          # /etc/samba — removed: NixOS now owns smb.conf via modules/samba.nix
+          # Daemon writes to /var/lib/dplaneos/smb-shares.conf instead
         ];
         CapabilityBoundingSet = [
           "CAP_SYS_ADMIN"

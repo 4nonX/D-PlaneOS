@@ -184,6 +184,13 @@ func CreateVLAN(w http.ResponseWriter, r *http.Request) {
 	if req.IP != "" && !strings.ContainsAny(req.IP, ";|&$`\\\"'") {
 		_ = netlinkx.AddrAdd(ifName, req.IP)
 	}
+
+	// Persist to DB and Nix fragment
+	persistVLAN(ifName, req.Parent, req.VlanID)
+	if req.IP != "" {
+		persistStaticIP(ifName, req.IP, "", nil)
+	}
+
 	respondOK(w, map[string]interface{}{
 		"success":   true,
 		"interface": ifName,
@@ -211,6 +218,7 @@ func DeleteVLAN(w http.ResponseWriter, r *http.Request) {
 		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
 		return
 	}
+	persistVLANDelete(req.Interface)
 	respondOK(w, map[string]interface{}{"success": true, "deleted": req.Interface})
 }
 
@@ -291,6 +299,13 @@ func CreateBond(w http.ResponseWriter, r *http.Request) {
 	if req.IP != "" && !strings.ContainsAny(req.IP, ";|&$`\\\"'") {
 		_ = netlinkx.AddrAdd(req.Name, req.IP)
 	}
+
+	// Persist to DB (boot reconciliation) and Nix fragment (NixOS declarative)
+	persistBond(req.Name, req.Slaves, req.Mode)
+	if req.IP != "" {
+		persistStaticIP(req.Name, req.IP, "", nil)
+	}
+
 	respondOK(w, map[string]interface{}{
 		"success": true,
 		"name":    req.Name,
@@ -365,10 +380,117 @@ func SetNTPServers(w http.ResponseWriter, r *http.Request) {
 	// Restart timesyncd
 	executeCommandWithTimeout(TimeoutMedium, "/usr/bin/systemctl", []string{"restart", "systemd-timesyncd"})
 
+	// Persist to Nix fragment (NixOS: networking.timeServers)
+	persistNTP(req.Servers)
+
 	respondOK(w, map[string]interface{}{
 		"success": true,
 		"servers": req.Servers,
 	})
 
 	_ = args // suppress unused
+}
+
+// ListBonds lists all bonded interfaces currently present on the system.
+// GET /api/network/bond
+func ListBonds(w http.ResponseWriter, r *http.Request) {
+	links, err := netlinkx.LinkList()
+	if err != nil {
+		http.Error(w, "failed to list interfaces: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type bondInfo struct {
+		Name   string   `json:"name"`
+		Slaves []string `json:"slaves"`
+		State  string   `json:"state"`
+	}
+
+	// Find bond interfaces by type field
+	bondNames := map[string]bool{}
+	for _, l := range links {
+		if l.Type == "bond" || strings.HasPrefix(l.Name, "bond") {
+			bondNames[l.Name] = true
+		}
+	}
+
+	// Find slaves by reading /sys/class/net/<iface>/master symlink
+	bondSlaves := map[string][]string{}
+	for _, l := range links {
+		target, err2 := bondMasterOf(l.Name)
+		if err2 == nil {
+			parts := strings.Split(target, "/")
+			master := parts[len(parts)-1]
+			bondSlaves[master] = append(bondSlaves[master], l.Name)
+			bondNames[master] = true
+		}
+	}
+
+	var bonds []bondInfo
+	for _, l := range links {
+		if !bondNames[l.Name] {
+			continue
+		}
+		state := "down"
+		if l.Flags&0x1 != 0 { // net.FlagUp == 1
+			state = "up"
+		}
+		bonds = append(bonds, bondInfo{
+			Name:   l.Name,
+			Slaves: bondSlaves[l.Name],
+			State:  state,
+		})
+	}
+
+	respondOK(w, map[string]interface{}{
+		"success": true,
+		"bonds":   bonds,
+	})
+}
+
+// bondMasterOf reads /sys/class/net/<iface>/master symlink to find the bond it belongs to.
+// Returns master interface name or error. Uses exec to avoid importing "os".
+func bondMasterOf(ifaceName string) (string, error) {
+	out, err := executeCommandWithTimeout(TimeoutFast, "/bin/readlink", []string{
+		"/sys/class/net/" + ifaceName + "/master",
+	})
+	if err != nil {
+		return "", err
+	}
+	target := strings.TrimSpace(out)
+	parts := strings.Split(target, "/")
+	return parts[len(parts)-1], nil
+}
+
+// DeleteBond removes a bonded interface.
+// DELETE /api/network/bond/{name}
+func DeleteBond(w http.ResponseWriter, r *http.Request) {
+	// Extract name from path: /api/network/bond/{name}
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/network/bond/"), "/")
+	name := parts[0]
+
+	if strings.ContainsAny(name, ";|&$`\\\"' /") || len(name) > 16 || name == "" {
+		http.Error(w, "invalid bond name", http.StatusBadRequest)
+		return
+	}
+	if !strings.HasPrefix(name, "bond") {
+		http.Error(w, "name must start with 'bond'", http.StatusBadRequest)
+		return
+	}
+
+	// Bring down before deleting
+	_ = netlinkx.LinkSetDown(name)
+
+	if err := netlinkx.LinkDel(name); err != nil {
+		http.Error(w, "failed to delete bond: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Remove from persistence layers
+	persistBondDelete(name)
+
+	respondOK(w, map[string]interface{}{
+		"success": true,
+		"message": "bond deleted",
+	})
 }

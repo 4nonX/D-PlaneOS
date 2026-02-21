@@ -151,6 +151,7 @@ func ValidateSessionAndGetUser(sessionToken string) (*SessionUser, error) {
 		WHERE s.session_id = ?
 		AND (s.expires_at IS NULL OR s.expires_at > ?)
 		AND u.active = 1
+		AND COALESCE(s.status, 'active') = 'active'
 		LIMIT 1
 	`
 

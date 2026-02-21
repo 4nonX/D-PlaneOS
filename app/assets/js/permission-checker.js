@@ -11,11 +11,9 @@ class PermissionChecker {
     // Load current user's permissions
     async load() {
         try {
-            const response = await fetch('/api/rbac/me/permissions', {
-                headers: {
-                    'X-Session-Token': this.getSessionToken()
-                }
-            });
+            // Use csrfFetch so X-Session-ID + X-User headers are sent automatically
+            const fetchFn = typeof csrfFetch === 'function' ? csrfFetch : fetch;
+            const response = await fetchFn('/api/rbac/me/permissions');
 
             if (!response.ok) {
                 throw new Error('Failed to load permissions');
@@ -24,10 +22,12 @@ class PermissionChecker {
             const data = await response.json();
             
             // Store permissions in Map for fast lookup
-            data.permissions.forEach(perm => {
-                const key = `${perm.resource}:${perm.action}`;
-                this.permissions.set(key, true);
-            });
+            if (data.permissions) {
+                data.permissions.forEach(perm => {
+                    const key = `${perm.resource}:${perm.action}`;
+                    this.permissions.set(key, true);
+                });
+            }
 
             // Also store the 'can' map if provided
             if (data.can) {
@@ -40,10 +40,10 @@ class PermissionChecker {
             
             // Trigger permission-loaded event
             window.dispatchEvent(new CustomEvent('permissions-loaded', { 
-                detail: { permissions: data.permissions } 
+                detail: { permissions: data.permissions || [] } 
             }));
 
-            return data.permissions;
+            return data.permissions || [];
 
         } catch (error) {
             console.error('Failed to load permissions:', error);
@@ -54,6 +54,9 @@ class PermissionChecker {
 
     // Check if user has a specific permission
     can(resource, action) {
+        // Wildcard: if user has system:admin, they can do anything
+        if (this.permissions.get('system:admin') === true) return true;
+        if (this.permissions.get('*:*') === true) return true;
         const key = `${resource}:${action}`;
         return this.permissions.get(key) === true;
     }
@@ -74,68 +77,41 @@ class PermissionChecker {
         });
     }
 
-    // Get session token from cookie or localStorage
-    getSessionToken() {
-        // Try cookie first
-        const cookies = document.cookie.split(';');
-        for (let cookie of cookies) {
-            const [name, value] = cookie.trim().split('=');
-            if (name === 'session_token') {
-                return value;
-            }
-        }
-
-        // Fallback to localStorage
-        return localStorage.getItem('session_token') || '';
-    }
-
     // Hide element if user doesn't have permission
     hideIfCannot(element, resource, action) {
         if (!this.can(resource, action)) {
-            if (typeof element === 'string') {
-                element = document.querySelector(element);
-            }
-            if (element) {
-                element.style.display = 'none';
-            }
+            if (typeof element === 'string') element = document.querySelector(element);
+            if (element) element.style.display = 'none';
         }
     }
 
     // Show element only if user has permission
     showIfCan(element, resource, action) {
-        if (typeof element === 'string') {
-            element = document.querySelector(element);
-        }
-        
-        if (element) {
-            element.style.display = this.can(resource, action) ? '' : 'none';
-        }
+        if (typeof element === 'string') element = document.querySelector(element);
+        if (element) element.style.display = this.can(resource, action) ? '' : 'none';
     }
 
     // Disable element if user doesn't have permission
     disableIfCannot(element, resource, action) {
         if (!this.can(resource, action)) {
-            if (typeof element === 'string') {
-                element = document.querySelector(element);
-            }
+            if (typeof element === 'string') element = document.querySelector(element);
             if (element) {
                 element.disabled = true;
                 element.style.opacity = '0.5';
                 element.style.cursor = 'not-allowed';
+                element.title = `Requires ${resource}:${action} permission`;
             }
         }
     }
 
     // Apply permissions to all elements with data-permission attribute
     applyToPage() {
-        // Find all elements with data-permission
         document.querySelectorAll('[data-permission]').forEach(element => {
             const permission = element.getAttribute('data-permission');
             const [resource, action] = permission.split(':');
             
             if (!this.can(resource, action)) {
                 const hideMode = element.getAttribute('data-permission-mode') || 'hide';
-                
                 if (hideMode === 'hide') {
                     element.style.display = 'none';
                 } else if (hideMode === 'disable') {
@@ -146,43 +122,26 @@ class PermissionChecker {
             }
         });
 
-        // Find all elements with data-permission-any
         document.querySelectorAll('[data-permission-any]').forEach(element => {
             const permissions = element.getAttribute('data-permission-any').split(',');
-            const hasAny = this.canAny(...permissions);
-            
-            if (!hasAny) {
+            if (!this.canAny(...permissions)) {
                 const hideMode = element.getAttribute('data-permission-mode') || 'hide';
-                
-                if (hideMode === 'hide') {
-                    element.style.display = 'none';
-                } else if (hideMode === 'disable') {
-                    element.disabled = true;
-                }
+                if (hideMode === 'hide') element.style.display = 'none';
+                else if (hideMode === 'disable') element.disabled = true;
             }
         });
 
-        // Find all elements with data-permission-all
         document.querySelectorAll('[data-permission-all]').forEach(element => {
             const permissions = element.getAttribute('data-permission-all').split(',');
-            const hasAll = this.canAll(...permissions);
-            
-            if (!hasAll) {
+            if (!this.canAll(...permissions)) {
                 const hideMode = element.getAttribute('data-permission-mode') || 'hide';
-                
-                if (hideMode === 'hide') {
-                    element.style.display = 'none';
-                } else if (hideMode === 'disable') {
-                    element.disabled = true;
-                }
+                if (hideMode === 'hide') element.style.display = 'none';
+                else if (hideMode === 'disable') element.disabled = true;
             }
         });
     }
 
-    // Check if permission checking is enabled
-    isEnabled() {
-        return this.loaded;
-    }
+    isEnabled() { return this.loaded; }
 }
 
 // Create global instance
@@ -192,24 +151,13 @@ window.permissions = new PermissionChecker();
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         await window.permissions.load();
-        
-        // Apply permissions to current page
         window.permissions.applyToPage();
-        
     } catch (error) {
         console.warn('Permission checking disabled:', error);
     }
 });
 
-// Provide helper function for inline checks
-function can(resource, action) {
-    return window.permissions.can(resource, action);
-}
-
-function canAny(...permissions) {
-    return window.permissions.canAny(...permissions);
-}
-
-function canAll(...permissions) {
-    return window.permissions.canAll(...permissions);
-}
+// Provide helper functions for inline checks
+function can(resource, action) { return window.permissions.can(resource, action); }
+function canAny(...permissions) { return window.permissions.canAny(...permissions); }
+function canAll(...permissions) { return window.permissions.canAll(...permissions); }

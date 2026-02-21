@@ -64,24 +64,24 @@
 
 ```bash
 # Download latest release
-wget https://github.com/your-repo/dplaneos/releases/download/v5.8.0/dplaneos-v5.8.0-RBAC-HARDENED.tar.gz
+wget https://github.com/4nonX/D-PlaneOS/releases/download/v3.2.0/dplaneos-v3.2.0-networkd.tar.gz
 
 # Verify SHA256
-sha256sum dplaneos-v5.8.0-RBAC-HARDENED.tar.gz
-# Should match: 72d3f07f053a787f439d29c9ae65c4a449e3f49a883d574747b5d34b782b8c7c
+sha256sum dplaneos-v3.2.0-networkd.tar.gz
+# SHA256 published with each release on GitHub
 ```
 
 ### **Step 2: Extract**
 
 ```bash
-tar -xzf dplaneos-v5.8.0-RBAC-HARDENED.tar.gz
-cd dplaneos-v5.2.1
+tar -xzf dplaneos-v3.2.0-networkd.tar.gz
+cd dplaneos-v3.2.0
 ```
 
 ### **Step 3: Run Installer**
 
 ```bash
-sudo ./install-v5.2.3.sh
+sudo ./install.sh
 ```
 
 **What happens:**
@@ -223,11 +223,11 @@ sudo systemctl restart fail2ban
 
 ---
 
-## Upgrading from v5.7.1
+## Upgrading from v3.1.x
 
-**Note:** v5.8.0 is a clean architecture. Fresh install recommended.
+**Note:** v3.2.0 is backward compatible. Upgrade preserves all data and configuration.
 
-**If you have data in v5.7.1:**
+**If you have data in v3.1.x:**
 
 1. Backup your data:
    ```bash
@@ -235,7 +235,7 @@ sudo systemctl restart fail2ban
    zfs send tank@pre-upgrade > /backup/tank-pre-upgrade.zfs
    ```
 
-2. Fresh install v5.8.0
+2. Fresh install v3.2.0
 
 3. Import existing pool:
    ```bash
@@ -297,7 +297,7 @@ ls -lh /var/lib/dplaneos/dplaneos.db
 ## Uninstall
 
 ```bash
-cd dplaneos-v5.2.1
+cd dplaneos-v3.2.0
 sudo ./uninstall.sh
 
 # Remove all data (WARNING: destroys everything)
