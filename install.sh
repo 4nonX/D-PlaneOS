@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# D-PlaneOS v3.2.0 — Installer
+# D-PlaneOS v3.2.1 — Installer
 #
 # ── ONE-LINER INSTALL (nothing to download first) ────────────────────────────
 #
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 # ── Version ───────────────────────────────────────────────────────────────────
-readonly VERSION="3.2.0"
+readonly VERSION="3.2.1"
 readonly INSTALL_DIR="/opt/dplaneos"
 readonly DB_PATH="/var/lib/dplaneos/dplaneos.db"
 readonly LOG_FILE="/var/log/dplaneos-install.log"
@@ -257,11 +257,31 @@ step "Phase 2/12: System dependencies"
 # ────────────────────────────────────────────────────────────────────────────
 
 export DEBIAN_FRONTEND=noninteractive
+
+# Enable extra repos required for zfsutils-linux and python3-bcrypt
+# Ubuntu: universe   Debian: contrib
+case "${ID,,}" in
+    ubuntu|pop|linuxmint|raspbian)
+        if ! apt-cache show zfsutils-linux &>/dev/null 2>&1; then
+            apt-get install -y -qq software-properties-common &>/dev/null
+            add-apt-repository -y universe &>/dev/null
+            log "Ubuntu universe repository enabled"
+        fi
+        ;;
+    debian)
+        if ! grep -qE "contrib" /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; then
+            sed -i 's/^\(deb .*\)main$/\1main contrib non-free/' /etc/apt/sources.list
+            log "Debian contrib/non-free enabled"
+        fi
+        ;;
+esac
+
 apt-get update -qq 2>&1 | tail -1
 
 PACKAGES=(nginx sqlite3 smartmontools lsof udev zfsutils-linux
           acl ufw hdparm git openssh-client openssl ca-certificates
           iproute2 procps coreutils
+          python3-bcrypt apache2-utils
           musl-tools)  # enables fully static binary (glibc-independent)
 
 for pkg in "${PACKAGES[@]}"; do
@@ -582,6 +602,8 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; frame-ancestors 'self';" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
     location / { try_files \$uri \$uri/ /pages/index.html; }
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\$ {
         expires 1y; add_header Cache-Control "public, immutable"; }

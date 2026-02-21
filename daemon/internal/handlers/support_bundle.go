@@ -214,7 +214,7 @@ func (h *SupportBundleHandler) GenerateBundle(w http.ResponseWriter, r *http.Req
 	meta := map[string]interface{}{
 		"generated_at":    time.Now().UTC().Format(time.RFC3339),
 		"hostname":        hostname,
-		"dplaneos_version": "3.2.0",
+		"dplaneos_version": "3.2.1",
 		"sections":        len(sections),
 	}
 	metaJSON, _ := json.MarshalIndent(meta, "", "  ")

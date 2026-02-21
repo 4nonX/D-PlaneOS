@@ -16,7 +16,7 @@
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v3.0.0</span>
+        <span class="version-badge">v3.2.1</span>
       </div>
     </div>
     <div class="nav-links">

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# D-PlaneOS v3.2.0 — Bootstrap Installer
+# D-PlaneOS v3.2.1 — Bootstrap Installer
 #
 # This is the ONE-LINER entry point:
 #
@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-VERSION="3.2.0"
+VERSION="3.2.1"
 RELEASE_BASE="https://github.com/4nonX/dplaneos/releases/download/v${VERSION}"
 # Fallback mirror if GitHub is unreachable
 MIRROR_BASE="https://releases.dplaneos.io/v${VERSION}"

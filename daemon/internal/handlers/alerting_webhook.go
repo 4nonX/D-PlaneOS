@@ -306,7 +306,7 @@ func dispatchWebhook(cfg webhookConfig, payload webhookPayload) error {
 		return fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "D-PlaneOS/3.2.0")
+	req.Header.Set("User-Agent", "D-PlaneOS/3.2.1")
 	if cfg.SecretHeader != "" && cfg.SecretValue != "" {
 		req.Header.Set(cfg.SecretHeader, cfg.SecretValue)
 	}

@@ -38,7 +38,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/log/dplaneos /var/lib/dplaneos /opt/dplaneos /etc/dplaneos /run/dplaneos /etc/crontab /etc/exports
+ReadWritePaths=/var/log/dplaneos /var/lib/dplaneos /opt/dplaneos /etc/dplaneos /run/dplaneos /etc/crontab /etc/exports /etc/systemd/network
 # Note: /etc/samba removed — NixOS owns smb.conf via modules/samba.nix
 # Daemon writes per-share config to /var/lib/dplaneos/smb-shares.conf
 

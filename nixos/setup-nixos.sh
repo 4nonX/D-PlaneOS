@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# D-PlaneOS v3.2.0 — NixOS First-Boot Setup
+# D-PlaneOS v3.2.1 — NixOS First-Boot Setup
 # ─────────────────────────────────────────────────────────────────────────────
 # Run once after initial nixos-install and reboot:
 #   bash /root/setup-nixos.sh
@@ -32,7 +32,7 @@ if [ "$(id -u)" != "0" ]; then
 fi
 
 echo -e "${BOLD}"
-echo "    D-PlaneOS v3.2.0 — NixOS Setup"
+echo "    D-PlaneOS v3.2.1 — NixOS Setup"
 echo "────────────────────────────────────────"
 echo -e "${NC}"
 

@@ -50,7 +50,7 @@
   <script src="/assets/js/daemon-api.js"></script>
 </head>
 <body>
-<!-- D-PlaneOS v3.2.0 - Hierarchical Navigation -->
+<!-- D-PlaneOS v3.2.1 - Hierarchical Navigation -->
 <!-- This navigation maintains all security (CSRF, Auth) and real system state -->
 
 <div id="nav-root"></div>
@@ -448,7 +448,7 @@ if (window.ConnectionMonitor) {
 <span class="material-symbols-rounded setting-icon">update</span>
 <div class="setting-info">
 <div class="setting-name">System Version</div>
-<div class="setting-desc">D-PlaneOS v3.2.0</div>
+<div class="setting-desc">D-PlaneOS v3.2.1</div>
 </div>
 <button class="icon-btn" onclick="checkUpdates()"><span class="material-symbols-rounded">refresh</span></button>
 </div>
@@ -592,7 +592,7 @@ async function checkUpdates() {
         }, 3000);
       }
     } else {
-      ui.toast('System is up to date (v2.0)', 'success');
+      ui.toast('System is up to date (v3.2.1)', 'success');
     }
   } catch (error) {
     ui.hideLoading();
@@ -1416,7 +1416,7 @@ async function checkUpdates() {
         }, 3000);
       }
     } else {
-      ui.toast('System is up to date (v2.0)', 'success');
+      ui.toast('System is up to date (v3.2.1)', 'success');
     }
   } catch (error) {
     ui.hideLoading();

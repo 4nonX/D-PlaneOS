@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# D-PlaneOS v3.2.0 - Pre-Flight Validation
+# D-PlaneOS v3.2.1 - Pre-Flight Validation
 # 
 # This script runs BEFORE installation to ensure the system
 # meets ALL requirements. If ANY check fails, installation aborts.
@@ -26,7 +26,7 @@ NC='\033[0m'
 ERRORS=0
 WARNINGS=0
 
-echo -e "${BOLD}${BLUE}D-PlaneOS v3.2.0 Pre-Flight Validation${NC}"
+echo -e "${BOLD}${BLUE}D-PlaneOS v3.2.1 Pre-Flight Validation${NC}"
 echo "=========================================="
 echo ""
 

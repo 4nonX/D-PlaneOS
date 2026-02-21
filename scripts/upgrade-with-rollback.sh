@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# D-PlaneOS v3.2.0 - Safe Upgrade with Automatic Rollback
+# D-PlaneOS v3.2.1 - Safe Upgrade with Automatic Rollback
 #
-# Purpose: Upgrade from v3.1.x to v3.2.0 with automatic backup and rollback
+# Purpose: Upgrade from v3.2.0 to v3.2.1 with automatic backup and rollback
 # Usage: sudo ./upgrade-with-rollback.sh
 #
 # Features:
@@ -56,7 +56,7 @@ error() {
 # Header
 clear
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║       D-PlaneOS v3.2.0 - Safe Upgrade with Rollback         ║"
+echo "║       D-PlaneOS v3.2.1 - Safe Upgrade with Rollback         ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -119,7 +119,7 @@ cat > "$BACKUP_PATH/system-state.json" <<EOF
     "hostname": "$(hostname)",
     "os": "$(lsb_release -ds)",
     "kernel": "$(uname -r)",
-    "go_daemon": "dplaned v2.1.0",
+    "go_daemon": "dplaned v3.2.1",
     "apache2_status": "$(systemctl is-active apache2 2>/dev/null || echo 'not installed')",
     "nginx_status": "$(systemctl is-active nginx 2>/dev/null || echo 'not installed')",
     "dplaned_status": "$(systemctl is-active dplaned 2>/dev/null || echo 'not installed')"
@@ -138,7 +138,7 @@ cat > "$BACKUP_PATH/rollback.sh" <<'ROLLBACK_SCRIPT'
 set -euo pipefail
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║              D-PlaneOS v3.2.0 - Rollback                     ║"
+echo "║              D-PlaneOS v3.2.1 - Rollback                     ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 

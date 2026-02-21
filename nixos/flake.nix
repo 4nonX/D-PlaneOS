@@ -1,5 +1,5 @@
 {
-  description = "D-PlaneOS v3.2.0 — NAS Operating System (Appliance Build)";
+  description = "D-PlaneOS v3.2.1 — NAS Operating System (Appliance Build)";
 
   # ── Inputs ─────────────────────────────────────────────────────────────────
   #
@@ -134,7 +134,7 @@
         # ── Daemon package (static musl binary) ───────────────────────────
         packages.dplaneos-daemon = pkgsStatic.buildGoModule {
           pname        = "dplaneos-daemon";
-          version      = "3.2.0";
+          version      = "3.2.1";
           src          = ../.;
           # CGO_ENABLED=1 required for mattn/go-sqlite3 (C amalgamation)
           # musl-gcc provides the static C runtime; no glibc dependency.
@@ -149,7 +149,7 @@
           tags    = [ "sqlite_fts5" ];
           ldflags = [
             "-s" "-w"
-            "-X" "main.Version=3.2.0"
+            "-X" "main.Version=3.2.1"
             "-linkmode" "external"
             "-extldflags" "-static"
           ];
@@ -174,14 +174,14 @@
         # Build with: nix build .#dplaneos-daemon-dynamic
         packages.dplaneos-daemon-dynamic = pkgs.buildGoModule {
           pname        = "dplaneos-daemon-dynamic";
-          version      = "3.2.0";
+          version      = "3.2.1";
           src          = ../.;
           CGO_ENABLED  = "1";
           vendorHash   = null;
           subPackages  = [ "daemon/cmd/dplaned" ];
           nativeBuildInputs = with pkgs; [ gcc ];
           tags    = [ "sqlite_fts5" ];
-          ldflags = [ "-s" "-w" "-X" "main.Version=3.2.0" ];
+          ldflags = [ "-s" "-w" "-X" "main.Version=3.2.1" ];
           meta = with nixpkgs.lib; {
             description = "D-PlaneOS NAS daemon — glibc dynamic build (dev only)";
             license     = licenses.unfree;
