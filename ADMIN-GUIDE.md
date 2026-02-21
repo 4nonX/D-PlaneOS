@@ -1,8 +1,8 @@
-# D-PlaneOS v2.1.0 Administrator Guide
+# D-PlaneOS v3.2.0 Administrator Guide
 
 **Complete guide for system administration and user management**
 
-> Updated for v2.1.0-production: RBAC, LDAP/AD, ZFS encryption, injection-hardened, OOM-protected
+> Updated for v3.2.0: RBAC, LDAP/AD, ZFS encryption, injection-hardened, OOM-protected
 
 ---
 
@@ -579,7 +579,7 @@ zfs set recordsize=8K tank/database  # Small files
 
 ---
 
-## Directory Service (LDAP / Active Directory) — v2.0.0
+## Directory Service (LDAP / Active Directory)
 
 ### Overview
 
