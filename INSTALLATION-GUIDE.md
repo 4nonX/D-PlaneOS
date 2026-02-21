@@ -64,17 +64,17 @@
 
 ```bash
 # Download latest release
-wget https://github.com/4nonX/D-PlaneOS/releases/download/v3.2.0/dplaneos-v3.2.0-networkd.tar.gz
+wget https://github.com/4nonX/D-PlaneOS/releases/download/v3.2.0/dplaneos-v3.2.0.tar.gz
 
 # Verify SHA256
-sha256sum dplaneos-v3.2.0-networkd.tar.gz
+sha256sum dplaneos-v3.2.0.tar.gz
 # SHA256 published with each release on GitHub
 ```
 
 ### **Step 2: Extract**
 
 ```bash
-tar -xzf dplaneos-v3.2.0-networkd.tar.gz
+tar -xzf dplaneos-v3.2.0.tar.gz
 cd dplaneos-v3.2.0
 ```
 
