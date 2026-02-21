@@ -18,7 +18,7 @@ build: deps
 	@command -v go >/dev/null 2>&1 || { echo "ERROR: Go not found. Install with: apt install golang-go"; exit 1; }
 	@command -v gcc >/dev/null 2>&1 || { echo "ERROR: gcc not found (required for CGO/SQLite). Install with: apt install build-essential"; exit 1; }
 	@mkdir -p $(BUILD_DIR)
-	cd daemon && CGO_ENABLED=1 $(GO) build -ldflags="-s -w" -o ../$(BUILD_DIR)/$(BINARY_NAME) ./cmd/dplaned
+	cd daemon && CGO_ENABLED=1 $(GO) build -tags sqlite_fts5 -ldflags="-s -w -X main.Version=3.2.0" -o ../$(BUILD_DIR)/$(BINARY_NAME) ./cmd/dplaned
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
 install:
@@ -94,7 +94,7 @@ audit:
 	sudo tail -f /var/log/dplaneos/audit.log
 
 help:
-	@echo "D-PlaneOS v2.0.0 Build System"
+	@echo "D-PlaneOS v3.2.0 Build System"
 	@echo ""
 	@echo "Targets:"
 	@echo "  deps         - Resolve Go dependencies (needs internet)"
