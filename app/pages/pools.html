@@ -970,7 +970,7 @@ async function viewProperties(name) {
 }
 
 async function destroyPool(name) {
-  if (await ui.confirm('Destroy Pool?', `WARNING: This will permanently destroy ${name} and ALL data in it. This cannot be undone!`, 'Destroy', 'Cancel')) {
+  if (await ui.confirm('Destroy Pool?', `WARNING: This will permanently destroy ${name} and ALL data in it. This cannot be undone!`, 'Destroy', 'Cancel', true)) {
     ui.showLoading(`Destroying ${name}...`);
     
     try {

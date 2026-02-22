@@ -53,44 +53,51 @@
     },
     
     showLoading(text = 'Loading...') {
-      let overlay = document.getElementById('loadingOverlay');
-      if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'loadingOverlay';
-        overlay.className = 'loading-overlay';
-        overlay.innerHTML = `
-          <div class="loading-content">
-            <div class="spinner spinner-lg"></div>
-            <div style="margin-top:16px;color:rgba(255,255,255,0.8);">${text}</div>
+      let indicator = document.getElementById('loadingOverlay');
+      if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'loadingOverlay';
+        indicator.className = 'loading-indicator m3-loading-indicator';
+        indicator.setAttribute('aria-live', 'polite');
+        indicator.setAttribute('aria-label', 'Operation in progress');
+        indicator.innerHTML = `
+          <div class="loading-indicator-content">
+            <div class="spinner spinner-sm m3-spinner"></div>
+            <div class="loading-indicator-text">${text}</div>
+            <div class="m3-progress-indeterminate loading-indicator-bar"></div>
           </div>
         `;
-        document.body.appendChild(overlay);
+        document.body.appendChild(indicator);
+      } else {
+        const textEl = indicator.querySelector('.loading-indicator-text');
+        if (textEl) textEl.textContent = text;
       }
-      overlay.style.display = 'flex';
+      indicator.style.display = 'block';
     },
     
     hideLoading() {
-      const overlay = document.getElementById('loadingOverlay');
-      if (overlay) overlay.style.display = 'none';
+      const indicator = document.getElementById('loadingOverlay');
+      if (indicator) indicator.style.display = 'none';
     },
     
-    async confirm(title, message) {
+    async confirm(title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false) {
       return new Promise((resolve) => {
         const backdrop = document.createElement('div');
-        backdrop.className = 'modal-backdrop';
+        backdrop.className = 'modal-backdrop m3-modal-backdrop';
         backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:9998;';
         
         const modal = document.createElement('div');
-        modal.className = 'modal-content';
-        modal.style.cssText = 'background:rgba(30,41,59,0.98);border-radius:16px;border:1px solid rgba(255,255,255,0.1);max-width:480px;width:90%;backdrop-filter:blur(10px);';
+        modal.className = 'modal-content m3-modal';
+        modal.style.cssText = 'background:var(--md-sys-color-surface, rgba(30,41,59,0.98));border-radius:var(--md-sys-shape-corner-large, 16px);border:1px solid var(--md-sys-color-outline, rgba(255,255,255,0.1));max-width:480px;width:90%;backdrop-filter:blur(10px);';
+        const confirmClass = danger ? 'btn btn-danger' : 'btn btn-primary';
         modal.innerHTML = `
-          <div style="padding:24px;border-bottom:1px solid rgba(255,255,255,0.1);">
-            <h3 style="margin:0;font-size:18px;font-weight:600;">${title}</h3>
+          <div style="padding:24px;border-bottom:1px solid var(--md-sys-color-outline);">
+            <h3 style="margin:0;font-size:var(--md-sys-typescale-title-large, 18px);font-weight:600;">${title}</h3>
           </div>
-          <div style="padding:24px;color:rgba(255,255,255,0.8);line-height:1.6;">${message}</div>
-          <div style="padding:16px 24px;border-top:1px solid rgba(255,255,255,0.1);display:flex;gap:12px;justify-content:flex-end;">
-            <button class="btn" data-action="cancel">Cancel</button>
-            <button class="btn btn-primary" data-action="confirm">Confirm</button>
+          <div style="padding:24px;color:var(--md-sys-color-on-surface-variant, rgba(255,255,255,0.8));line-height:1.6;">${message}</div>
+          <div style="padding:16px 24px;border-top:1px solid var(--md-sys-color-outline);display:flex;gap:12px;justify-content:flex-end;">
+            <button class="btn m3-button-secondary" data-action="cancel">${cancelText}</button>
+            <button class="${confirmClass}" data-action="confirm">${confirmText}</button>
           </div>
         `;
         
@@ -116,10 +123,11 @@
     async prompt(title, message, defaultValue = '', placeholder = '') {
       return new Promise((resolve) => {
         const backdrop = document.createElement('div');
-        backdrop.className = 'modal-backdrop';
+        backdrop.className = 'modal-backdrop m3-modal-backdrop';
         backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:10000;backdrop-filter:blur(4px);';
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:rgba(30,41,59,0.98);border-radius:16px;border:1px solid rgba(255,255,255,0.1);max-width:480px;width:90%;backdrop-filter:blur(10px);';
+        modal.className = 'm3-modal';
+        modal.style.cssText = 'background:var(--md-sys-color-surface);border-radius:var(--md-sys-shape-corner-large);border:1px solid var(--md-sys-color-outline);max-width:480px;width:90%;backdrop-filter:blur(10px);';
         const inputId = 'ui-prompt-' + Date.now();
         modal.innerHTML = `
           <div style="padding:24px 24px 0;font-size:18px;font-weight:700;">${title}</div>

@@ -77,7 +77,7 @@ class DPlaneUI {
     }
     
     /**
-     * Toast Notification System
+     * Toast Notification System – dismissible, M3-aligned
      */
     toast(message, type = 'info', duration = 3000) {
         const toast = document.createElement('div');
@@ -92,19 +92,24 @@ class DPlaneUI {
         
         toast.innerHTML = `
             <span class="material-symbols-rounded" style="font-size:20px;">${icon}</span>
-            <span>${message}</span>
+            <span class="toast-message">${message}</span>
+            <button type="button" class="toast-close" aria-label="Dismiss">
+                <span class="material-symbols-rounded" style="font-size:18px;">close</span>
+            </button>
         `;
         
         document.body.appendChild(toast);
         
-        // Animate in
+        const remove = () => {
+            toast.classList.remove('show');
+            toast.classList.add('removing');
+            setTimeout(() => toast.remove(), 300);
+        };
+        
+        toast.querySelector('.toast-close').addEventListener('click', remove);
         setTimeout(() => toast.classList.add('show'), 10);
         
-        // Animate out
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 300);
-        }, duration);
+        if (duration > 0) setTimeout(remove, duration);
     }
     
     /**
@@ -208,12 +213,12 @@ class DPlaneUI {
     }
     
     /**
-     * Simple Confirm Dialog
+     * Simple Confirm Dialog – optional danger style for destructive actions
      */
-    async confirm(title, message, confirmText = 'Confirm', cancelText = 'Cancel') {
+    async confirm(title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false) {
         const result = await this.modal(title, `<p class="text-base">${message}</p>`, [
             { text: cancelText },
-            { text: confirmText, primary: true }
+            { text: confirmText, primary: true, danger: !!danger }
         ]);
         return result === 1;
     }
@@ -461,32 +466,34 @@ class DPlaneUI {
     }
     
     /**
-     * Loading State
+     * Loading State – non-blocking corner indicator (does not cover UI or prevent navigation)
+     * Shares the same element as EnhancedUI (id loadingOverlay) when both are present.
      */
     showLoading(message = 'Loading...') {
-        // Remove existing loader
-        this.hideLoading();
-        
-        const loader = document.createElement('div');
-        loader.className = 'loading-overlay';
-        loader.id = 'global-loader';
-        loader.innerHTML = `
-            <div class="text-center">
-                <div class="loading-spinner mb-16"></div>
-                <p class="text-base text-muted">${message}</p>
-            </div>
-        `;
-        
-        document.body.appendChild(loader);
-        setTimeout(() => loader.classList.add('show'), 10);
+        let loader = document.getElementById('loadingOverlay') || document.getElementById('global-loader');
+        if (!loader) {
+            loader = document.createElement('div');
+            loader.className = 'loading-indicator m3-loading-indicator';
+            loader.id = 'loadingOverlay';
+            loader.setAttribute('aria-live', 'polite');
+            loader.innerHTML = `
+                <div class="loading-indicator-content">
+                    <div class="spinner spinner-sm"></div>
+                    <div class="loading-indicator-text">${message}</div>
+                    <div class="m3-progress-indeterminate loading-indicator-bar"></div>
+                </div>
+            `;
+            document.body.appendChild(loader);
+        } else {
+            const textEl = loader.querySelector('.loading-indicator-text');
+            if (textEl) textEl.textContent = message;
+        }
+        loader.style.display = 'block';
     }
     
     hideLoading() {
-        const loader = document.getElementById('global-loader');
-        if (loader) {
-            loader.classList.remove('show');
-            setTimeout(() => loader.remove(), 300);
-        }
+        const loader = document.getElementById('loadingOverlay') || document.getElementById('global-loader');
+        if (loader) loader.style.display = 'none';
     }
     
     /**

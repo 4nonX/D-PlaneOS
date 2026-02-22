@@ -2304,7 +2304,7 @@ async function saveWebhook() {
 }
 
 async function deleteWebhook(id, name) {
-  if (!confirm('Delete webhook "' + name + '"?')) return;
+  if (!await ui.confirm('Delete Webhook', 'Delete webhook "' + name + '"? Notifications will no longer be sent to this URL.')) return;
   try {
     const r = await csrfFetch('/api/alerts/webhooks/'+id, {method:'DELETE'});
     const d = await r.json();

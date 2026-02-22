@@ -888,10 +888,11 @@
                     return;
                 }
 
-                // Create pool
+                // Create pool – show progress so user knows it can take a while
                 const suggestion = suggestions[selectedSuggestion];
                 try {
                     document.getElementById('btn-next').disabled = true;
+                    if (window.ui && window.ui.showLoading) window.ui.showLoading('Creating pool...');
                     await daemonAPI('/api/system/pool/create', 'POST', {
                         name: suggestion.name,
                         type: suggestion.type,
@@ -900,9 +901,11 @@
                 } catch (error) {
                     ui.toast('Failed to create pool: ' + error.message, 'error');
                     document.getElementById('btn-next').disabled = false;
+                    if (window.ui && window.ui.hideLoading) window.ui.hideLoading();
                     return;
                 } finally {
                     document.getElementById('btn-next').disabled = false;
+                    if (window.ui && window.ui.hideLoading) window.ui.hideLoading();
                 }
             }
 

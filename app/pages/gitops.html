@@ -529,7 +529,7 @@ async function loadPlanForApply() {
 }
 
 async function applyPlan() {
-  if (!confirm('Apply the current plan against live state?\n\nThis will modify your ZFS pools, datasets, and SMB shares.')) return;
+  if (!await ui.confirm('Apply Plan', 'Apply the current plan against live state? This will modify your ZFS pools, datasets, and SMB shares.', 'Apply', 'Cancel', true)) return;
 
   const btn = document.getElementById('applyBtn');
   btn.disabled = true;

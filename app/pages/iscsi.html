@@ -316,7 +316,7 @@ async function loadTargets() {
 }
 
 async function deleteTarget(iqn) {
-  if (!confirm(`Delete target ${iqn}?\n\nThis will disconnect all initiators.`)) return;
+  if (!await ui.confirm('Delete Target', `Delete target ${iqn}? This will disconnect all initiators.`)) return;
   const iqnEnc = encodeURIComponent(iqn);
   const r = await fetch(`/api/iscsi/targets/${iqnEnc}`, {
     method: 'DELETE', headers: headers()
@@ -399,7 +399,7 @@ async function addACL() {
 }
 
 async function deleteACL(target, initiator) {
-  if (!confirm(`Remove initiator ${initiator} from ${target}?`)) return;
+  if (!await ui.confirm('Remove Initiator', `Remove initiator ${initiator} from ${target}?`)) return;
   const r = await fetch('/api/iscsi/acls', {
     method: 'DELETE', headers: headers(),
     body: JSON.stringify({ target_iqn: target, initiator_iqn: initiator })
