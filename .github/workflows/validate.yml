@@ -158,7 +158,7 @@ jobs:
           [ "$CODE" = "400" ] && ok "Malformed username → 400" || fail "Malformed username → $CODE (want 400)"
 
           WEAK_BODY=$(python3 -c "import os,json; print(json.dumps({'current_password':os.environ.get('CI_PASS',''),'new_password':'weak'}))")
-          WEAK=$(curl -sf -X POST $BASE/api/auth/change-password \
+          WEAK=$(curl -s -X POST $BASE/api/auth/change-password \
             -H "X-Session-ID: $SESSION" -H "X-User: admin" -H "Content-Type: application/json" \
             -d "$WEAK_BODY")
           assert_json "Weak password rejected" "$WEAK" "success" "false"
