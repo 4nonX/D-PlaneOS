@@ -405,6 +405,19 @@ chown -R www-data:www-data "${INSTALL_DIR}/app" 2>/dev/null || true
 chmod 700 /var/lib/dplaneos
 log "Files installed to $INSTALL_DIR"
 
+# ZED hook for real-time ZFS event notification (README/Architecture claim)
+if [ -d /etc/zfs/zed.d ] && [ -f "${INSTALL_DIR}/zed/dplaneos-notify.sh" ]; then
+    install -m 755 "${INSTALL_DIR}/zed/dplaneos-notify.sh" /etc/zfs/zed.d/
+    log "ZED hook installed (real-time disk failure alerts)"
+else
+    [ ! -d /etc/zfs/zed.d ] && warn "/etc/zfs/zed.d not found — ZED hook skipped (install ZFS first)"
+fi
+# udev rules for removable media detection
+if [ -f "${INSTALL_DIR}/udev/99-dplaneos-removable-media.rules" ]; then
+    install -m 644 "${INSTALL_DIR}/udev/99-dplaneos-removable-media.rules" /etc/udev/rules.d/ 2>/dev/null && \
+        udevadm control --reload-rules 2>/dev/null && log "udev rules installed" || true
+fi
+
 INSTALL_PHASE=5
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -690,6 +703,22 @@ ln -sf /etc/nginx/sites-available/dplaneos /etc/nginx/sites-enabled/
 rm -f /var/www/html/index.html /var/www/html/index.nginx-debian.html 2>/dev/null || true
 nginx -t 2>&1 || die "nginx config invalid — check /etc/nginx/sites-available/dplaneos"
 log "nginx configured (port ${OPT_PORT})"
+
+# ── Firewall (UFW) — parity with NixOS: allow NAS ports, then enable ────────
+if command -v ufw &>/dev/null; then
+    for port in 22 80 443 445 2049; do
+        ufw allow "$port"/tcp &>/dev/null || true
+    done
+    ufw allow 5353/udp &>/dev/null || true   # mDNS (optional discovery)
+    if ufw status 2>/dev/null | grep -q "Status: active"; then
+        log "Firewall (UFW): already active; NAS ports allowed"
+    else
+        echo "y" | ufw --force enable &>/dev/null && log "Firewall (UFW): enabled (22, 80, 443, 445, 2049, mDNS)" \
+            || warn "Firewall: UFW enable failed (ports added; run 'ufw enable' manually if desired)"
+    fi
+else
+    warn "UFW not found — firewall not configured"
+fi
 
 INSTALL_PHASE=9
 

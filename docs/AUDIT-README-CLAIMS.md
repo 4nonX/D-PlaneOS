@@ -21,7 +21,7 @@ This document records the results of auditing the repository against the goals a
 - **SQLite:** WAL, `synchronous=FULL`, daily backup (and optional off-pool path) confirmed in `main.go`.
 - **Command whitelist:** `daemon/internal/security/whitelist.go` and `ValidateCommand`; injection tests in CI.
 - **Safe container update, Time Machine, ephemeral sandbox, ZFS health, NixOS guard, replication:** Routes and behavior present in `main.go` and related handlers.
-- **ZED hook:** `zed/dplaneos-notify.sh` and docs reference it.
+- **ZED hook:** `zed/dplaneos-notify.sh` exists; `install.sh` now installs it to `/etc/zfs/zed.d/` when ZFS is present (matches README “real-time disk failure alerts”).
 - **Docs present:** `ADMIN-GUIDE.md`, `ERROR-REFERENCE.md`, `TROUBLESHOOTING.md`, `INSTALLATION-GUIDE.md`, `nixos/README.md`, `CHANGELOG.md`.
 
 ## Notes
@@ -29,4 +29,13 @@ This document records the results of auditing the repository against the goals a
 - **Route count:** The daemon registers 244 route handlers in `main.go`; "170+ API routes" is a conservative description that stays accurate as routes are added or reorganized.
 - **Permissions:** The live schema is seeded from `daemon/cmd/dplaned/schema.go` (28 permissions). The file `daemon/internal/database/migrations/008_rbac_system.sql` defines more permissions (34+); that migration may be used in other deployment paths. The README now reflects the 28 permissions actually seeded by the daemon.
 - **LDAP:** Configuration is documented in the README under "LDAP / Active Directory" and in the UI (Identity → Directory Service). A separate `LDAP-REFERENCE.md` can be added later if a technical reference is desired.
-- **Debian/Ubuntu vs NixOS:** The Debian/Ubuntu installer (`install.sh`) was updated for feature parity: it now installs and configures Samba, NFS, and Docker (same stack as NixOS), so a single `./install.sh` run produces a full NAS. See INSTALLATION-GUIDE.md and README Quick Start.
+- **Debian/Ubuntu vs NixOS:** The Debian/Ubuntu installer (`install.sh`) was updated for feature parity: it now installs and configures Samba, NFS, Docker, UFW firewall, and the ZED hook (same stack as NixOS), so a single `./install.sh` run produces a full NAS. See INSTALLATION-GUIDE.md and README Quick Start.
+
+## Follow-up verification (claims vs behaviour)
+
+- **Firewall:** README/Security claimed “firewall”; NixOS has one, Debian did not. Added UFW allow (22, 80, 443, 445, 2049, mDNS) and enable in `install.sh` after nginx.
+- **ZED hook:** Architecture claims “ZED hook for real-time disk failure alerts”; only `make install` installed it. Added ZED hook (and udev rules) install to `install.sh` Phase 4.
+- **Daily backup:** Confirmed in `main.go` (startup + 24h ticker, VACUUM INTO).
+- **ECC:** Confirmed (dmidecode, dashboard advisory, `NON-ECC-WARNING.md`).
+- **API tokens:** Confirmed (schema + `api_tokens.go`).
+- **Doc gaps fixed:** INSTALLATION-GUIDE referenced non-existent `INSTALLATION-GUIDE-NIXOS.md` → now points to `nixos/NIXOS-INSTALL-GUIDE.md` and `nixos/README.md`. Support section claimed `/usr/share/doc/dplaneos/` → updated to repo/install paths. Uninstall section referenced non-existent `uninstall.sh` → replaced with manual steps.

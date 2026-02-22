@@ -107,11 +107,11 @@ sudo ./install.sh
 3. System dependencies: ZFS utilities, nginx, SQLite, smartmontools, **Samba, NFS server, Docker**, and other tools
 4. **Samba, NFS, Docker** configured and enabled (Samba uses daemon-managed `/var/lib/dplaneos/smb-shares.conf`)
 5. ZFS module and ARC tuning
-6. Files installed to `/opt/dplaneos`
+6. Files installed to `/opt/dplaneos`; ZED hook and udev rules installed when available
 7. Daemon binary (pre-built or built from source)
 8. sudoers (for optional www-data helpers)
 9. Database initialized with RBAC schema; admin password generated
-10. nginx reverse proxy
+10. nginx reverse proxy; firewall (UFW): allow 22, 80, 443, 445, 2049, mDNS — then enable
 11. Kernel tuning (inotify, TCP, vm)
 12. Docker ZFS storage driver (if ZFS pool exists)
 13. systemd services (dplaned, ZFS mount gate); validation
@@ -320,14 +320,19 @@ ls -lh /var/lib/dplaneos/dplaneos.db
 
 ## Uninstall
 
-```bash
-cd dplaneos-v3.2.1
-sudo ./uninstall.sh
+No dedicated uninstall script is provided. To remove D-PlaneOS:
 
-# Remove all data (WARNING: destroys everything)
-sudo zpool destroy tank  # if you want to delete pool
-sudo rm -rf /var/lib/dplaneos
-sudo rm -rf /etc/dplaneos
+```bash
+sudo systemctl stop dplaned nginx
+sudo systemctl disable dplaned
+sudo rm -f /etc/systemd/system/dplaned.service /etc/systemd/system/dplaneos-zfs-mount-wait.service
+sudo systemctl daemon-reload
+sudo rm -rf /opt/dplaneos
+sudo rm -f /etc/nginx/sites-enabled/dplaneos /etc/nginx/sites-available/dplaneos
+sudo rm -f /etc/sudoers.d/dplaneos
+# Optional: remove data and config (WARNING: destroys DB and settings)
+# sudo rm -rf /var/lib/dplaneos /etc/dplaneos
+# sudo zpool destroy tank   # only if you want to delete the pool
 ```
 
 ---
@@ -348,9 +353,9 @@ After installation:
 
 ## Support
 
-- Documentation: `/usr/share/doc/dplaneos/`
+- Documentation: in the repository (e.g. `ADMIN-GUIDE.md`, `TROUBLESHOOTING.md`, `ERROR-REFERENCE.md`) or at `/opt/dplaneos/` after install
 - Logs: `/var/log/dplaneos/`
-- Config: `/etc/dplaneos/config.json`
+- Config: `/etc/dplaneos/` (and daemon state in `/var/lib/dplaneos/`)
 - Database: `/var/lib/dplaneos/dplaneos.db`
 
 **Log locations:**
@@ -367,7 +372,7 @@ After installation:
 
 ## NixOS Installation
 
-For the full NixOS installation guide, see **INSTALLATION-GUIDE-NIXOS.md** (in the release archive or at the repository root).
+For the full NixOS installation guide, see **nixos/NIXOS-INSTALL-GUIDE.md** or **nixos/README.md**.
 
 **Quick note on PolyForm licensing and `nixpkgs.config.allowUnfreePredicate`:**
 
