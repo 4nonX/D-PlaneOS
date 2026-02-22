@@ -127,9 +127,16 @@ jobs:
           assert_json "/health ok"             "$(curl -sf $BASE/health)"  "status" "ok"
           assert_json "/api/csrf returns token" "$(curl -sf $BASE/api/csrf)" "csrf_token"
 
-          LOGIN=$(curl -sf -X POST $BASE/api/auth/login \
+          # Capture login response and HTTP code (avoid curl -f so we can show body on failure)
+          LOGIN_RESP=$(curl -s -w "\n%{http_code}" -X POST $BASE/api/auth/login \
             -H "Content-Type: application/json" \
             -d "{\"username\":\"admin\",\"password\":\"$CI_PASS\"}")
+          HTTP_CODE=$(echo "$LOGIN_RESP" | tail -n1)
+          LOGIN=$(echo "$LOGIN_RESP" | sed '$d')
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Login failed (HTTP $HTTP_CODE): $LOGIN"
+            exit 1
+          fi
           assert_json "Login succeeds"        "$LOGIN" "success" "true"
           assert_json "Login returns session" "$LOGIN" "session_id"
 

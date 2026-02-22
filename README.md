@@ -23,7 +23,7 @@ See [nixos/README.md](nixos/README.md) for the full NixOS guide.
 
 Web UI: `http://your-server` (nginx reverse proxy on port 80 → daemon on 9000)
 
-**Default login:** `admin` / `admin` (change immediately after first login)
+**Default login:** username `admin`; password is set on first run via the setup wizard (or by your installer/CI).
 
 > **Rebuilding from source?** You need Go 1.22+ and gcc: `make build` compiles fresh.
 
@@ -87,7 +87,6 @@ Navigate to **Identity → Directory Service** to configure. Supports:
 
 ## Documentation
 
-- `CHANGELOG.md` — Full version history including v3.0.0 through v3.2.0
 - `CHANGELOG.md` — Full version history
 - `ADMIN-GUIDE.md` — Full administration guide
 - `ERROR-REFERENCE.md` — API error codes and diagnostics
