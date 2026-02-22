@@ -99,7 +99,7 @@ help:
 	@echo "Targets:"
 	@echo "  deps         - Resolve Go dependencies (needs internet)"
 	@echo "  build        - Build the daemon binary (CGO_ENABLED=1 for SQLite)"
-	@echo "  install      - Build and install daemon + systemd (minimal); for full NAS use ./install.sh"
+	@echo "  install      - Build and install daemon + systemd service"
 	@echo "  test         - Run tests"
 	@echo "  clean        - Remove build artifacts"
 	@echo "  start        - Start the daemon service"

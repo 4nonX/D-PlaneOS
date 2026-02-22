@@ -414,11 +414,76 @@ loadReplicationTasks();
 
 </script>
   <script src="/assets/js/realtime-client.js"></script>
-<!-- v3.0.0: Remote SSH Replication -->
+<!-- v3.2.1: SSH Key Setup + Remote Replication -->
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const main = document.querySelector('.main');
   if (!main) return;
+
+  // ── SSH Key Management card ───────────────────────────────────────────────
+  const keySection = document.createElement('div');
+  keySection.style.marginTop = '48px';
+  keySection.innerHTML = `
+    <h2 class="page-title" style="font-size:28px;">SSH Key Setup</h2>
+    <p class="page-subtitle" style="margin-bottom:32px;">One-time setup required before remote replication</p>
+    <div class="card" id="ssh-key-card" style="padding:32px;border-left:4px solid var(--md-sys-color-tertiary);">
+      <div id="ssh-key-status" style="margin-bottom:20px;"></div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;">
+        <button class="btn btn-primary" onclick="generateKey()">
+          <span class="material-symbols-rounded" style="font-size:18px;">key</span> Generate Key
+        </button>
+        <button class="btn" onclick="toggleCopyKeyForm()" id="copy-key-btn" style="background:rgba(255,255,255,0.05);" disabled>
+          <span class="material-symbols-rounded" style="font-size:18px;">install_desktop</span> Install on Remote
+        </button>
+      </div>
+      <div id="pubkey-display" style="display:none;margin-top:20px;">
+        <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Public Key — add to remote's authorized_keys, or use Install on Remote below</label>
+        <div style="position:relative;">
+          <textarea id="pubkey-text" readonly rows="3"
+            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 48px 10px 16px;color:rgba(255,255,255,0.8);font-family:monospace;font-size:12px;resize:none;box-sizing:border-box;"></textarea>
+          <button onclick="copyPubKey()" title="Copy to clipboard"
+            style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,0.08);border:none;border-radius:8px;padding:4px 8px;cursor:pointer;color:rgba(255,255,255,0.7);">
+            <span class="material-symbols-rounded" style="font-size:16px;">content_copy</span>
+          </button>
+        </div>
+      </div>
+      <div id="copy-key-form" style="display:none;margin-top:20px;border-top:1px solid rgba(255,255,255,0.08);padding-top:20px;">
+        <p style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px;">Enter the remote host credentials to install the key. This is a one-time operation — the password is not stored.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Remote Host</label>
+            <input id="cid-host" type="text" placeholder="backup.local"
+              style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Remote User</label>
+            <input id="cid-user" type="text" value="root" placeholder="root"
+              style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Port</label>
+            <input id="cid-port" type="number" value="22" min="1" max="65535"
+              style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Password (one-time)</label>
+            <input id="cid-pass" type="password" placeholder="Remote root password"
+              style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;box-sizing:border-box;">
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <button class="btn btn-primary" onclick="installKey()">
+            <span class="material-symbols-rounded" style="font-size:18px;">send</span> Install Key
+          </button>
+          <button class="btn" onclick="toggleCopyKeyForm()" style="background:rgba(255,255,255,0.05);">Cancel</button>
+        </div>
+      </div>
+    </div>
+  `;
+  main.appendChild(keySection);
+  loadPubKey();
+
+  // ── Remote Replication card ───────────────────────────────────────────────
   const s = document.createElement('div');
   s.style.marginTop = '48px';
   s.innerHTML = `
@@ -434,6 +499,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <input id="repl-pool" type="text" placeholder="backup/nas" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
         <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Rate Limit</label>
           <input id="repl-rate" type="text" placeholder="50M (empty=unlimited)" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Remote User</label>
+          <input id="repl-user" type="text" value="root" placeholder="root" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;"></div>
+        <div><label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">SSH Key Path <span style="opacity:0.5;">(defaults to generated key)</span></label>
+          <input id="repl-key" type="text" value="/root/.ssh/dplaneos_replication" placeholder="/root/.ssh/dplaneos_replication" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--md-sys-shape-corner-medium);padding:10px 16px;color:#fff;font-family:monospace;"></div>
       </div>
       <div style="display:flex;gap:12px;margin-top:20px;align-items:center;">
         <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="repl-resume" style="accent-color:var(--md-sys-color-primary);width:16px;height:16px;"> Resume interrupted</label>
@@ -446,13 +515,118 @@ document.addEventListener('DOMContentLoaded', () => {
   `;
   main.appendChild(s);
 });
+async function loadPubKey() {
+  try {
+    const r = await csrfFetch('/api/replication/ssh-pubkey');
+    const d = await r.json();
+    renderKeyStatus(d);
+  } catch(e) {
+    document.getElementById('ssh-key-status').innerHTML =
+      '<p style="color:rgba(255,255,255,0.4);font-size:14px;">Could not load key status</p>';
+  }
+}
+
+function renderKeyStatus(d) {
+  const status = document.getElementById('ssh-key-status');
+  const pubkeyDisplay = document.getElementById('pubkey-display');
+  const pubkeyText = document.getElementById('pubkey-text');
+  const copyBtn = document.getElementById('copy-key-btn');
+
+  if (d.exists && d.public_key) {
+    status.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:10px;">
+        <span class="material-symbols-rounded" style="color:var(--success);font-size:20px;">check_circle</span>
+        <span style="font-size:14px;">Replication key exists — ready for use. Regenerating invalidates the key on all remotes.</span>
+      </div>`;
+    pubkeyDisplay.style.display = 'block';
+    pubkeyText.value = d.public_key;
+    copyBtn.disabled = false;
+  } else {
+    status.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:10px;">
+        <span class="material-symbols-rounded" style="color:#f59e0b;font-size:20px;">warning</span>
+        <span style="font-size:14px;">No replication key found. Generate one to enable remote replication.</span>
+      </div>`;
+    pubkeyDisplay.style.display = 'none';
+    copyBtn.disabled = true;
+  }
+}
+
+async function generateKey() {
+  if (document.getElementById('pubkey-display').style.display !== 'none') {
+    if (!await ui.confirm('Regenerate Key?', 'This will invalidate the current key on all remote hosts. You will need to re-run Install on Remote for each host.')) return;
+  }
+  ui.showLoading('Generating ed25519 key pair…');
+  try {
+    const r = await csrfFetch('/api/replication/ssh-keygen', { method: 'POST', body: '{}' });
+    const d = await r.json();
+    ui.hideLoading();
+    if (d.success) {
+      renderKeyStatus({ exists: true, public_key: d.public_key });
+      ui.toast('Key generated successfully', 'success');
+    } else {
+      ui.toast(d.error || 'Key generation failed', 'error');
+    }
+  } catch(e) {
+    ui.hideLoading();
+    ui.toast('Error: ' + e.message, 'error');
+  }
+}
+
+function toggleCopyKeyForm() {
+  const form = document.getElementById('copy-key-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function installKey() {
+  const host = document.getElementById('cid-host').value.trim();
+  const user = document.getElementById('cid-user').value.trim() || 'root';
+  const port = parseInt(document.getElementById('cid-port').value) || 22;
+  const pass = document.getElementById('cid-pass').value;
+
+  if (!host) { ui.toast('Remote host is required', 'warning'); return; }
+  if (!pass) { ui.toast('Password is required', 'warning'); return; }
+
+  ui.showLoading('Installing key on ' + host + '…');
+  try {
+    const r = await csrfFetch('/api/replication/ssh-copy-id', {
+      method: 'POST',
+      body: JSON.stringify({ remote_host: host, remote_user: user, remote_port: port, password: pass })
+    });
+    const d = await r.json();
+    ui.hideLoading();
+    if (d.success) {
+      document.getElementById('cid-pass').value = '';
+      toggleCopyKeyForm();
+      ui.toast(d.message || 'Key installed successfully', 'success');
+    } else {
+      ui.toast(d.error || 'Key installation failed', 'error');
+    }
+  } catch(e) {
+    ui.hideLoading();
+    ui.toast('Error: ' + e.message, 'error');
+  }
+}
+
+function copyPubKey() {
+  const text = document.getElementById('pubkey-text').value;
+  navigator.clipboard.writeText(text).then(() => {
+    ui.toast('Public key copied to clipboard', 'success');
+  }).catch(() => {
+    // Fallback for non-HTTPS contexts
+    document.getElementById('pubkey-text').select();
+    document.execCommand('copy');
+    ui.toast('Public key copied', 'success');
+  });
+}
+
 async function testRemote() {
   const host = document.getElementById('repl-host').value;
   if (!host) { ui.toast('Enter host','warning'); return; }
   try { const r = await csrfFetch('/api/replication/test',{method:'POST',body:JSON.stringify({remote_host:host,remote_user:'root'})}); const d = await r.json(); d.success ? ui.toast('Connection OK ('+d.duration_ms+'ms)','success') : ui.toast('Failed: '+d.error,'error'); } catch(e) { ui.toast('Error','error'); }
 }
 async function startReplication() {
-  const data = { snapshot:document.getElementById('repl-snap').value, remote_host:document.getElementById('repl-host').value, remote_pool:document.getElementById('repl-pool').value, rate_limit:document.getElementById('repl-rate').value, resume:document.getElementById('repl-resume').checked, compressed:document.getElementById('repl-compressed').checked, remote_user:'root' };
+  const data = { snapshot:document.getElementById('repl-snap').value, remote_host:document.getElementById('repl-host').value, remote_pool:document.getElementById('repl-pool').value, rate_limit:document.getElementById('repl-rate').value, resume:document.getElementById('repl-resume').checked, compressed:document.getElementById('repl-compressed').checked, remote_user:document.getElementById('repl-user').value||'root', ssh_key_path:document.getElementById('repl-key').value||'/root/.ssh/dplaneos_replication' };
   if (!data.snapshot||!data.remote_host||!data.remote_pool) { ui.toast('Fill all required fields','warning'); return; }
   const btn = document.querySelector('[onclick*="startReplication"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Replicating…'; }

@@ -448,7 +448,7 @@ if (window.ConnectionMonitor) {
 <span class="material-symbols-rounded setting-icon">update</span>
 <div class="setting-info">
 <div class="setting-name">System Version</div>
-<div class="setting-desc" id="settings-version-desc">D-PlaneOS</div>
+<div class="setting-desc" id="settings-version">D-PlaneOS</div>
 </div>
 <button class="icon-btn" onclick="checkUpdates()"><span class="material-symbols-rounded">refresh</span></button>
 </div>
@@ -592,21 +592,13 @@ async function checkUpdates() {
         }, 3000);
       }
     } else {
-      ui.toast('System is up to date', 'success');
+      ui.toast('System is up to date' + (_settingsVersion ? ' (v' + _settingsVersion + ')' : ''), 'success');
     }
   } catch (error) {
     ui.hideLoading();
     ui.toast('Network error: ' + error.message, 'error');
   }
 }
-
-// Fill version from /health on load
-(function() {
-  fetch('/health').then(function(r) { return r.json(); }).then(function(d) {
-    var el = document.getElementById('settings-version-desc');
-    if (el && d.version) el.textContent = 'D-PlaneOS v' + d.version;
-  }).catch(function() {});
-})();
 
 // Telegram Configuration
 let telegramConfig = { bot_token: '', chat_id: '', enabled: false };
@@ -714,6 +706,16 @@ async function testTelegram() {
 }
 
 document.addEventListener('DOMContentLoaded', loadTelegramConfig);
+
+// Populate version display from /health (no auth required)
+let _settingsVersion = '';
+fetch('/health').then(r => r.json()).then(d => {
+  if (d.version) {
+    _settingsVersion = d.version;
+    const el = document.getElementById('settings-version');
+    if (el) el.textContent = 'D-PlaneOS v' + d.version;
+  }
+}).catch(() => {});
 </script>
   <script src="/assets/js/realtime-client.js"></script>
 <!-- v3.0.0: NixOS Configuration Guard -->
@@ -1424,21 +1426,13 @@ async function checkUpdates() {
         }, 3000);
       }
     } else {
-      ui.toast('System is up to date', 'success');
+      ui.toast('System is up to date' + (_settingsVersion ? ' (v' + _settingsVersion + ')' : ''), 'success');
     }
   } catch (error) {
     ui.hideLoading();
     ui.toast('Network error: ' + error.message, 'error');
   }
 }
-
-// Fill version from /health on load
-(function() {
-  fetch('/health').then(function(r) { return r.json(); }).then(function(d) {
-    var el = document.getElementById('settings-version-desc');
-    if (el && d.version) el.textContent = 'D-PlaneOS v' + d.version;
-  }).catch(function() {});
-})();
 
 // Telegram Configuration
 let telegramConfig = { bot_token: '', chat_id: '', enabled: false };
@@ -2304,7 +2298,7 @@ async function saveWebhook() {
 }
 
 async function deleteWebhook(id, name) {
-  if (!await ui.confirm('Delete Webhook', 'Delete webhook "' + name + '"? Notifications will no longer be sent to this URL.')) return;
+  if (!confirm('Delete webhook "' + name + '"?')) return;
   try {
     const r = await csrfFetch('/api/alerts/webhooks/'+id, {method:'DELETE'});
     const d = await r.json();

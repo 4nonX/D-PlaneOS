@@ -16,10 +16,6 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VERSION="${VERSION:-$(cat "$REPO_ROOT/VERSION" 2>/dev/null || echo "unknown")}"
-
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -30,7 +26,7 @@ NC='\033[0m'
 ERRORS=0
 WARNINGS=0
 
-echo -e "${BOLD}${BLUE}D-PlaneOS v${VERSION} Pre-Flight Validation${NC}"
+echo -e "${BOLD}${BLUE}D-PlaneOS v$(cat "$(dirname "$0")/../VERSION" 2>/dev/null | tr -d "[:space:]" || echo "?") Pre-Flight Validation${NC}"
 echo "=========================================="
 echo ""
 

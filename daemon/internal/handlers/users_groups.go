@@ -167,13 +167,6 @@ func (h *UserGroupHandler) createUser(w http.ResponseWriter, req userActionReque
 	}
 
 	id, _ := result.LastInsertId()
-
-	// Assign role in user_roles so RBAC permission checks apply
-	var roleID int64
-	if err := h.db.QueryRow(`SELECT id FROM roles WHERE name = ? LIMIT 1`, role).Scan(&roleID); err == nil {
-		h.db.Exec(`INSERT OR IGNORE INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, 'system')`, id, roleID)
-	}
-
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"id":      id,

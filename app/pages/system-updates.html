@@ -429,7 +429,7 @@ async function loadGenerations() {
 }
 
 async function rollbackTo(genId) {
-  if (!await ui.confirm('Roll Back Generation', `Roll back to generation #${genId}? This will immediately switch your running system.`)) return;
+  if (!confirm(`Roll back to generation #${genId}?\n\nThis will immediately switch your running system.`)) return;
   const r = await fetch('/api/nixos/rollback', {
     method: 'POST', headers: hdrs(),
     body: JSON.stringify({ generation: String(genId) })
@@ -452,7 +452,7 @@ async function rollbackTo(genId) {
 }
 
 async function rollbackPrevious() {
-  if (!await ui.confirm('Roll Back', 'Roll back to the previous generation? This will immediately switch your running system.')) return;
+  if (!confirm('Roll back to the previous generation?')) return;
   const r = await fetch('/api/nixos/rollback', {
     method: 'POST', headers: hdrs(), body: JSON.stringify({ generation: '' })
   });

@@ -40,6 +40,10 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, disko, impermanence }:
+  let
+    # Read version from VERSION file at evaluation time — single source of truth
+    dplaneosVersion = builtins.replaceStrings ["\n"] [""] (builtins.readFile ../VERSION);
+  in
     let
       supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
 
@@ -113,7 +117,6 @@
     flake-utils.lib.eachSystem supportedSystems (system:
       let
         pkgs    = nixpkgs.legacyPackages.${system};
-        version = builtins.trim (builtins.readFile ../VERSION);
 
         # ── Static build via musl ──────────────────────────────────────────
         # Why musl instead of glibc?
@@ -135,7 +138,7 @@
         # ── Daemon package (static musl binary) ───────────────────────────
         packages.dplaneos-daemon = pkgsStatic.buildGoModule {
           pname        = "dplaneos-daemon";
-          version      = version;
+          version      = dplaneosVersion;
           src          = ../.;
           # CGO_ENABLED=1 required for mattn/go-sqlite3 (C amalgamation)
           # musl-gcc provides the static C runtime; no glibc dependency.
@@ -150,7 +153,7 @@
           tags    = [ "sqlite_fts5" ];
           ldflags = [
             "-s" "-w"
-            "-X" "main.Version=${version}"
+            "-X" "main.Version=${dplaneosVersion}"
             "-linkmode" "external"
             "-extldflags" "-static"
           ];
@@ -175,14 +178,14 @@
         # Build with: nix build .#dplaneos-daemon-dynamic
         packages.dplaneos-daemon-dynamic = pkgs.buildGoModule {
           pname        = "dplaneos-daemon-dynamic";
-          version      = version;
+          version      = dplaneosVersion;
           src          = ../.;
           CGO_ENABLED  = "1";
           vendorHash   = null;
           subPackages  = [ "daemon/cmd/dplaned" ];
           nativeBuildInputs = with pkgs; [ gcc ];
           tags    = [ "sqlite_fts5" ];
-          ldflags = [ "-s" "-w" "-X" "main.Version=${version}" ];
+          ldflags = [ "-s" "-w" "-X" "main.Version=${dplaneosVersion}" ];
           meta = with nixpkgs.lib; {
             description = "D-PlaneOS NAS daemon — glibc dynamic build (dev only)";
             license     = licenses.unfree;

@@ -167,8 +167,6 @@ func initSchema(db *sql.DB) error {
 		`ALTER TABLE sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`,
 		`ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`,
 
 		// ── Git Sync ──
 		`CREATE TABLE IF NOT EXISTS git_sync_config (
@@ -433,12 +431,12 @@ func seedDefaults(db *sql.DB) error {
 	db.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount)
 	if userCount == 0 {
 		if _, err := db.Exec(
-			"INSERT INTO users (username, display_name, email, active, role) VALUES ('admin', 'Administrator', 'admin@localhost', 1, 'admin')",
+			"INSERT INTO users (username, display_name, email, active) VALUES ('admin', 'Administrator', 'admin@localhost', 1)",
 		); err != nil {
 			return fmt.Errorf("admin user seed: %w", err)
 		}
 
-		// Assign admin role in user_roles (RBAC)
+		// Assign admin role
 		var adminRoleID, adminUserID int
 		db.QueryRow("SELECT id FROM roles WHERE name = 'admin'").Scan(&adminRoleID)
 		db.QueryRow("SELECT id FROM users WHERE username = 'admin'").Scan(&adminUserID)

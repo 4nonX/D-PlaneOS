@@ -24,72 +24,31 @@
   to { transform: rotate(360deg); }
 }
 
-/* Non-blocking loading indicator – corner widget, does not cover UI or block navigation */
-.loading-indicator,
-.m3-loading-indicator {
+.loading-overlay {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 9999;
-  max-width: 320px;
-  pointer-events: auto;
   animation: fadeIn 0.2s ease;
 }
 
-.loading-indicator-content,
-.m3-loading-indicator .loading-indicator-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px 20px;
-  background: var(--md-sys-color-surface, rgba(30, 41, 59, 0.98));
-  border: 1px solid var(--md-sys-color-outline, rgba(255, 255, 255, 0.1));
-  border-radius: var(--md-sys-shape-corner-medium, 12px);
-  box-shadow: var(--md-sys-elevation-2, 0 4px 16px rgba(0, 0, 0, 0.3));
+.loading-content {
+  text-align: center;
+  background: rgba(30, 41, 59, 0.95);
+  padding: 32px 48px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.loading-indicator-content .spinner {
-  margin: 0;
-  flex-shrink: 0;
-}
-
-.loading-indicator-text {
-  color: var(--md-sys-color-on-surface-variant, rgba(255, 255, 255, 0.85));
-  font-size: var(--md-sys-typescale-body-medium, 14px);
-  font-weight: 500;
-}
-
-.loading-indicator-bar {
-  width: 100%;
-}
-
-/* M3 linear progress – indeterminate (for time-consuming operations) */
-.m3-progress-indeterminate {
-  height: 4px;
-  border-radius: 2px;
-  background: var(--md-sys-color-outline-variant, rgba(255, 255, 255, 0.12));
-  overflow: hidden;
-}
-
-.m3-progress-indeterminate::after {
-  content: '';
-  display: block;
-  height: 100%;
-  width: 40%;
-  background: var(--md-sys-color-primary, #8a9cff);
-  border-radius: 2px;
-  animation: m3-progress-indeterminate 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-@keyframes m3-progress-indeterminate {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(350%); }
-}
-
-.spinner-sm {
-  width: 24px;
-  height: 24px;
-  border-width: 3px;
+.loading-content .spinner {
+  margin-bottom: 16px;
 }
 
 .skeleton {
@@ -135,14 +94,14 @@
 }
 
 .toast {
-  background: var(--md-sys-color-surface, rgba(30, 41, 59, 0.98));
-  border: 1px solid var(--md-sys-color-outline, rgba(255, 255, 255, 0.1));
-  border-radius: var(--md-sys-shape-corner-medium, 12px);
+  background: rgba(30, 41, 59, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
   padding: 16px;
   display: flex;
   align-items: start;
   gap: 12px;
-  box-shadow: var(--md-sys-elevation-2, 0 4px 16px rgba(0, 0, 0, 0.3));
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
   animation: slideInRight 0.3s ease;
   backdrop-filter: blur(10px);
 }

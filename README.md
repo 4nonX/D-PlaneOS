@@ -4,38 +4,28 @@ Source-Available NAS OS with Material Design 3 UI, ZFS storage, Docker container
 
 ## Quick Start
 
-### Debian/Ubuntu (one-step full NAS)
-
-**Option A — one-liner (no download first):**
-```bash
-curl -fsSL https://get.dplaneos.io | sudo bash
-```
-
-**Option B — from release tarball:**
+### Debian/Ubuntu
 ```bash
 tar xzf dplaneos-v3.2.1.tar.gz
-cd dplaneos-v3.2.1   # or the extracted directory name
-sudo ./install.sh
+cd dplaneos
+sudo make install   # Pre-built binary, no compiler needed
+sudo systemctl start dplaned
 ```
-
-The installer sets up the daemon, nginx, ZFS tools, **Samba (SMB/CIFS), NFS, and Docker** so you get a full NAS in one run. When it finishes, open **http://your-server** in a browser.
-
-**Default login:** username `admin`; password is shown at the end of install (or set via setup wizard on first login).
 
 ### NixOS
 ```bash
-cd D-PlaneOS/nixos
+cd nixos
 sudo bash setup-nixos.sh
 sudo nixos-rebuild switch --flake .#dplaneos
 ```
 
 See [nixos/README.md](nixos/README.md) for the full NixOS guide.
 
-### Minimal install (binary only, no Samba/NFS/Docker)
+Web UI: `http://your-server` (nginx reverse proxy on port 80 → daemon on 9000)
 
-If you already have nginx and dependencies and only want the daemon: `sudo make install` then `sudo systemctl start dplaned`. See [INSTALLATION-GUIDE.md](INSTALLATION-GUIDE.md) for details.
+**Default login:** `admin` / `admin` (change immediately after first login)
 
-> **Building from source?** You need Go 1.21+ and gcc. Run `./install.sh` — it will build the daemon if no pre-built binary is present.
+> **Rebuilding from source?** You need Go 1.22+ and gcc: `make build` compiles fresh.
 
 ### Off-Pool Database Backup (recommended for large pools)
 
@@ -88,22 +78,24 @@ Navigate to **Identity → Directory Service** to configure. Supports:
 ## Architecture
 
 - **Frontend:** HTML5 + Material Design 3, flyout navigation, no framework dependencies
-- **Backend:** Go daemon (`dplaned`, 8MB) on port 9000, 170+ API routes
+- **Backend:** Go daemon (`dplaned`, 8MB) on port 9000, 171 API routes
 - **Database:** SQLite with WAL mode, `synchronous=FULL`, daily `.backup` (WAL-safe)
 - **Web Server:** nginx reverse proxy (TLS termination)
 - **Storage:** ZFS (native kernel module) + ZED hook for real-time disk failure alerts
-- **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 28 permissions), injection-hardened, OOM-protected (512MB limit)
+- **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 34 permissions), injection-hardened, OOM-protected (1 GB limit)
 - **NixOS:** Full support via Flake — entire NAS defined in a single `configuration.nix`
 
 ## Documentation
 
+- `CHANGELOG.md` — Full version history including v3.0.0 through v3.2.0
 - `CHANGELOG.md` — Full version history
 - `ADMIN-GUIDE.md` — Full administration guide
 - `ERROR-REFERENCE.md` — API error codes and diagnostics
 - `TROUBLESHOOTING.md` — Build issues, ZED setup, common fixes
 - `nixos/README.md` — NixOS installation and configuration
+- `LDAP-REFERENCE.md` — LDAP technical reference
 - `INSTALLATION-GUIDE.md` — Detailed installation steps
 
 ## License
 
-Source-Available. See LICENSE file.
+Open source. See LICENSE file.

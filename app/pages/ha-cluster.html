@@ -399,7 +399,7 @@ async function registerPeer() {
 
 // ── Remove peer ───────────────────────────────────────────────────────────────
 async function removePeer(id, name) {
-  if (!await ui.confirm('Remove Peer', `Remove peer "${name}" from the cluster? This stops heartbeat monitoring for this node.`)) return;
+  if (!confirm(`Remove peer "${name}" from the cluster?\n\nThis stops heartbeat monitoring for this node.`)) return;
   try {
     const res = await csrfFetch(`/api/ha/peers/${encodeURIComponent(id)}`, { method: 'DELETE' });
     const data = await res.json();
@@ -416,12 +416,11 @@ async function removePeer(id, name) {
 
 // ── Promote to active ─────────────────────────────────────────────────────────
 async function promoteToActive(id, name) {
-  const confirmed = await ui.confirm(
-    'Promote to Active',
-    `Promote "${name}" to ACTIVE? This transfers ZFS pool control to that node. Verify the current active node is unreachable before proceeding. Running both nodes as active simultaneously can cause data corruption (split-brain).`,
-    'Promote',
-    'Cancel',
-    true
+  const confirmed = confirm(
+    `Promote "${name}" to ACTIVE?\n\n` +
+    `⚠ This transfers ZFS pool control to that node.\n` +
+    `⚠ Verify the current active node is unreachable before proceeding.\n` +
+    `⚠ Running both nodes as active simultaneously can cause data corruption (split-brain).`
   );
   if (!confirmed) return;
 

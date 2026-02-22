@@ -49,7 +49,8 @@ type WebhookHandler struct {
 	db *sql.DB
 }
 
-func NewWebhookHandler(db *sql.DB) *WebhookHandler {
+func NewWebhookHandler(db *sql.DB, version string) *WebhookHandler {
+	SetDaemonVersion(version)
 	return &WebhookHandler{db: db}
 }
 
@@ -295,6 +296,12 @@ func webhookSubscribed(eventsJSON, event string) bool {
 
 // dispatchWebhook sends a single webhook payload synchronously.
 // Used by TestWebhook (needs the error returned to the caller).
+// daemonVersion is set at startup via SetDaemonVersion — populated from main.Version.
+var daemonVersion = "dev"
+
+// SetDaemonVersion allows main to inject the build version into this package.
+func SetDaemonVersion(v string) { daemonVersion = v }
+
 func dispatchWebhook(cfg webhookConfig, payload webhookPayload) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -306,7 +313,7 @@ func dispatchWebhook(cfg webhookConfig, payload webhookPayload) error {
 		return fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "D-PlaneOS/3.2.1")
+	req.Header.Set("User-Agent", "D-PlaneOS/"+daemonVersion)
 	if cfg.SecretHeader != "" && cfg.SecretValue != "" {
 		req.Header.Set(cfg.SecretHeader, cfg.SecretValue)
 	}

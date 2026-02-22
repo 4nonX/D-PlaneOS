@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	Version = "3.2.1"
+	Version = "dev" // overridden at build time via: -ldflags "-X main.Version=$(cat VERSION)"
 )
 
 func main() {
@@ -322,6 +322,9 @@ func main() {
 	replicationRemoteHandler := handlers.NewReplicationHandler()
 	r.HandleFunc("/api/replication/remote", replicationRemoteHandler.ReplicateToRemote).Methods("POST")
 	r.HandleFunc("/api/replication/test", replicationRemoteHandler.TestRemoteConnection).Methods("POST")
+	r.HandleFunc("/api/replication/ssh-keygen", handlers.GenerateReplicationKey).Methods("POST")
+	r.HandleFunc("/api/replication/ssh-pubkey", handlers.GetReplicationPubKey).Methods("GET")
+	r.HandleFunc("/api/replication/ssh-copy-id", handlers.CopyReplicationKey).Methods("POST")
 
 	// v3.0.0: ZFS Time Machine (browse snapshots, restore single files)
 	timeMachineHandler := handlers.NewZFSTimeMachineHandler()
@@ -408,7 +411,7 @@ func main() {
 	supportBundleHandler := handlers.NewSupportBundleHandler(db, Version)
 	r.Handle("/api/system/support-bundle", permRoute("system","admin",supportBundleHandler.GenerateBundle)).Methods("POST")
 
-	webhookHandler := handlers.NewWebhookHandler(db)
+	webhookHandler := handlers.NewWebhookHandler(db, Version)
 	r.HandleFunc("/api/alerts/webhooks", webhookHandler.ListWebhooks).Methods("GET")
 	r.Handle("/api/alerts/webhooks", permRoute("system","write",webhookHandler.SaveWebhook)).Methods("POST")
 	r.Handle("/api/alerts/webhooks/{id}", permRoute("system","write",webhookHandler.DeleteWebhook)).Methods("DELETE")

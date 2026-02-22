@@ -28,9 +28,6 @@ type SupportBundleHandler struct {
 }
 
 func NewSupportBundleHandler(db *sql.DB, version string) *SupportBundleHandler {
-	if version == "" {
-		version = "dev"
-	}
 	return &SupportBundleHandler{db: db, version: version}
 }
 

@@ -24,7 +24,7 @@ import (
 
 const (
 	socketPath = "/var/run/docker.sock"
-	apiVersion = "v1.41"
+	apiVersion = "3.2.1"
 )
 
 // Client is a minimal Docker API client using the Unix socket.

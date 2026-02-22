@@ -2,7 +2,7 @@
 #
 # D-PlaneOS - Safe Upgrade with Automatic Rollback
 #
-# Purpose: Upgrade from the prior release with automatic backup and rollback
+# Purpose: Upgrade from to with automatic backup and rollback
 # Usage: sudo ./upgrade-with-rollback.sh
 #
 # Features:
@@ -14,11 +14,6 @@
 #
 
 set -euo pipefail
-
-# Version from repo (avoid hardcoding so CI stale-version check passes)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VERSION="${VERSION:-$(cat "$REPO_ROOT/VERSION" 2>/dev/null || echo "unknown")}"
 
 # Colors
 RED='\033[0;31m'
@@ -61,7 +56,7 @@ error() {
 # Header
 clear
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║       D-PlaneOS v$VERSION - Safe Upgrade with Rollback         ║"
+echo "║       D-PlaneOS v$(cat "$(dirname "$0")/../VERSION" 2>/dev/null | tr -d "[:space:]" || echo "?") - Safe Upgrade with Rollback         ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -124,7 +119,7 @@ cat > "$BACKUP_PATH/system-state.json" <<EOF
     "hostname": "$(hostname)",
     "os": "$(lsb_release -ds)",
     "kernel": "$(uname -r)",
-    "go_daemon": "dplaned v$VERSION",
+    "go_daemon": "dplaned v$(cat '$(dirname '$0')/../VERSION' 2>/dev/null | tr -d '[:space:]' || echo '?')",
     "apache2_status": "$(systemctl is-active apache2 2>/dev/null || echo 'not installed')",
     "nginx_status": "$(systemctl is-active nginx 2>/dev/null || echo 'not installed')",
     "dplaned_status": "$(systemctl is-active dplaned 2>/dev/null || echo 'not installed')"
@@ -143,7 +138,7 @@ cat > "$BACKUP_PATH/rollback.sh" <<'ROLLBACK_SCRIPT'
 set -euo pipefail
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║              D-PlaneOS v__VERSION__ - Rollback                     ║"
+echo "║              D-PlaneOS v$(cat "$(dirname "$0")/../VERSION" 2>/dev/null | tr -d "[:space:]" || echo "?") - Rollback                     ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -211,7 +206,6 @@ echo "Test by accessing: http://$(hostname -I | awk '{print $1}')/"
 echo ""
 ROLLBACK_SCRIPT
 
-sed -i "s/__VERSION__/$VERSION/g" "$BACKUP_PATH/rollback.sh"
 chmod +x "$BACKUP_PATH/rollback.sh"
 success "Rollback script created: $BACKUP_PATH/rollback.sh"
 

@@ -4,13 +4,24 @@
 # Creates production + vendored tarballs with full validation
 #
 # Usage: ./scripts/build-release.sh [version]
-# Example: ./scripts/build-release.sh 2.0.0
+# Version defaults to contents of VERSION file if no argument given.
+# Example: ./scripts/build-release.sh 3.3.0
 #
 
 set -euo pipefail
 
-VERSION="${1:-2.0.0}"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Read version from VERSION file; allow override via argument
+VERSION_FILE="$PROJECT_DIR/VERSION"
+if [ -n "${1:-}" ]; then
+  VERSION="$1"
+elif [ -f "$VERSION_FILE" ]; then
+  VERSION="$(cat "$VERSION_FILE" | tr -d '[:space:]')"
+else
+  echo "ERROR: No version argument given and VERSION file not found at $VERSION_FILE" >&2
+  exit 1
+fi
 BUILD_DIR="$PROJECT_DIR/build"
 RELEASE_DIR="$PROJECT_DIR/release"
 BINARY="dplaned"
@@ -111,6 +122,38 @@ tar czf "$RELEASE_DIR/${TARNAME}-vendored.tar.gz" \
 VENDORED_SIZE=$(du -h "$RELEASE_DIR/${TARNAME}-vendored.tar.gz" | cut -f1)
 pass "${TARNAME}-vendored.tar.gz ($VENDORED_SIZE)"
 
+# ── Hash attestation ──
+echo ""
+echo "Generating SHA256 attestation..."
+cd "$RELEASE_DIR"
+
+ATTEST_FILE="${TARNAME}-SHA256SUMS"
+
+# Binary hash (what users can verify against a self-build)
+BINARY_HASH=$(sha256sum "$PROJECT_DIR/daemon/dplaned" 2>/dev/null | awk '{print $1}' || sha256sum "$PROJECT_DIR/release/dplaned-linux-amd64" 2>/dev/null | awk '{print $1}' || echo "not-built")
+BUILD_BINARY_HASH=$(sha256sum "$BUILD_DIR/$BINARY" | awk '{print $1}')
+
+{
+  echo "# D-PlaneOS v${VERSION} — SHA256 Attestation"
+  echo "# Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+  echo "# Builder:   $(go version)"
+  echo "# Commit:    $(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || echo 'unknown')"
+  echo "#"
+  echo "# To verify the shipped binary matches source:"
+  echo "#   CGO_ENABLED=1 go build -mod=vendor -ldflags='-s -w' -o dplaned-local ./daemon/cmd/dplaned/"
+  echo "#   sha256sum dplaned-local"
+  echo "#   Compare with daemon_binary_sha256 below"
+  echo ""
+  sha256sum "${TARNAME}.tar.gz"
+  sha256sum "${TARNAME}-vendored.tar.gz"
+  echo ""
+  echo "# Binary hashes (for source-build verification)"
+  echo "${BUILD_BINARY_HASH}  dplaned-linux-amd64 (this build)"
+  [ "$BINARY_HASH" != "not-built" ] && echo "${BINARY_HASH}  dplaned-linux-amd64 (shipped in release/)" || true
+} > "$ATTEST_FILE"
+
+pass "SHA256SUMS: $ATTEST_FILE"
+
 # ── Summary ──
 ROUTE_COUNT=$(grep -c 'HandleFunc' "$PROJECT_DIR/daemon/cmd/dplaned/main.go" || echo "?")
 GO_FILES=$(find "$PROJECT_DIR/daemon" -name '*.go' ! -path '*/vendor/*' | wc -l)
@@ -127,4 +170,5 @@ echo "  API routes: $ROUTE_COUNT"
 echo ""
 echo "  $RELEASE_DIR/${TARNAME}.tar.gz"
 echo "  $RELEASE_DIR/${TARNAME}-vendored.tar.gz"
+echo "  $RELEASE_DIR/${TARNAME}-SHA256SUMS"
 echo "═══════════════════════════════════════════════"

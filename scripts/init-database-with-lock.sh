@@ -10,10 +10,6 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VERSION="${VERSION:-$(cat "$REPO_ROOT/VERSION" 2>/dev/null || echo "0.0.0")}"
-
 DB_PATH="/var/lib/dplaneos/dplaneos.db"
 LOCK_FILE="/var/run/dplaneos/db.lock"
 LOCK_DIR=$(dirname "$LOCK_FILE")
@@ -62,8 +58,8 @@ init_database() {
     # Create database directory
     mkdir -p "$(dirname "$DB_PATH")"
     
-    # Create database schema (unquoted EOF so VERSION expands)
-    sqlite3 "$DB_PATH" <<EOF
+    # Create database schema
+    sqlite3 "$DB_PATH" <<'EOF'
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_log(user_id);
 
 -- Insert default settings
 INSERT OR IGNORE INTO settings (key, value) VALUES ('initialized', '1');
-INSERT OR IGNORE INTO settings (key, value) VALUES ('version', '$VERSION');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('version', '$(cat "$(dirname "$0")/../VERSION" 2>/dev/null | tr -d "[:space:]" || echo "unknown")');
 EOF
     
     # Set proper permissions

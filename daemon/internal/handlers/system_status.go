@@ -24,9 +24,6 @@ type SystemStatusHandler struct {
 }
 
 func NewSystemStatusHandler(db *sql.DB, version string) *SystemStatusHandler {
-	if version == "" {
-		version = "dev"
-	}
 	return &SystemStatusHandler{db: db, startTime: time.Now(), version: version}
 }
 

@@ -13,10 +13,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VERSION="${VERSION:-$(cat "$REPO_ROOT/VERSION" 2>/dev/null || echo "unknown")}"
-
 CONFIG="/etc/nixos/configuration.nix"
 BOLD="\033[1m"
 GREEN="\033[32m"
@@ -36,7 +32,7 @@ if [ "$(id -u)" != "0" ]; then
 fi
 
 echo -e "${BOLD}"
-echo "    D-PlaneOS v${VERSION} — NixOS Setup"
+echo "    D-PlaneOS v$(cat "$(dirname "$0")/../VERSION" 2>/dev/null | tr -d "[:space:]" || echo "?") — NixOS Setup"
 echo "────────────────────────────────────────"
 echo -e "${NC}"
 
