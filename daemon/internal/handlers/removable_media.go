@@ -25,13 +25,17 @@ type Device struct {
 	Mounted    bool   `json:"mounted"`
 }
 
-// ListDevices lists all removable devices
+// ListDevices lists all removable devices. Always returns JSON (empty list on lsblk error/parse error).
 func (h *RemovableMediaHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	// Use lsblk to list removable devices
 	output, err := cmdutil.RunFast("lsblk", "-J", "-o", "NAME,SIZE,MODEL,MOUNTPOINT,RM,TYPE")
-	
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to list devices: %v", err), http.StatusInternalServerError)
+		log.Printf("removable/list: lsblk failed: %v", err)
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   fmt.Sprintf("Failed to list devices: %v", err),
+			"devices": []Device{},
+		})
 		return
 	}
 
@@ -48,7 +52,12 @@ func (h *RemovableMediaHandler) ListDevices(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := json.Unmarshal(output, &lsblkOutput); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to parse lsblk output: %v", err), http.StatusInternalServerError)
+		log.Printf("removable/list: parse lsblk output: %v", err)
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   fmt.Sprintf("Failed to parse lsblk output: %v", err),
+			"devices": []Device{},
+		})
 		return
 	}
 
@@ -67,8 +76,7 @@ func (h *RemovableMediaHandler) ListDevices(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"devices": devices,
 	})
