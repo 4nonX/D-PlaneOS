@@ -135,4 +135,4 @@ PRs that introduce security issues will be closed without merge regardless of ot
 
 ## License
 
-By contributing, you agree your contributions are licensed under the project's [PolyForm Shield 1.0.0 License](LICENSE).
+By contributing, you agree your contributions are licensed under the project's [PolyForm Shield License 1.0.0](LICENSE).
