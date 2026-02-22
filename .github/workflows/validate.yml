@@ -74,15 +74,6 @@ jobs:
           sudo mkdir -p /var/lib/dplaneos
           sudo bash scripts/init-database-with-lock.sh
 
-      - name: Seed CI user
-        run: |
-          CI_PASS="CiAdmin1!Test"
-          CI_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'$CI_PASS', bcrypt.gensalt(rounds=10)).decode())")
-          sudo sqlite3 /var/lib/dplaneos/dplaneos.db \
-            "INSERT OR REPLACE INTO users (username, password_hash, active, role, must_change_password)
-             VALUES ('admin', '$CI_HASH', 1, 'admin', 0);"
-          echo "CI_PASS=$CI_PASS" >> $GITHUB_ENV
-
       - name: Start daemon
         run: |
           chmod +x dplaned-ci
@@ -99,6 +90,16 @@ jobs:
             sleep 1
           done
           curl -sf http://127.0.0.1:9000/health | grep -q '"ok"'
+
+
+      - name: Seed CI user
+        run: |
+          CI_PASS="CiAdmin1!Test"
+          CI_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'$CI_PASS', bcrypt.gensalt(rounds=10)).decode())")
+          sudo sqlite3 /var/lib/dplaneos/dplaneos.db \
+            "INSERT OR REPLACE INTO users (username, password_hash, active, role, must_change_password)
+             VALUES ('admin', '$CI_HASH', 1, 'admin', 0);"
+          echo "CI_PASS=$CI_PASS" >> $GITHUB_ENV
 
       - name: API integration tests
         run: |

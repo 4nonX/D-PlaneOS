@@ -58,63 +58,18 @@ init_database() {
     # Create database directory
     mkdir -p "$(dirname "$DB_PATH")"
     
-    # Create database schema
-    sqlite3 "$DB_PATH" <<'EOF'
--- Users table
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    email TEXT,
-    role TEXT DEFAULT 'user',
-    created_at INTEGER DEFAULT (strftime('%s', 'now')),
-    last_login INTEGER
-);
-
--- Sessions table
-CREATE TABLE IF NOT EXISTS sessions (
-    session_id TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    ip_address TEXT,
-    user_agent TEXT,
-    created_at INTEGER DEFAULT (strftime('%s', 'now')),
-    expires_at INTEGER NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Settings table
-CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT,
-    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
-
--- Audit log table
-CREATE TABLE IF NOT EXISTS audit_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp INTEGER DEFAULT (strftime('%s', 'now')),
-    user_id INTEGER,
-    action TEXT NOT NULL,
-    resource TEXT,
-    details TEXT,
-    ip_address TEXT,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-);
-
--- Create indexes
-CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
-CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_log(user_id);
-
--- Insert default settings
-INSERT OR IGNORE INTO settings (key, value) VALUES ('initialized', '1');
-INSERT OR IGNORE INTO settings (key, value) VALUES ('version', '$(cat "$(dirname "$0")/../VERSION" 2>/dev/null | tr -d "[:space:]" || echo "unknown")');
-EOF
+    # Create an empty database file so the daemon can open it on first start.
+    # Schema is created by the daemon's initSchema() on startup — do NOT
+    # duplicate it here. Keeping schema in one place (schema.go) prevents drift.
+    if [ ! -f "$DB_PATH" ]; then
+        sqlite3 "$DB_PATH" "PRAGMA journal_mode=WAL;"
+    fi
     
-    # Set proper permissions
-    chown www-data:www-data "$DB_PATH"
+    # Set permissions — only chown if www-data exists (not present in CI/minimal installs)
     chmod 660 "$DB_PATH"
+    if id www-data &>/dev/null; then
+        chown www-data:www-data "$DB_PATH"
+    fi
     
     echo "Database initialized successfully"
     
