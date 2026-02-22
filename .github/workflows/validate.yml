@@ -165,7 +165,7 @@ jobs:
 
           api() {
             local method="$1" path="$2" body="${3:-}"
-            local args=(-sf --max-time 15 -X "$method" "$BASE$path"
+            local args=(-s --max-time 15 -X "$method" "$BASE$path"
                         -H "X-Session-ID: $SESSION" -H "X-User: admin"
                         -H "Content-Type: application/json")
             [ -n "$body" ] && args+=(-d "$body")
@@ -282,14 +282,14 @@ jobs:
           echo "$INJECT" | grep -q '"success":false\|Forbidden\|not allowed' \
             && ok "Command injection blocked" || fail "Command injection NOT blocked"
 
-          PROM=$(curl -sf --max-time 5 $BASE/metrics \
+          PROM=$(curl -s --max-time 5 $BASE/metrics \
             -H "X-Session-ID: $SESSION" -H "X-User: admin" 2>/dev/null || echo "")
           [ -n "$PROM" ] && ok "Prometheus /metrics responds" || fail "Prometheus /metrics no response"
 
           # ── Logout ────────────────────────────────────────────────────────────
 
           assert_json "Logout" "$(api POST /api/auth/logout)" "success" "true"
-          AUTHED=$(curl -sf $BASE/api/auth/check -H "X-Session-ID: $SESSION" | \
+          AUTHED=$(curl -s $BASE/api/auth/check -H "X-Session-ID: $SESSION" | \
             python3 -c "import sys,json; print(json.load(sys.stdin).get('authenticated'))" 2>/dev/null)
           [ "$AUTHED" = "False" ] || [ "$AUTHED" = "false" ] \
             && ok "Session dead after logout" \
