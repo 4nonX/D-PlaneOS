@@ -45,6 +45,15 @@
 - NixOS (experimental — see NixOS section)
 - Any systemd-based Linux with ZFS support
 
+### **Fully working NAS out of the box?**
+
+| Base OS    | Web UI + daemon + ZFS | File sharing (SMB/NFS) | Docker |
+|------------|------------------------|-------------------------|--------|
+| **NixOS**  | Yes (one `nixos-rebuild switch`) | Yes — Samba + NFS enabled in config | Yes — ZFS driver configured |
+| **Debian** | Yes (`sudo ./install.sh`)        | No — install `samba` and `nfs-kernel-server` yourself, then configure | No — install `docker.io` if you want containers |
+
+On **Debian/Ubuntu**, the installer gives you the management stack (daemon, nginx, ZFS tools, DB, systemd). You get a working web UI and can create pools, users, and shares from the UI. For **actual** SMB/NFS serving you must install and enable Samba and NFS; the daemon writes share config (e.g. `/var/lib/dplaneos/smb-shares.conf`) for Samba to use. On **NixOS**, the flake/configuration enables the full stack (ZFS, daemon, nginx, Docker, Samba, NFS, firewall, backups) in one go.
+
 ---
 
 ## Pre-Installation Checklist
@@ -85,12 +94,14 @@ sudo ./install.sh
 ```
 
 **What happens:**
-1. System dependencies installed (ZFS, Docker, SQLite, Go)
-2. D-PlaneOS daemon compiled
+1. System dependencies installed (ZFS utilities, nginx, SQLite, smartmontools, etc.; Go only if building from source)
+2. D-PlaneOS daemon built or pre-built binary installed
 3. Database initialized with RBAC schema
 4. systemd service created
 5. nginx reverse proxy configured
 6. First admin user setup prompt
+
+**Note:** The installer does *not* install Docker, Samba, or NFS. For a full NAS with file sharing, install them after: `sudo apt install docker.io samba nfs-kernel-server` (then enable/start smbd, nfs-server). The daemon will generate SMB share config; point Samba at `/var/lib/dplaneos/smb-shares.conf` or use the UI to manage shares.
 
 **Installation time:** ~5-10 minutes (depending on internet speed)
 
