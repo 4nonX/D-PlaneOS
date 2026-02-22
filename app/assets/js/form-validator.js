@@ -1,4 +1,4 @@
-// D-PlaneOS v3.2.1 - Form Validation
+// D-PlaneOS - Form Validation
 
 class FormValidator {
   constructor(form) {

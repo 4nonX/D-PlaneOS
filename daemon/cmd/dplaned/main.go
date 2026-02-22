@@ -405,7 +405,7 @@ func main() {
 	r.Handle("/api/system/audit/stats", permRoute("audit","read",auditRotationHandler.GetAuditStats)).Methods("GET")
 	r.Handle("/api/system/audit/verify-chain", permRoute("audit","read",auditRotationHandler.VerifyAuditChain)).Methods("GET")
 
-	supportBundleHandler := handlers.NewSupportBundleHandler(db)
+	supportBundleHandler := handlers.NewSupportBundleHandler(db, Version)
 	r.Handle("/api/system/support-bundle", permRoute("system","admin",supportBundleHandler.GenerateBundle)).Methods("POST")
 
 	webhookHandler := handlers.NewWebhookHandler(db)
@@ -502,7 +502,7 @@ func main() {
 	r.HandleFunc("/api/users/create", userGroupHandler.HandleUsers).Methods("POST")
 
 	// System status, profile, preflight, setup handlers
-	systemStatusHandler := handlers.NewSystemStatusHandler(db)
+	systemStatusHandler := handlers.NewSystemStatusHandler(db, Version)
 	r.HandleFunc("/api/system/setup-admin", systemStatusHandler.HandleSetupAdmin).Methods("POST")
 	r.HandleFunc("/api/system/status", systemStatusHandler.HandleStatus).Methods("GET")
 	r.HandleFunc("/api/system/profile", systemStatusHandler.HandleProfile).Methods("GET")

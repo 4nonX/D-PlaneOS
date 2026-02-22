@@ -1,5 +1,5 @@
 /**
- * D-PlaneOS Real-time WebSocket Client v3.2.1
+ * D-PlaneOS Real-time WebSocket Client
  * Connects to event daemon for live system updates
  */
 

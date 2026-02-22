@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# D-PlaneOS v3.2.1 — NixOS First-Boot Setup
+# D-PlaneOS — NixOS First-Boot Setup
 # ─────────────────────────────────────────────────────────────────────────────
 # Run once after initial nixos-install and reboot:
 #   bash /root/setup-nixos.sh
@@ -12,6 +12,10 @@
 #   5. Triggers a nixos-rebuild switch
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VERSION="${VERSION:-$(cat "$REPO_ROOT/VERSION" 2>/dev/null || echo "unknown")}"
 
 CONFIG="/etc/nixos/configuration.nix"
 BOLD="\033[1m"
@@ -32,7 +36,7 @@ if [ "$(id -u)" != "0" ]; then
 fi
 
 echo -e "${BOLD}"
-echo "    D-PlaneOS v3.2.1 — NixOS Setup"
+echo "    D-PlaneOS v${VERSION} — NixOS Setup"
 echo "────────────────────────────────────────"
 echo -e "${NC}"
 

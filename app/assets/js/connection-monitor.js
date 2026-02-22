@@ -1,4 +1,4 @@
-// D-PlaneOS v3.2.1 - Connection Status Monitor
+// D-PlaneOS - Connection Status Monitor
 
 class ConnectionMonitor {
   constructor() {

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# D-PlaneOS v3.2.1 — Bootstrap Installer
+# D-PlaneOS — Bootstrap Installer
 #
 # This is the ONE-LINER entry point:
 #
@@ -21,7 +21,15 @@
 
 set -euo pipefail
 
-VERSION="3.2.1"
+# Version: from repo VERSION file when present, else from GitHub raw (avoids stale hardcodes)
+if [ -f "$(dirname "$0")/VERSION" ]; then
+  VERSION=$(cat "$(dirname "$0")/VERSION")
+else
+  VERSION=$(curl -sL "https://raw.githubusercontent.com/4nonX/dplaneos/main/VERSION" 2>/dev/null || true)
+fi
+[ -z "$VERSION" ] && { echo "Could not determine D-PlaneOS version." >&2; exit 1; }
+VERSION=$(echo "$VERSION" | tr -d '\r\n')
+
 RELEASE_BASE="https://github.com/4nonX/dplaneos/releases/download/v${VERSION}"
 # Fallback mirror if GitHub is unreachable
 MIRROR_BASE="https://releases.dplaneos.io/v${VERSION}"

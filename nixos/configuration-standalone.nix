@@ -1,4 +1,4 @@
-# D-PlaneOS v3.2.1 — NixOS Standalone Configuration
+# D-PlaneOS — NixOS Standalone Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 # This file IS your entire NAS operating system configuration.
 # Edit it, then run: sudo nixos-rebuild switch

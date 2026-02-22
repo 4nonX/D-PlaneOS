@@ -23,8 +23,11 @@ type SystemStatusHandler struct {
 	version   string
 }
 
-func NewSystemStatusHandler(db *sql.DB) *SystemStatusHandler {
-	return &SystemStatusHandler{db: db, startTime: time.Now(), version: "3.2.1"}
+func NewSystemStatusHandler(db *sql.DB, version string) *SystemStatusHandler {
+	if version == "" {
+		version = "dev"
+	}
+	return &SystemStatusHandler{db: db, startTime: time.Now(), version: version}
 }
 
 func (h *SystemStatusHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {

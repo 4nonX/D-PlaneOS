@@ -16,7 +16,7 @@
     <div style="display: flex; align-items: center; gap: 16px;">
       <div class="logo">
         D-PlaneOS
-        <span class="version-badge">v3.2.1</span>
+        <span class="version-badge" id="nav-version-badge">—</span>
       </div>
     </div>
     <div class="nav-links">
@@ -251,4 +251,10 @@ function showKeyboardHelp() {
       }
     });
   }
+
+  // Version badge from /health (no auth required)
+  fetch('/health').then(function(r) { return r.json(); }).then(function(d) {
+    const el = document.getElementById('nav-version-badge');
+    if (el && d.version) el.textContent = 'v' + d.version;
+  }).catch(function() {});
 })();

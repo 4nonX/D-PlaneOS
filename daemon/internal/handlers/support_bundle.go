@@ -23,11 +23,15 @@ import (
 // Collection is best-effort: failures in individual sections are logged and
 // included as error notes inside the archive, never cause a 500.
 type SupportBundleHandler struct {
-	db *sql.DB
+	db      *sql.DB
+	version string
 }
 
-func NewSupportBundleHandler(db *sql.DB) *SupportBundleHandler {
-	return &SupportBundleHandler{db: db}
+func NewSupportBundleHandler(db *sql.DB, version string) *SupportBundleHandler {
+	if version == "" {
+		version = "dev"
+	}
+	return &SupportBundleHandler{db: db, version: version}
 }
 
 // bundleSection is one file's worth of content in the archive.
@@ -214,7 +218,7 @@ func (h *SupportBundleHandler) GenerateBundle(w http.ResponseWriter, r *http.Req
 	meta := map[string]interface{}{
 		"generated_at":    time.Now().UTC().Format(time.RFC3339),
 		"hostname":        hostname,
-		"dplaneos_version": "3.2.1",
+		"dplaneos_version": h.version,
 		"sections":        len(sections),
 	}
 	metaJSON, _ := json.MarshalIndent(meta, "", "  ")

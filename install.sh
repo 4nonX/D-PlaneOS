@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# D-PlaneOS v3.2.1 — Installer
+# D-PlaneOS — Installer
 #
 # ── ONE-LINER INSTALL (nothing to download first) ────────────────────────────
 #
@@ -23,13 +23,13 @@
 
 set -euo pipefail
 
-# ── Version ───────────────────────────────────────────────────────────────────
-readonly VERSION="3.2.1"
+# ── Version (from repo VERSION file; tarballs include it) ─────────────────────
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly VERSION="${VERSION:-$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown")}"
 readonly INSTALL_DIR="/opt/dplaneos"
 readonly DB_PATH="/var/lib/dplaneos/dplaneos.db"
 readonly LOG_FILE="/var/log/dplaneos-install.log"
 readonly BACKUP_BASE="/var/lib/dplaneos/backups"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
