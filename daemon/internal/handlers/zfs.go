@@ -160,7 +160,8 @@ func (h *ZFSHandler) ListDatasets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	output, err := executeCommand("/usr/sbin/zfs", []string{"list", "-H", "-o", "name,used,avail,refer,mountpoint", "-t", "filesystem"})
+	// -p: parsable (numeric) used/avail/refquota for quota UI
+	output, err := executeCommand("/usr/sbin/zfs", []string{"list", "-Hp", "-o", "name,used,avail,refer,mountpoint,refquota", "-t", "filesystem"})
 	duration := time.Since(start)
 
 	audit.LogCommand(audit.LevelInfo, user, "zfs_list", nil, err == nil, duration, err)
@@ -341,10 +342,10 @@ func isPoolNameChar(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
-// parseZfsList parses `zfs list -H -o name,used,avail,refer,mountpoint` output.
-// Same resilience as parseZpoolList: tab-split, field validation, malformed line skip.
-func parseZfsList(output string) []map[string]string {
-	var datasets []map[string]string
+// parseZfsList parses `zfs list -Hp -o name,used,avail,refer,mountpoint,refquota` output.
+// With -p, used/avail/refquota are numeric (bytes); refquota is 0 or - when unset.
+func parseZfsList(output string) []map[string]interface{} {
+	var datasets []map[string]interface{}
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
 	for _, line := range lines {
@@ -366,16 +367,30 @@ func parseZfsList(output string) []map[string]string {
 			continue
 		}
 
-		datasets = append(datasets, map[string]string{
+		usedNum := parseIntZero(fields[1])
+		availNum := parseIntZero(fields[2])
+		quotaNum := int64(0)
+		if len(fields) >= 6 && fields[5] != "" && fields[5] != "-" {
+			quotaNum = parseIntZero(fields[5])
+		}
+
+		datasets = append(datasets, map[string]interface{}{
 			"name":       fields[0],
-			"used":       fields[1],
-			"avail":      fields[2],
+			"used":       usedNum,
+			"avail":      availNum,
 			"refer":      fields[3],
 			"mountpoint": fields[4],
+			"quota":      quotaNum,
 		})
 	}
 
 	return datasets
+}
+
+func parseIntZero(s string) int64 {
+	var n int64
+	fmt.Sscanf(s, "%d", &n)
+	return n
 }
 
 // respondJSON and respondError are defined in helpers.go

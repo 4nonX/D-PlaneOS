@@ -8,6 +8,22 @@ class DaemonAPI {
     this.baseURL = '';
   }
 
+  // Generic request: (url, method?, body?) → parsed JSON (for pages that call daemonAPI(url) or daemonAPI(url, 'POST', body))
+  async request(url, method = 'GET', body) {
+    const options = { method };
+    if (body != null && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+      options.body = typeof body === 'string' ? body : JSON.stringify(body);
+    }
+    const response = await this.fetch(url, options);
+    const text = await response.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(text || response.statusText);
+    }
+  }
+
   // Helper for CSRF-protected fetch with retry logic
   async fetch(url, options = {}) {
     const defaultOptions = {
@@ -327,5 +343,16 @@ class DaemonAPI {
   }
 }
 
-// Global instance
-const daemonAPI = new DaemonAPI();
+// Global: callable daemonAPI(url, method?, body?) and daemonAPI.zfs_pools() etc.
+const _daemonAPIInstance = new DaemonAPI();
+function daemonAPI(url, method, body) {
+  if (typeof url === 'string') {
+    return _daemonAPIInstance.request(url, method || 'GET', body);
+  }
+  return _daemonAPIInstance;
+}
+Object.getOwnPropertyNames(DaemonAPI.prototype).forEach(key => {
+  if (key !== 'constructor' && typeof _daemonAPIInstance[key] === 'function') {
+    daemonAPI[key] = _daemonAPIInstance[key].bind(_daemonAPIInstance);
+  }
+});

@@ -39,3 +39,9 @@ This document records the results of auditing the repository against the goals a
 - **ECC:** Confirmed (dmidecode, dashboard advisory, `NON-ECC-WARNING.md`).
 - **API tokens:** Confirmed (schema + `api_tokens.go`).
 - **Doc gaps fixed:** INSTALLATION-GUIDE referenced non-existent `INSTALLATION-GUIDE-NIXOS.md` → now points to `nixos/NIXOS-INSTALL-GUIDE.md` and `nixos/README.md`. Support section claimed `/usr/share/doc/dplaneos/` → updated to repo/install paths. Uninstall section referenced non-existent `uninstall.sh` → replaced with manual steps.
+
+## UI/backend alignment (NAS expectations)
+
+- **daemonAPI callable:** Setup wizard, settings, and users pages called `daemonAPI(url, method?, body?)` but the global was only the `DaemonAPI` instance (not a function). Added `request(url, method, body)` to the class and a callable wrapper so both `daemonAPI('/api/...')` and `daemonAPI.zfs_pools()` work. Same behaviour on Debian and NixOS (shared app).
+- **Dataset quota:** Pools page sent set/remove quota to POST `/api/zfs/datasets` with `action: 'set_quota'`, which the backend does not handle. Frontend now calls POST `/api/zfs/dataset/quota` with `{ dataset, refquota, refreservation }` (refquota as human string e.g. `"5G"` or `"none"`). Added `bytesToZfsQuota(bytes)` and fixed `setQuota`/`removeQuota`. Backend already had `SetDatasetQuota` for that contract.
+- **Datasets list for quota tab:** Frontend expected `d.datasets` and numeric `used`/`quota`; backend returned `d.data` and string used/avail. ListDatasets now uses `zfs list -Hp -o name,used,avail,refer,mountpoint,refquota` and parseZfsList returns `quota` (and numeric used/avail) so the quota tab shows and updates correctly. Frontend accepts `d.datasets||d.data`.
