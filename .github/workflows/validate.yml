@@ -278,9 +278,11 @@ jobs:
           valid_json "$(api GET /api/rbac/me/permissions)" && ok "My permissions"    || fail "My permissions → invalid JSON"
           valid_json "$(api GET /api/auth/tokens)"         && ok "API tokens"        || fail "API tokens → invalid JSON"
 
-          INJECT=$(api POST /api/zfs/command \
-            "{\"command\":\"ls\",\"args\":[\"/etc/passwd\"],\"session_id\":\"$SESSION\",\"user\":\"admin\"}")
-          echo "$INJECT" | grep -q '"success":false\|Forbidden\|not allowed' \
+          # Must use curl -s (no -f): server returns 403/404 when blocking, and we need the JSON body
+          INJECT=$(curl -s --max-time 15 -X POST "$BASE/api/zfs/command" \
+            -H "X-Session-ID: $SESSION" -H "X-User: admin" -H "Content-Type: application/json" \
+            -d "{\"command\":\"ls\",\"args\":[\"/etc/passwd\"],\"session_id\":\"$SESSION\",\"user\":\"admin\"}")
+          echo "$INJECT" | grep -qE '"success"\s*:\s*false|Forbidden|not allowed|Command not found' \
             && ok "Command injection blocked" || fail "Command injection NOT blocked"
 
           PROM=$(curl -sf --max-time 5 $BASE/metrics \
