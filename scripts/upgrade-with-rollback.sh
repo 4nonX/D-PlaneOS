@@ -2,7 +2,7 @@
 #
 # D-PlaneOS v3.2.1 - Safe Upgrade with Automatic Rollback
 #
-# Purpose: Upgrade from v3.2.0 to v3.2.1 with automatic backup and rollback
+# Purpose: Upgrade from the prior release to v3.2.1 with automatic backup and rollback
 # Usage: sudo ./upgrade-with-rollback.sh
 #
 # Features:
