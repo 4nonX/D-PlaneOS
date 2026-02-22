@@ -1,763 +1,271 @@
-# D-PlaneOS v3.2.1 - Showstopper Mitigation Guide
+# D-PlaneOS v3.2.1 — Showstopper Mitigation Guide
 
-**Date:** 2026-02-07  
-**Purpose:** Honest assessment + workarounds for remaining limitations
-
----
-
-## 🎯 EXECUTIVE SUMMARY
-
-D-PlaneOS v3.2.1 has **ZERO technical bugs** but **5 strategic limitations** that may be showstoppers for specific use cases.
-
-This guide provides:
-- Honest assessment of each limitation
-- Workarounds (where possible)
-- Migration timeline for fixes
-- Decision matrix: "Should I use v3.2.1?"
+**Updated:** 2026-02-22  
+**Replaces:** 2026-02-07 edition (stale — referenced PHP layer that no longer exists)  
+**Purpose:** Honest assessment of what works, what doesn't, and what to do about it
 
 ---
 
-## 🚨 SHOWSTOPPER #1: Binary-Trust Barrier
+## How to Read This Guide
 
-### The Issue
+Each item is classified as one of:
 
-**Go daemon is compiled binary - not auditable like PHP**
-
-**Who's affected:**
-- Security auditors
-- Open-source purists
-- Organizations requiring source-level review
-
-**Severity:** 🔴 HIGH for security-critical environments
-
-### Why It Exists
-
-**Security trade-off:**
-- ✅ Go daemon = privilege separation (secure)
-- ❌ Binary = not transparently auditable
-
-### Mitigation Options
-
-#### Option A: Compile from Source (Full Transparency)
-
-```bash
-# Install Go compiler
-sudo apt install golang-go
-
-# Navigate to daemon source
-cd /var/www/dplaneos/daemon
-
-# Review ALL source code
-find . -name "*.go" -exec less {} \;
-
-# Compile yourself
-go build -o dplaned ./cmd/dplaned
-
-# Compare with shipped binary
-sha256sum dplaned /usr/local/bin/dplaned
-
-# Install your build
-sudo install -m 755 dplaned /usr/local/bin/dplaned
-sudo systemctl restart dplaned
-```
-
-**Result:** Full transparency, you control the binary
-
-#### Option B: Continuous Monitoring
-
-Use the included **Daemon Watchdog** (see below) to:
-- Monitor daemon behavior
-- Detect anomalies
-- Auto-restart on crashes
-- Alert on suspicious activity
-
-```bash
-# Install watchdog
-sudo cp /var/www/dplaneos/scripts/dplaneos-watchdog.sh /usr/local/bin/
-sudo chmod +x /usr/local/bin/dplaneos-watchdog.sh
-
-# Add to cron (every 5 minutes)
-echo "*/5 * * * * /usr/local/bin/dplaneos-watchdog.sh" | sudo crontab -
-```
-
-#### Option C: Future enhancement (eBPF Monitoring)
-
-**Roadmap:** A future version will include eBPF-based daemon monitoring showing:
-- All syscalls made
-- Network connections
-- File access
-- Memory operations
-
-**Timeline:** Q3 2026
-
-### Decision Matrix
-
-| Your Requirement | v3.2.1 Suitable? | Recommendation |
-|------------------|------------------|----------------|
-| Home use | ✅ YES | Use as-is |
-| Small business | ✅ YES | Use with monitoring |
-| Security audit required | ⚠️ MAYBE | Compile from source |
-| Government/Military | ❌ NO | Contact maintainer for roadmap |
+- ✅ **RESOLVED** — was a showstopper in an earlier version, no longer is
+- ⚠️ **PARTIAL** — real implementation exists but with documented limits
+- 🔴 **OPEN** — still a genuine limitation in v3.2.1
 
 ---
 
-## 🚨 SHOWSTOPPER #2: Replication is Simulated
+## ✅ RESOLVED — Showstopper #2: Replication Was Simulated
 
-### The Issue
+### What the Old Guide Said
 
-**ZFS replication GUI returns "success" but does NOT execute replication!**
+> `app/api/replication.php` line 121: `// Send snapshot (simulated)` — the GUI returns "success" but does nothing.
 
-**CRITICAL:** Line 121 in `app/api/replication.php`:
-```php
-// Send snapshot (simulated)
-// In production: sudo zfs send $snapshot | ssh $target sudo zfs receive
-```
+### What Is Actually True in v3.2.1
 
-**Who's affected:**
-- Anyone relying on GUI for offsite backup
-- Business continuity planning
-- Disaster recovery setups
+`app/api/replication.php` **does not exist**. It was removed when the PHP layer was replaced by the Go daemon in v3.0.0.
 
-**Severity:** 🔴 CRITICAL for DR/BC scenarios
+The real implementation lives in `daemon/internal/handlers/replication_remote.go`. It performs:
 
-### Why It Exists
+- Full `zfs send | ssh zfs recv` pipe
+- Incremental sends (`-i base_snapshot`)
+- Compressed streams (`-c` flag)
+- Resume tokens for interrupted transfers — the send command checks for an existing token on the remote before starting, avoiding full re-sends after network drops
+- Rate limiting via `pv` (e.g. `rate_limit: "50M"` for 50 MB/s)
+- Input validation on all shell-bound fields (snapshot name, remote host, remote user, port, SSH key path) — shell metacharacters are rejected before any command is constructed
 
-**Complexity of production-ready replication:**
-- SSH key management
-- Network error handling
-- Resume on failure
-- Bandwidth throttling
-- Encryption in transit
-- Partial send/receive
-- Incremental vs full
+SSH connectivity can be verified independently before attempting a transfer via `POST /api/replication/test`.
 
-**Proper implementation requires 2,000+ lines of code.**
+**Both endpoints (`/api/replication/remote` and `/api/replication/test`) are exercised in CI** and pass on every commit.
 
-### Current Status
+### What Still Requires Manual Setup
 
-**What Works:**
-- ✅ Replication task creation (DB)
-- ✅ Replication scheduling (DB)
-- ✅ Replication UI
+SSH key distribution is not handled by the GUI. Before using GUI replication, set up key-based auth manually:
 
-**What DOESN'T Work:**
-- ❌ Actual zfs send/receive
-- ❌ SSH connection handling
-- ❌ Error recovery
-- ❌ Progress tracking
-
-### Mitigation Options
-
-#### Option A: Manual CLI Replication (Production-Ready NOW)
-
-**Step 1: Set up SSH keys**
 ```bash
-# On source NAS
+# On the source NAS
 sudo ssh-keygen -t ed25519 -f /root/.ssh/replication_key -N ""
-
-# Copy to target
 sudo ssh-copy-id -i /root/.ssh/replication_key.pub root@target-nas
 ```
 
-**Step 2: Create replication script**
-```bash
-sudo nano /usr/local/bin/replicate-to-offsite.sh
-```
-
-```bash
-#!/bin/bash
-# Production-grade ZFS replication script
-
-SOURCE_DATASET="tank/important"
-TARGET_HOST="backup-nas.example.com"
-TARGET_DATASET="backup/important"
-SSH_KEY="/root/.ssh/replication_key"
-
-# Find latest snapshot
-LATEST=$(zfs list -t snapshot -o name -s creation | grep "^${SOURCE_DATASET}@" | tail -1)
-
-if [ -z "$LATEST" ]; then
-    echo "ERROR: No snapshots found"
-    exit 1
-fi
-
-# Send to remote
-echo "Replicating $LATEST..."
-zfs send -v $LATEST | \
-    ssh -i "$SSH_KEY" -o ConnectTimeout=10 root@$TARGET_HOST \
-    "zfs receive -F $TARGET_DATASET"
-
-if [ $? -eq 0 ]; then
-    echo "SUCCESS: $LATEST replicated"
-else
-    echo "ERROR: Replication failed"
-    exit 1
-fi
-```
-
-**Step 3: Schedule via cron**
-```bash
-# Daily at 2 AM
-0 2 * * * /usr/local/bin/replicate-to-offsite.sh
-```
-
-**Result:** Production-ready replication TODAY
-
-#### Option B: Use syncoid (Recommended)
-
-**Install syncoid (part of sanoid):**
-```bash
-sudo apt install sanoid
-```
-
-**Configure replication:**
-```bash
-sudo nano /etc/sanoid/syncoid.conf
-```
-
-```
-[tank/important]
-target = root@backup-nas:backup/important
-recursive = yes
-use_hold_tags = yes
-```
-
-**Run manually or via cron:**
-```bash
-# Manual
-sudo syncoid tank/important root@backup-nas:backup/important
-
-# Cron (daily 2 AM)
-0 2 * * * /usr/sbin/syncoid tank/important root@backup-nas:backup/important
-```
-
-**Benefits:**
-- ✅ Resume on failure
-- ✅ Incremental sends
-- ✅ Progress tracking
-- ✅ Battle-tested
-- ✅ Production-ready
-
-#### Option C: Planned for next minor release
-
-**Roadmap:** Next release will include:
-- Complete zfs send/receive
-- SSH key management UI
-- Network error handling
-- Resume functionality
-- Progress tracking
-- Bandwidth throttling
-- Encryption options
-
-**Timeline:** Q2 2026 (March-April)
-
-**Note:** We're integrating syncoid as backend!
-
-### Decision Matrix
-
-| Your Need | Recommendation |
-|-----------|----------------|
-| Need replication NOW | Use syncoid (Option B) |
-| Comfortable with CLI | Manual script (Option A) |
-| Want GUI only | Planned feature (Option C) |
-| Testing/Development | v3.2.1 OK (just don't rely on it) |
-
-### CRITICAL WARNING
-
-**DO NOT rely on v3.2.1 replication GUI for production!**
-
-If you:
-- Click "Execute Replication" in GUI
-- See "Success" message
-- Think your data is replicated
-
-**YOUR DATA IS NOT REPLICATED!**
-
-Use Option A or B above.
+Then point the GUI's SSH key path field at `/root/.ssh/replication_key`.
 
 ---
 
-## 🚨 SHOWSTOPPER #3: Resource Hunger on Small Hardware
+## ✅ RESOLVED — Showstopper #3: PostgreSQL Resource Hunger
 
-### The Issue
+### What the Old Guide Said
 
-**v3.2.1 requires more resources than v2.x**
+> v3.2.1 requires PostgreSQL (+100–200 MB RAM). Raspberry Pi users and low-RAM systems are affected.
 
-**Increased requirements:**
-- Go daemon: +30MB RAM baseline
-- PostgreSQL: +100-200MB RAM
-- Material Design 3: +CPU for animations
+### What Is Actually True in v3.2.1
 
-**Who's affected:**
-- Raspberry Pi users (especially Pi 3B or older)
-- Old Atom boards (N270, N280 era)
-- VMs with <2GB RAM
-- Systems with single-core CPUs
+**There is no PostgreSQL**. The database backend is SQLite with FTS5, built directly into the daemon binary at compile time (`-tags sqlite_fts5`). `install.sh` installs `sqlite3` and initialises the schema at `/var/lib/dplaneos/dplaneos.db`. No external database process runs.
 
-**Severity:** 🟡 MEDIUM (workable with tuning)
+The resource profile is:
 
-### Measured Impact
+- Daemon idle RAM: ~50–80 MB (Go runtime + SQLite in-process)
+- No separate database service
+- Compatible with Raspberry Pi 4 (4 GB) and similar single-board hardware
 
-**v2.6 (PHP only, SQLite):**
-- Idle RAM: 150MB
-- Active RAM: 250MB
-- CPU: <5% idle
-
-**v3.2.1 (Go + PostgreSQL):**
-- Idle RAM: 400MB
-- Active RAM: 650MB
-- CPU: 8-12% idle
-
-**Increase:** +2.6x RAM, +2x CPU
-
-### Mitigation Options
-
-#### Option A: Use SQLite Instead of PostgreSQL
-
-**During installation:**
-```bash
-sudo ./install.sh
-
-# When prompted for database:
-# [1] PostgreSQL (recommended)
-# [2] SQLite (lightweight)
-# Choose: 2
-```
-
-**Saves:** ~150MB RAM, 5% CPU
-
-**Trade-off:** 
-- ✅ Lower resources
-- ❌ Limited to 1-5 concurrent users
-- ❌ Database locks under load
-
-#### Option B: Tune PostgreSQL for Low Memory
-
-**Edit PostgreSQL config:**
-```bash
-sudo nano /etc/postgresql/15/main/postgresql.conf
-```
-
-```ini
-# Low-memory tuning
-shared_buffers = 32MB              # Default: 128MB
-effective_cache_size = 128MB       # Default: 4GB
-maintenance_work_mem = 16MB        # Default: 64MB
-work_mem = 2MB                     # Default: 4MB
-max_connections = 20               # Default: 100
-```
-
-**Restart:**
-```bash
-sudo systemctl restart postgresql
-```
-
-**Saves:** ~100MB RAM
-
-#### Option C: Limit ZFS ARC
-
-**ZFS uses RAM for caching - limit it:**
-```bash
-# Limit ARC to 512MB (for 2GB RAM systems)
-echo "options zfs zfs_arc_max=536870912" | sudo tee /etc/modprobe.d/zfs.conf
-
-# Reboot to apply
-sudo reboot
-```
-
-**Saves:** Prevents ZFS from using ALL available RAM
-
-#### Option D: Disable Material Design Animations
-
-**Edit frontend config:**
-```bash
-sudo nano /var/www/dplaneos/app/includes/config.php
-```
-
-```php
-// Disable heavy animations
-define('MATERIAL_ANIMATIONS', false);
-```
-
-**Saves:** 3-5% CPU on low-end hardware
-
-### Hardware Requirements Matrix
-
-| Hardware | SQLite | PostgreSQL | Recommended |
-|----------|--------|------------|-------------|
-| Pi 4 (4GB) | ✅ Great | ✅ Great | PostgreSQL |
-| Pi 3B+ (1GB) | ✅ OK | ⚠️ Slow | SQLite + tuning |
-| Pi 2/3 (512MB) | ⚠️ Marginal | ❌ No | Stick with v2.x |
-| Atom N270 | ⚠️ Slow | ❌ No | SQLite only |
-| 2GB RAM VM | ✅ Good | ⚠️ OK | SQLite or tuned PostgreSQL |
-| 4GB+ RAM | ✅ Great | ✅ Great | PostgreSQL |
-
-### Decision Matrix
-
-| Your Hardware | v3.2.1 Suitable? | Configuration |
-|---------------|------------------|---------------|
-| 4GB+ RAM | ✅ YES | Default (PostgreSQL) |
-| 2GB RAM | ⚠️ YES | SQLite + ZFS ARC limit |
-| 1GB RAM | ⚠️ MAYBE | SQLite + all tuning |
-| <1GB RAM | ❌ NO | Use v2.x or upgrade hardware |
+The old guide's RAM figures (400 MB idle, 650 MB active) came from a different version lineage and do not apply here.
 
 ---
 
-## 🚨 SHOWSTOPPER #4: No Upgrade Rollback
+## ✅ RESOLVED — Showstopper #4: No Upgrade Rollback
 
-### The Issue
+### What the Old Guide Said
 
-**If v4 upgrade fails, system can be "bricked"**
+> If a v4 upgrade fails the system can be "bricked". No rollback mechanism exists.
 
-**Failure scenarios:**
-- Database migration fails (encoding issues)
-- PostgreSQL won't start
-- Web server config broken
-- Daemon won't compile
+### What Is Actually True in v3.2.1
 
-**Who's affected:**
-- Anyone upgrading from v2.x/v3.x
-- Systems with custom configs
-- Non-standard setups
+`scripts/upgrade-with-rollback.sh` ships in the release tarball. It:
 
-**Severity:** 🔴 HIGH (data loss risk)
+1. Creates a timestamped backup at `/var/lib/dplaneos-backup/pre-upgrade-YYYY-MM-DD-HH-MM/` before touching anything — includes the SQLite database, nginx config, and system state
+2. Runs the installer with verification at each step, halting on the first error
+3. On failure, automatically restores the backup and restarts services
+4. Leaves a `rollback.sh` in the backup directory for manual recovery if needed
 
-### Why It Exists
-
-**Complexity of rollback:**
-- Database schema changes (hard to reverse)
-- File layout changes
-- Dependency changes
-- State migration
-
-### Mitigation: Auto-Backup + Rollback Script
-
-**Included in v3.2.1:** `/var/www/dplaneos/scripts/upgrade-with-rollback.sh`
-
-**Features:**
-- ✅ Auto-backup before upgrade
-- ✅ Verification checks
-- ✅ One-command rollback
-- ✅ Preserves user data
-
-**Usage:**
+**Usage — always use this instead of running `install.sh` directly when upgrading:**
 
 ```bash
-# Instead of:
-sudo ./install.sh
-
-# Use:
 sudo ./scripts/upgrade-with-rollback.sh
 ```
 
-**What it does:**
-
-1. **Pre-upgrade backup:**
-```
-/var/lib/dplaneos-backup/
-├── pre-upgrade-2026-02-07-14-30/
-│   ├── dplaneos.db                 # Database
-│   ├── apache2-config/             # Web server
-│   ├── installed-packages.txt      # Package list
-│   └── system-state.json           # System info
-```
-
-2. **Safe upgrade:**
-```
-- Run installer
-- Verify each step
-- Stop on first error
-```
-
-3. **Auto-rollback on failure:**
-```
-- Restore database
-- Restore configs
-- Restart services
-- System back to working state
-```
-
-**Manual rollback:**
-```bash
-# If upgrade failed
-cd /var/lib/dplaneos-backup/pre-upgrade-*/
-sudo ./rollback.sh
-
-# System restored to pre-upgrade state
-```
-
-### Pre-Upgrade Checklist
-
-**Before upgrading, verify:**
+**Pre-upgrade checklist:**
 
 ```bash
-# 1. Backup exists
-sudo ls -la /var/lib/dplaneos-backup/
+# Database accessible
+sqlite3 /var/lib/dplaneos/dplaneos.db ".tables"
 
-# 2. Database accessible
-sudo -u www-data sqlite3 /var/lib/dplaneos/dplaneos.db ".tables"
+# Web UI responding
+curl -s http://localhost/health | grep ok
 
-# 3. Web UI working
-curl http://localhost/
+# Pools healthy
+zpool status
 
-# 4. Pools accessible
-zpool list
-
-# 5. Enough disk space
+# At least 500 MB free on the install partition
 df -h /var/www/dplaneos
-# Need: 500MB free minimum
 ```
-
-### Recovery Procedure (If Upgrade Bricks System)
-
-**Step 1: Boot into rescue mode (if needed)**
-```bash
-# If web UI completely broken
-sudo systemctl stop apache2 php-fpm dplaned
-```
-
-**Step 2: Find latest backup**
-```bash
-cd /var/lib/dplaneos-backup/
-ls -lt
-# Use most recent: pre-upgrade-YYYY-MM-DD-HH-MM/
-```
-
-**Step 3: Restore database**
-```bash
-cd /var/lib/dplaneos-backup/pre-upgrade-*/
-sudo cp dplaneos.db /var/lib/dplaneos/dplaneos.db
-```
-
-**Step 4: Restore configs**
-```bash
-sudo cp -r apache2-config/* /etc/apache2/sites-available/
-```
-
-**Step 5: Restart services**
-```bash
-sudo systemctl start apache2 php-fpm
-# Daemon may not exist in v2.x backup - OK
-```
-
-**Step 6: Verify recovery**
-```bash
-curl http://localhost/
-# Should show login page
-```
-
-### Decision Matrix
-
-| Scenario | Risk | Mitigation |
-|----------|------|------------|
-| Fresh install | ✅ LOW | None needed |
-| Upgrade v3.x → v3.2.x | ✅ SUPPORTED | Use upgrade-with-rollback.sh |
-| Upgrade v2.x → v3.x | 🔴 HIGH | Manual backup + rollback script |
-| Custom config | 🔴 HIGH | Document customizations first |
 
 ---
 
-## 🚨 SHOWSTOPPER #5: No High Availability
+## ⚠️ PARTIAL — Showstopper #5: High Availability
+
+### What the Old Guide Said
+
+> No clustering, no failover, no redundancy. HA requires fundamental redesign.
+
+### What Is Actually True in v3.2.1
+
+A real active/standby coordination layer exists in `daemon/internal/ha/cluster.go`. It is not marketing — it runs in the daemon process and is tested in CI.
+
+**What it does:**
+
+- Peer registration: `POST /api/ha/peers` registers a standby node by address
+- Heartbeat loop: the daemon pings all registered peers via `GET /health` every 15 seconds
+- State tracking: peers move through `healthy → degraded → unreachable` after 2 consecutive missed beats, persisted in SQLite so the state survives restarts
+- Quorum calculation: reports whether a majority of registered nodes are reachable
+- Role management: `active` / `standby` roles are assignable per node; `POST /api/ha/peers/{id}/role` promotes or demotes a peer
+- Inbound heartbeats: standby nodes can push heartbeats to the active node via `POST /api/ha/heartbeat`
+
+**What it does not do:**
+
+- **No automatic failover.** If the active node goes unreachable, the standby detects this and reports it, but does not automatically import ZFS pools or redirect traffic. Promotion is a deliberate manual step.
+- **No shared storage / DRBD / Ceph.** Each node manages its own ZFS pools. Replication between them is via the `zfs send` pipeline described above.
+- **No split-brain fencing.** There is no STONITH or equivalent. In a network partition, both nodes may believe they are active. Do not automate pool imports on standby without external fencing.
+- **No VIP management.** DNS or load-balancer cutover is outside the system.
+
+### Practical Active/Standby Setup
+
+This setup gives you monitored standby with manual failover in under 5 minutes.
+
+**Step 1: Register the standby node on the active NAS**
+
+```bash
+curl -s -X POST http://active-nas:9000/api/ha/peers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "nas-b",
+    "name": "NAS-B Standby",
+    "address": "http://192.168.1.101:9000",
+    "role": "standby"
+  }'
+```
+
+**Step 2: Confirm both nodes see each other**
+
+```bash
+# On active node
+curl -s http://active-nas:9000/api/ha/status | python3 -m json.tool
+```
+
+**Step 3: Set up replication (see Showstopper #2 above)**
+
+```bash
+# Daily incremental replication at 02:00
+0 2 * * * curl -s -X POST http://active-nas:9000/api/replication/remote \
+  -H "Content-Type: application/json" \
+  -d '{"snapshot":"tank/data@daily","remote_host":"nas-b","remote_user":"root","remote_pool":"backup/data","incremental":true,"ssh_key_path":"/root/.ssh/replication_key","compressed":true}'
+```
+
+**Step 4: Manual failover procedure (when active fails)**
+
+```bash
+# On standby node — import the pool (use -f if active is unresponsive)
+sudo zpool import -f tank
+
+# Start services
+sudo systemctl start dplaned nginx
+
+# Promote this node to active role (optional — updates GUI display)
+curl -s -X POST http://nas-b:9000/api/ha/peers/nas-a/role \
+  -d '{"role":"standby"}'
+
+# Update DNS or client config to point at nas-b
+```
+
+**RTO (manual): 5–10 minutes**  
+**RPO: time since last successful replication run**
+
+### What HA Is NOT Suitable for in v3.2.1
+
+| Requirement | v3.2.1 | Alternative |
+|---|---|---|
+| Automatic failover < 60 s | ❌ | TrueNAS SCALE Enterprise / Proxmox HA |
+| Split-brain safe auto-promotion | ❌ | Pacemaker + STONITH |
+| Shared active/active storage | ❌ | Ceph, GlusterFS |
+| 99.99% SLA | ❌ | Commercial SAN |
+
+---
+
+## 🔴 OPEN — Showstopper #1: Binary-Trust Barrier
 
 ### The Issue
 
-**No clustering, no failover, no redundancy**
+The Go daemon (`dplaned`) ships as a compiled binary. Users who require source-level auditability before trusting a privileged process cannot verify the binary matches the source without building it themselves.
 
-**Missing features:**
-- Cluster-aware file system
-- Automatic failover
-- Shared storage
-- Load balancing
-- Split-brain prevention
-- Heartbeat monitoring
+**Who is affected:** security auditors, organisations with supply-chain review requirements, open-source purists.
 
-**Who's affected:**
-- Enterprise users
-- Mission-critical deployments
-- 99.99% uptime requirements
-- Multi-site deployments
+**Who is not affected:** home users, homelabs, small offices — the daemon source is published and the build is reproducible.
 
-**Severity:** 🔴 CRITICAL for enterprise
+### Mitigation: Build from Source
 
-### Why It Exists
-
-**Architectural limitation:**
-- ZFS is not cluster-aware
-- Single-node design
-- No shared-nothing architecture
-- No distributed consensus
-
-**HA requires fundamental redesign.**
-
-### Mitigation Options
-
-#### Option A: Manual Failover Setup
-
-**Architecture:**
-```
-Primary NAS (Active)
-    ↓ (replication)
-Secondary NAS (Standby)
-    ↓ (manual failover)
-Clients switch to secondary
-```
-
-**Setup:**
-
-1. **Configure replication (see Showstopper #2)**
-```bash
-# Primary → Secondary (every hour)
-0 * * * * syncoid tank/data root@secondary:tank/data
-```
-
-2. **Prepare secondary for takeover**
-```bash
-# On secondary
-sudo zpool export tank
-# Wait for primary failure
-```
-
-3. **Manual failover procedure**
-```bash
-# On secondary, when primary fails:
-sudo zpool import -f tank
-sudo systemctl start apache2 php-fpm dplaned
-
-# Update DNS or VIP to point to secondary
-# OR tell clients to use secondary IP
-```
-
-**RTO (Recovery Time Objective):** 5-15 minutes (manual)  
-**RPO (Recovery Point Objective):** 1 hour (based on replication schedule)
-
-#### Option B: Scripted Failover with Monitoring
-
-**Use included watchdog + auto-import:**
+The full daemon source is included in the release tarball under `daemon/`. The CI pipeline (GitHub Actions, public log) builds from that same source on every commit. To verify or replace the shipped binary:
 
 ```bash
-# On secondary, monitor primary
-*/1 * * * * /usr/local/bin/monitor-primary.sh
+# Install Go 1.21+
+sudo apt install golang-go   # or use https://go.dev/dl/
+
+cd /path/to/dplaneos-v3.2.1/daemon
+
+# Build
+CGO_ENABLED=1 go build -tags sqlite_fts5 -ldflags "-X main.Version=3.2.1" -o dplaned-local ./cmd/dplaned
+
+# Compare
+sha256sum dplaned-local release/dplaned-linux-amd64
+
+# Deploy your build
+sudo install -m 755 dplaned-local /usr/local/bin/dplaned
+sudo systemctl restart dplaned
 ```
 
-**monitor-primary.sh:**
-```bash
-#!/bin/bash
-PRIMARY_IP="192.168.1.100"
-MAX_FAILURES=3
+If the SHA256 values match, the shipped binary is identical to what the source produces. If they differ, use your own build.
 
-if ! ping -c 3 $PRIMARY_IP > /dev/null; then
-    # Primary down, check again
-    sleep 60
-    if ! ping -c 3 $PRIMARY_IP > /dev/null; then
-        # Primary still down, initiate failover
-        logger "PRIMARY FAILED - Initiating failover"
-        /usr/local/bin/failover-to-secondary.sh
-    fi
-fi
-```
+### What Is Planned
 
-**RTO:** 3-5 minutes (automatic)  
-**RPO:** 1 hour
-
-**WARNING:** Risk of split-brain! Use fencing.
-
-#### Option C: Future Enterprise HA features
-
-**Roadmap:** A future Enterprise tier will include:
-- Active-passive clustering
-- Automatic failover
-- Shared storage (Ceph backend)
-- Heartbeat + fencing
-- VIP management
-- Split-brain prevention
-
-**Timeline:** Q4 2026  
-**Licensing:** Commercial license required
-
-#### Option D: Use Enterprise Alternative
-
-**If you need HA NOW:**
-- TrueNAS Scale (Kubernetes-based, HA capable)
-- Proxmox Cluster (VM-level HA)
-- Commercial SAN (NetApp, etc.)
-
-**D-PlaneOS is NOT an enterprise HA solution (yet).**
-
-### Decision Matrix
-
-| Your Requirement | v3.2.1 Suitable? | Recommendation |
-|------------------|------------------|----------------|
-| Home/Lab | ✅ YES | Use as single node |
-| Small business | ⚠️ MAYBE | Manual failover (Option A) |
-| 99.9% uptime | ❌ NO | Use TrueNAS Scale |
-| 99.99% uptime | ❌ NO | Commercial SAN |
-| Mission-critical | ⚠️ LIMITED | Contact maintainer for roadmap |
+No specific roadmap date. Reproducible build verification (publishing expected hashes in the release alongside CI attestation) is the next step, not eBPF monitoring. The eBPF reference in the previous guide was aspirational and has been removed.
 
 ---
 
-## 📊 FINAL DECISION MATRIX
+## Decision Matrix
 
-### Should YOU use D-PlaneOS v3.2.1?
-
-| Use Case | Recommendation | Confidence |
-|----------|----------------|------------|
-| **Home NAS** (1-5 users) | ✅ YES - Perfect fit | 100% |
-| **Small Office** (5-20 users) | ✅ YES - Use PostgreSQL | 95% |
-| **Homelab/Learning** | ✅ YES - Ideal platform | 100% |
-| **Docker-First** | ✅ YES - Best in class | 100% |
-| **Media Server** | ✅ YES - Excellent | 100% |
-| **Backup Target** | ✅ YES - Reliable | 90% |
-| **Development** | ✅ YES - Great for testing | 100% |
-| **Security Audit Required** | ⚠️ MAYBE - Compile from source | 60% |
-| **Enterprise DR/BC** | ⚠️ MAYBE - Use CLI replication | 50% |
-| **Low-end Hardware** | ⚠️ MAYBE - Use SQLite + tuning | 70% |
-| **Production Replication** | ⚠️ CLI available | 20% |
-| **High Availability** | ❌ NO - Not designed for HA | 0% |
-| **Mission-Critical** | ❌ NO - Use enterprise solution | 0% |
+| Use Case | Verdict | Notes |
+|---|---|---|
+| Home NAS | ✅ Ready | No caveats |
+| Homelab / learning | ✅ Ready | Ideal |
+| Small office (< 20 users) | ✅ Ready | Single node, SQLite handles it |
+| Offsite backup / replication | ✅ Ready | GUI works; SSH keys needed upfront |
+| Monitored active/standby | ⚠️ Usable | Manual failover only; plan your RTO |
+| Security audit required | ⚠️ Usable | Build from source |
+| Auto-failover / 99.99% SLA | ❌ Not this | Use TrueNAS Scale or Proxmox HA |
+| Active/active shared storage | ❌ Not this | Requires Ceph or GlusterFS |
 
 ---
 
-## 🚀 ROADMAP: When Will These Be Fixed?
+## Roadmap
 
-| Showstopper | Fix Version | ETA | Status |
-|-------------|-------------|-----|--------|
-| #1 Binary Trust | Future (eBPF monitoring) | TBD | Planned |
-| #2 Replication | v4.1 (Full implementation) | Q2 2026 | **In Progress** |
-| #3 Resources | v4.1 (Optimizations) | Q2 2026 | Planned |
-| #4 Rollback | v3.2.1 (**Included!**) | NOW | ✅ **DONE** |
-| #5 HA | Future Enterprise tier | TBD | Planned |
-
----
-
-## ✅ CONCLUSION
-
-**D-PlaneOS v3.2.1 is production-ready for:**
-- Home users ✅
-- Small offices ✅
-- Homelabs ✅
-- Docker enthusiasts ✅
-
-**D-PlaneOS v3.2.1 is NOT ready for:**
-- Enterprise HA ❌
-- GUI-only replication ❌
-- Ultra-low-end hardware ❌
-
-**Honest assessment:**
-- **Technical bugs:** ZERO ✅
-- **Strategic limitations:** 5 (documented here)
-- **Workarounds:** Available for all 5
-- **Timeline for fixes:** 4-12 months
-
-**Use it IF:**
-- Your use case matches "production-ready" list
-- You understand the limitations
-- You can accept the workarounds
-
-**Don't use it IF:**
-- You need HA/clustering
-- You require GUI-only replication
-- Hardware is below minimum specs
+| Item | Status | Target |
+|---|---|---|
+| Replication GUI (real implementation) | ✅ Done as of v3.0.0 | — |
+| SQLite-only (no PostgreSQL dependency) | ✅ Done | — |
+| Upgrade rollback script | ✅ Done as of v3.2.1 | — |
+| Active/standby coordination layer | ✅ Done (manual failover) | — |
+| Reproducible build verification / hash attestation | Planned | TBD |
+| Automated failover with fencing | Not planned | Scope exceeds single-node NAS design |
 
 ---
 
-**Honesty is the best policy. Know the limits. Work within them. Succeed anyway.** 🎯
+*Honest assessment: know the limits, work within them.*
