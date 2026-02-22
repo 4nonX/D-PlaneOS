@@ -94,14 +94,18 @@ jobs:
 
       - name: Seed CI user
         run: |
-          CI_PASS="CiAdmin1!Test"
-          CI_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'$CI_PASS', bcrypt.gensalt(rounds=10)).decode())")
+          set +H
+          export CI_PASS="CiAdmin1!Test"
+          CI_HASH=$(python3 -c "import os,bcrypt; print(bcrypt.hashpw(os.environ['CI_PASS'].encode(), bcrypt.gensalt(rounds=10)).decode())")
           sudo sqlite3 /var/lib/dplaneos/dplaneos.db \
             "UPDATE users SET password_hash='$CI_HASH', active=1, role='admin', must_change_password=0 WHERE username='admin';"
-          echo "CI_PASS=$CI_PASS" >> $GITHUB_ENV
+          echo "CI_PASS<<CI_PASS_EOF" >> $GITHUB_ENV
+          echo "$CI_PASS" >> $GITHUB_ENV
+          echo "CI_PASS_EOF" >> $GITHUB_ENV
 
       - name: API integration tests
         run: |
+          set +H
           BASE="http://127.0.0.1:9000"
           PASS=0; FAIL=0; FAILURES=""
 
@@ -129,9 +133,10 @@ jobs:
           assert_json "/health ok"             "$(curl -sf $BASE/health)"  "status" "ok"
           assert_json "/api/csrf returns token" "$(curl -sf $BASE/api/csrf)" "csrf_token"
 
-          LOGIN=$(curl -sf -X POST $BASE/api/auth/login \
+          LOGIN_BODY=$(python3 -c "import os,json; print(json.dumps({'username':'admin','password':os.environ.get('CI_PASS','')}))")
+          LOGIN=$(curl -s -X POST $BASE/api/auth/login \
             -H "Content-Type: application/json" \
-            -d "{\"username\":\"admin\",\"password\":\"$CI_PASS\"}")
+            -d "$LOGIN_BODY")
           assert_json "Login succeeds"        "$LOGIN" "success" "true"
           assert_json "Login returns session" "$LOGIN" "session_id"
 
@@ -152,9 +157,10 @@ jobs:
             -H "Content-Type: application/json" -d '{"username":"bad user<>","password":"x"}')
           [ "$CODE" = "400" ] && ok "Malformed username → 400" || fail "Malformed username → $CODE (want 400)"
 
+          WEAK_BODY=$(python3 -c "import os,json; print(json.dumps({'current_password':os.environ.get('CI_PASS',''),'new_password':'weak'}))")
           WEAK=$(curl -sf -X POST $BASE/api/auth/change-password \
             -H "X-Session-ID: $SESSION" -H "X-User: admin" -H "Content-Type: application/json" \
-            -d "{\"current_password\":\"$CI_PASS\",\"new_password\":\"weak\"}")
+            -d "$WEAK_BODY")
           assert_json "Weak password rejected" "$WEAK" "success" "false"
 
           api() {
