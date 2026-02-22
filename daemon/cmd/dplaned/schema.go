@@ -435,7 +435,7 @@ func seedDefaults(db *sql.DB) error {
 	db.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount)
 	if userCount == 0 {
 		if _, err := db.Exec(
-			"INSERT INTO users (username, display_name, email, active) VALUES ('admin', 'Administrator', 'admin@localhost', 1)",
+			"INSERT INTO users (username, display_name, email, active, role) VALUES ('admin', 'Administrator', 'admin@localhost', 1, 'admin')",
 		); err != nil {
 			return fmt.Errorf("admin user seed: %w", err)
 		}
