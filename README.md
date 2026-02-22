@@ -25,7 +25,7 @@ Web UI: `http://your-server` (nginx reverse proxy on port 80 → daemon on 9000)
 
 **Default login:** username `admin`; password is set on first run via the setup wizard (or by your installer/CI).
 
-> **Rebuilding from source?** You need Go 1.22+ and gcc: `make build` compiles fresh.
+> **Rebuilding from source?** You need Go 1.21+ and gcc: `make build` compiles fresh.
 
 ### Off-Pool Database Backup (recommended for large pools)
 
@@ -78,11 +78,11 @@ Navigate to **Identity → Directory Service** to configure. Supports:
 ## Architecture
 
 - **Frontend:** HTML5 + Material Design 3, flyout navigation, no framework dependencies
-- **Backend:** Go daemon (`dplaned`, 8MB) on port 9000, 171 API routes
+- **Backend:** Go daemon (`dplaned`, 8MB) on port 9000, 170+ API routes
 - **Database:** SQLite with WAL mode, `synchronous=FULL`, daily `.backup` (WAL-safe)
 - **Web Server:** nginx reverse proxy (TLS termination)
 - **Storage:** ZFS (native kernel module) + ZED hook for real-time disk failure alerts
-- **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 34 permissions), injection-hardened, OOM-protected (1 GB limit)
+- **Security:** Input validation on all exec.Command (regex whitelist), RBAC (4 roles, 28 permissions), injection-hardened, OOM-protected (512MB limit)
 - **NixOS:** Full support via Flake — entire NAS defined in a single `configuration.nix`
 
 ## Documentation
@@ -92,7 +92,6 @@ Navigate to **Identity → Directory Service** to configure. Supports:
 - `ERROR-REFERENCE.md` — API error codes and diagnostics
 - `TROUBLESHOOTING.md` — Build issues, ZED setup, common fixes
 - `nixos/README.md` — NixOS installation and configuration
-- `LDAP-REFERENCE.md` — LDAP technical reference
 - `INSTALLATION-GUIDE.md` — Detailed installation steps
 
 ## License
