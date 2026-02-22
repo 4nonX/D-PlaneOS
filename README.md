@@ -1,6 +1,6 @@
 # D-PlaneOS v3.2.1 — Enterprise NAS Operating System
 
-Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
+Source-Available NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RBAC, and LDAP/Active Directory integration.
 
 ## Quick Start
 
@@ -106,4 +106,4 @@ Navigate to **Identity → Directory Service** to configure. Supports:
 
 ## License
 
-Open source. See LICENSE file.
+Source-Available. See LICENSE file.
