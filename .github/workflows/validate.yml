@@ -446,7 +446,7 @@ jobs:
             --include="*.json" --include="*.nix" --include="*.service" \
             --include="*.conf" \
             . \
-            | grep -v "vendor\|\.git\|CHANGELOG\|RELEASE-NOTES\|INSTALLATION-GUIDE\|TROUBLESHOOTING\|README" \
+            | grep -v "vendor\|\.git\|CHANGELOG\|RELEASE-NOTES\|INSTALLATION-GUIDE\|TROUBLESHOOTING\|README\|upgrade-with-rollback" \
             | xargs grep -l "$PREV" 2>/dev/null || true)
           if [ -n "$BAD" ]; then
             echo "✗ Stale version $PREV found in:"

@@ -40,3 +40,9 @@ func respondErrorSimple(w http.ResponseWriter, message string, code int) {
 		Error:   message,
 	})
 }
+
+// getUserFromRequest extracts the authenticated username from request headers.
+// The frontend sets X-User on every authenticated request.
+func getUserFromRequest(r *http.Request) string {
+	return r.Header.Get("X-User")
+}

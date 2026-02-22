@@ -13,6 +13,7 @@ type LogLevel string
 const (
 	LevelInfo    LogLevel = "INFO"
 	LevelWarning LogLevel = "WARNING"
+	LevelWarn    LogLevel = "WARNING" // alias for LevelWarning
 	LevelError   LogLevel = "ERROR"
 	LevelSecurity LogLevel = "SECURITY"
 )
