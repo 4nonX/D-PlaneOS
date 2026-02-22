@@ -50,9 +50,9 @@
 | Base OS    | Web UI + daemon + ZFS | File sharing (SMB/NFS) | Docker |
 |------------|------------------------|-------------------------|--------|
 | **NixOS**  | Yes (one `nixos-rebuild switch`) | Yes — Samba + NFS enabled in config | Yes — ZFS driver configured |
-| **Debian** | Yes (`sudo ./install.sh`)        | No — install `samba` and `nfs-kernel-server` yourself, then configure | No — install `docker.io` if you want containers |
+| **Debian/Ubuntu** | Yes (`sudo ./install.sh`) | Yes — Samba + NFS installed and configured | Yes — Docker installed; ZFS driver configured when a pool exists |
 
-On **Debian/Ubuntu**, the installer gives you the management stack (daemon, nginx, ZFS tools, DB, systemd). You get a working web UI and can create pools, users, and shares from the UI. For **actual** SMB/NFS serving you must install and enable Samba and NFS; the daemon writes share config (e.g. `/var/lib/dplaneos/smb-shares.conf`) for Samba to use. On **NixOS**, the flake/configuration enables the full stack (ZFS, daemon, nginx, Docker, Samba, NFS, firewall, backups) in one go.
+On **Debian/Ubuntu**, `install.sh` installs and configures the full NAS stack (daemon, nginx, ZFS tools, **Samba**, **NFS**, **Docker**, DB, systemd) so you get feature parity with the NixOS build. SMB shares are managed by the daemon and written to `/var/lib/dplaneos/smb-shares.conf`; the installer configures the system Samba to use that file. On **NixOS**, the flake does the same in one `nixos-rebuild switch`.
 
 ---
 
@@ -68,6 +68,14 @@ On **Debian/Ubuntu**, the installer gives you the management stack (daemon, ngin
 ---
 
 ## Installation Steps
+
+**Easiest (no download first):** Run the one-liner, then open the URL and log in with the printed password.
+
+```bash
+curl -fsSL https://get.dplaneos.io | sudo bash
+```
+
+**Or** follow the steps below to install from a release tarball.
 
 ### **Step 1: Download Package**
 
@@ -93,17 +101,22 @@ cd dplaneos-v3.2.1
 sudo ./install.sh
 ```
 
-**What happens:**
-1. System dependencies installed (ZFS utilities, nginx, SQLite, smartmontools, etc.; Go only if building from source)
-2. D-PlaneOS daemon built or pre-built binary installed
-3. Database initialized with RBAC schema
-4. systemd service created
-5. nginx reverse proxy configured
-6. First admin user setup prompt
+**What happens (13 phases):**
+1. Pre-flight checks (OS, RAM, disk, port)
+2. Backup (on upgrade) or fresh install
+3. System dependencies: ZFS utilities, nginx, SQLite, smartmontools, **Samba, NFS server, Docker**, and other tools
+4. **Samba, NFS, Docker** configured and enabled (Samba uses daemon-managed `/var/lib/dplaneos/smb-shares.conf`)
+5. ZFS module and ARC tuning
+6. Files installed to `/opt/dplaneos`
+7. Daemon binary (pre-built or built from source)
+8. sudoers (for optional www-data helpers)
+9. Database initialized with RBAC schema; admin password generated
+10. nginx reverse proxy
+11. Kernel tuning (inotify, TCP, vm)
+12. Docker ZFS storage driver (if ZFS pool exists)
+13. systemd services (dplaned, ZFS mount gate); validation
 
-**Note:** The installer does *not* install Docker, Samba, or NFS. For a full NAS with file sharing, install them after: `sudo apt install docker.io samba nfs-kernel-server` (then enable/start smbd, nfs-server). The daemon will generate SMB share config; point Samba at `/var/lib/dplaneos/smb-shares.conf` or use the UI to manage shares.
-
-**Installation time:** ~5-10 minutes (depending on internet speed)
+**Installation time:** ~5–10 minutes (depending on internet speed and whether the daemon is built from source).
 
 ### **Step 4: Access Web Interface**
 

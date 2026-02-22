@@ -163,7 +163,7 @@ echo "  Log          : $LOG_FILE"
 echo ""
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 0/12: Pre-flight checks"
+step "Phase 0/13: Pre-flight checks"
 # ────────────────────────────────────────────────────────────────────────────
 
 [ -f /etc/os-release ] || die "Cannot detect OS"
@@ -208,7 +208,7 @@ $OPT_UPGRADE && log "Mode: Upgrade (data preserved)" || log "Mode: Fresh install
 INSTALL_PHASE=1
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 1/12: Backup"
+step "Phase 1/13: Backup"
 # ────────────────────────────────────────────────────────────────────────────
 
 if $OPT_UPGRADE; then
@@ -253,7 +253,7 @@ fi
 INSTALL_PHASE=2
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 2/12: System dependencies"
+step "Phase 2/13: System dependencies"
 # ────────────────────────────────────────────────────────────────────────────
 
 export DEBIAN_FRONTEND=noninteractive
@@ -278,11 +278,13 @@ esac
 
 apt-get update -qq 2>&1 | tail -1
 
+# NAS stack: Samba (SMB/CIFS), NFS, Docker — same as NixOS for feature parity
 PACKAGES=(nginx sqlite3 smartmontools lsof udev zfsutils-linux
           acl ufw hdparm git openssh-client openssl ca-certificates
           iproute2 procps coreutils
           python3-bcrypt apache2-utils
-          musl-tools)  # enables fully static binary (glibc-independent)
+          musl-tools
+          samba nfs-kernel-server docker.io)  # SMB, NFS, containers
 
 for pkg in "${PACKAGES[@]}"; do
     if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
@@ -294,10 +296,66 @@ for pkg in "${PACKAGES[@]}"; do
     fi
 done
 
-INSTALL_PHASE=3
+# ────────────────────────────────────────────────────────────────────────────
+step "Phase 2b/13: Samba, NFS, Docker (NAS stack)"
+# ────────────────────────────────────────────────────────────────────────────
+
+# Samba: daemon writes shares to /var/lib/dplaneos/smb-shares.conf (see systemd unit)
+# System smb.conf must include that file so smbd serves the daemon-managed shares.
+SMB_CONF="/etc/samba/smb.conf"
+SMB_SHARES="/var/lib/dplaneos/smb-shares.conf"
+if command -v testparm &>/dev/null; then
+    [ -f "$SMB_CONF" ] && cp "$SMB_CONF" "${SMB_CONF}.dpkg-old" 2>/dev/null || true
+    cat > "$SMB_CONF" <<SMBINCLUDE
+# D-PlaneOS — managed by install.sh; do not edit manually
+# All shares are defined by the daemon in the included file.
+include = $SMB_SHARES
+SMBINCLUDE
+    # Minimal stub so smbd can start before any share exists (daemon overwrites on first share)
+    mkdir -p "$(dirname "$SMB_SHARES")"
+    if [ ! -s "$SMB_SHARES" ]; then
+        cat > "$SMB_SHARES" <<'SMBSTUB'
+[global]
+   workgroup = WORKGROUP
+   server string = D-PlaneOS NAS
+   security = user
+   map to guest = Bad User
+   log file = /var/log/samba/log.%m
+   max log size = 1000
+SMBSTUB
+        log "Samba: $SMB_SHARES stub created"
+    fi
+    mkdir -p /var/log/samba
+    systemctl enable smbd nmbd 2>/dev/null && systemctl start smbd nmbd 2>/dev/null \
+        && log "Samba: smbd, nmbd enabled and started" \
+        || warn "Samba: enable/start failed (check journalctl -u smbd)"
+else
+    warn "Samba not installed — skipping SMB config"
+fi
+
+# NFS: server enabled; exports managed via /etc/exports (daemon can reload with exportfs -ra)
+if systemctl is-enabled nfs-server &>/dev/null 2>&1 || [ -f /etc/exports ]; then
+    touch /etc/exports 2>/dev/null || true
+    systemctl enable nfs-server 2>/dev/null && systemctl start nfs-server 2>/dev/null \
+        && log "NFS: nfs-server enabled and started" \
+        || warn "NFS: enable/start failed (check journalctl -u nfs-server)"
+else
+    # nfs-kernel-server on Debian/Ubuntu provides nfs-server.service
+    systemctl enable nfs-server 2>/dev/null || true
+    systemctl start nfs-server 2>/dev/null && log "NFS: nfs-server started" || warn "NFS: start failed"
+fi
+
+# Docker: enable and start; ZFS driver configured later (Phase 10) if ZFS pool exists
+if command -v docker &>/dev/null; then
+    systemctl enable docker 2>/dev/null && ( systemctl start docker 2>/dev/null || true ) \
+        && log "Docker: enabled and started" \
+        || warn "Docker: enable/start failed"
+fi
+
+INSTALL_PHASE=3  # next phase for rollback reporting
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 3/12: ZFS setup"
+step "Phase 3/13: ZFS setup"
 # ────────────────────────────────────────────────────────────────────────────
 
 if ! lsmod | grep -q "^zfs "; then
@@ -325,7 +383,7 @@ log "ZFS ARC: ${ARC_MAX_GB}GB of ${TOTAL_RAM_GB}GB RAM"
 INSTALL_PHASE=4
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 4/12: Installing files"
+step "Phase 4/13: Installing files"
 # ────────────────────────────────────────────────────────────────────────────
 
 mkdir -p "$INSTALL_DIR" /var/lib/dplaneos/{backups,git-stacks} /var/log/dplaneos /etc/dplaneos
@@ -350,7 +408,7 @@ log "Files installed to $INSTALL_DIR"
 INSTALL_PHASE=5
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 5/12: Daemon binary"
+step "Phase 5/13: Daemon binary"
 # ────────────────────────────────────────────────────────────────────────────
 
 BINARY_SRC=""
@@ -425,7 +483,7 @@ fi
 INSTALL_PHASE=6
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 6/12: sudoers"
+step "Phase 6/13: sudoers"
 # ────────────────────────────────────────────────────────────────────────────
 
 SUDOERS_TMP=$(mktemp)
@@ -457,7 +515,7 @@ rm -f "$SUDOERS_TMP"
 INSTALL_PHASE=7
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 7/12: Database"
+step "Phase 7/13: Database"
 # ────────────────────────────────────────────────────────────────────────────
 
 mkdir -p "$(dirname "$DB_PATH")"
@@ -587,7 +645,7 @@ chmod 600 "$DB_PATH"
 INSTALL_PHASE=8
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 8/12: nginx"
+step "Phase 8/13: nginx"
 # ────────────────────────────────────────────────────────────────────────────
 
 cat > /etc/nginx/sites-available/dplaneos <<NGINX
@@ -636,7 +694,7 @@ log "nginx configured (port ${OPT_PORT})"
 INSTALL_PHASE=9
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 9/12: Kernel tuning"
+step "Phase 9/13: Kernel tuning"
 # ────────────────────────────────────────────────────────────────────────────
 
 cat > /etc/sysctl.d/99-dplaneos.conf <<'SYSCTL'
@@ -656,7 +714,7 @@ log "Kernel tuning applied"
 INSTALL_PHASE=10
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 10/12: Docker (optional)"
+step "Phase 10/13: Docker ZFS driver (optional)"
 # ────────────────────────────────────────────────────────────────────────────
 
 if command -v docker &>/dev/null; then
@@ -678,7 +736,7 @@ fi
 INSTALL_PHASE=11
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 11/12: Services"
+step "Phase 11/13: Services"
 # ────────────────────────────────────────────────────────────────────────────
 
 # ZFS mount gate
@@ -766,7 +824,7 @@ fi
 INSTALL_PHASE=12
 
 # ────────────────────────────────────────────────────────────────────────────
-step "Phase 12/12: Validation"
+step "Phase 12/13: Validation"
 # ────────────────────────────────────────────────────────────────────────────
 
 if [ -f "${INSTALL_DIR}/scripts/post-install-validation.sh" ]; then

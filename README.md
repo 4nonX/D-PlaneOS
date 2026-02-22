@@ -4,28 +4,38 @@ Open-source NAS OS with Material Design 3 UI, ZFS storage, Docker containers, RB
 
 ## Quick Start
 
-### Debian/Ubuntu
+### Debian/Ubuntu (one-step full NAS)
+
+**Option A — one-liner (no download first):**
+```bash
+curl -fsSL https://get.dplaneos.io | sudo bash
+```
+
+**Option B — from release tarball:**
 ```bash
 tar xzf dplaneos-v3.2.1.tar.gz
-cd dplaneos
-sudo make install   # Pre-built binary, no compiler needed
-sudo systemctl start dplaned
+cd dplaneos-v3.2.1   # or the extracted directory name
+sudo ./install.sh
 ```
+
+The installer sets up the daemon, nginx, ZFS tools, **Samba (SMB/CIFS), NFS, and Docker** so you get a full NAS in one run. When it finishes, open **http://your-server** in a browser.
+
+**Default login:** username `admin`; password is shown at the end of install (or set via setup wizard on first login).
 
 ### NixOS
 ```bash
-cd nixos
+cd D-PlaneOS/nixos
 sudo bash setup-nixos.sh
 sudo nixos-rebuild switch --flake .#dplaneos
 ```
 
 See [nixos/README.md](nixos/README.md) for the full NixOS guide.
 
-Web UI: `http://your-server` (nginx reverse proxy on port 80 → daemon on 9000)
+### Minimal install (binary only, no Samba/NFS/Docker)
 
-**Default login:** username `admin`; password is set on first run via the setup wizard (or by your installer/CI).
+If you already have nginx and dependencies and only want the daemon: `sudo make install` then `sudo systemctl start dplaned`. See [INSTALLATION-GUIDE.md](INSTALLATION-GUIDE.md) for details.
 
-> **Rebuilding from source?** You need Go 1.21+ and gcc: `make build` compiles fresh.
+> **Building from source?** You need Go 1.21+ and gcc. Run `./install.sh` — it will build the daemon if no pre-built binary is present.
 
 ### Off-Pool Database Backup (recommended for large pools)
 
