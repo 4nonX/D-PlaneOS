@@ -95,7 +95,7 @@ jobs:
           CI_PASS="CiAdmin1!Test"
           CI_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'$CI_PASS', bcrypt.gensalt(rounds=10)).decode())")
           sudo sqlite3 /var/lib/dplaneos/dplaneos.db \
-            "UPDATE users SET password_hash = '$CI_HASH', must_change_password = 0 WHERE username = 'admin';"
+            "UPDATE users SET password_hash = '$CI_HASH' WHERE username = 'admin';"
           echo "CI_PASS=$CI_PASS" >> $GITHUB_ENV
 
       - name: API integration tests
