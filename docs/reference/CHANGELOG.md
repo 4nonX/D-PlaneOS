@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v11.6.1 (2026-05-23) - "UI Polish"
+
+Upgrade from: v11.6.0 - Drop-in. No schema changes. No configuration changes.
+
+### Fixed
+- **Undefined CSS token `var(--text-primary)` in five page components**: The token was never defined in the design system. References in `GitOpsPage.tsx` (branch dropdown), `HAPage.tsx` (connectivity test URL display), `NVMeOFPage.tsx` (two section headings), and `PoolsPage.tsx` (disk wipe confirmation label) all replaced with the correct `var(--text)`.
+- **Missing root tokens `--text-3xs` and `--bg-hover`**: Both were referenced in component styles but absent from the `:root` block. Added: `--text-3xs: 9px` and `--bg-hover: var(--surface-hover)`.
+- **Broken `.modal-close:hover` token references**: Used `var(--bg-hover)` (undefined) and `var(--text-primary)` (undefined); fixed to `var(--surface)` and `var(--text)` respectively.
+- **Password visibility toggle used emoji instead of icon**: Replaced literal unicode checkmark with `<Icon name="visibility" / "visibility_off">` from the Material Symbols set for consistent rendering.
+
+### Changed
+- **Primary color saturation reduced below 80%**: Dark theme: 100% -> 60%; light theme: 80% -> 55%. Prevents oversaturation across accent-colored interactive elements.
+- **Outer glows removed from interactive elements**: Removed `box-shadow` neon glows from `.btn-primary`, `.btn-primary:hover`, `.btn-danger:hover`, sidebar logo, active nav icons, and notification dot. Replaced with neutral drop shadows or no shadow where none is needed.
+- **`text-shadow` glow removed from active tab underline**: `.tab-underline.active` no longer uses `text-shadow: 0 0 12px var(--primary-glow)`.
+- **`background-attachment: fixed` removed from root gradient**: Caused rendering artifacts on iOS Safari (full-viewport jumps on scroll). Root background now uses standard attachment.
+- **Inter removed from font fallback stack**: `'Outfit', 'Inter', system-ui` -> `'Outfit', system-ui`. Inter is banned per the design system.
+- **Glow pulse animation opacity softened**: `glow-pulse-green` max opacity 0.6 -> 0.4; `glow-pulse-blue` 0.6 -> 0.3.
+- **TopBar user chip simplified**: Replaced full pill (avatar, username, role badge) with avatar-only circle wrapped in a tooltip showing username and role. Reduces header clutter.
+- **PoolMonitor moved to left side of TopBar**: Previously centered with wide margins; now positioned immediately after the breadcrumb with a vertical separator, consistent with left-to-right information hierarchy.
+- **ZFS events sidebar widget**: Raw event strings replaced with parsed icon + label rows. Eight event types recognized (scrub complete/started, resilver done/progress, pool import/export, fault detected, TRIM event) with appropriate Material Symbol icons and semantic colors.
+- **Page icon border desaturated**: TopBar page icon border changed from a saturated primary-hue HSL value to `var(--border)`.
+
+---
+
 ## v11.6.0 (2026-05-22) - "Infrastructure"
 
 Upgrade from: v11.5.0 - Drop-in. No schema changes. No configuration changes.
