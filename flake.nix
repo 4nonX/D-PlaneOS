@@ -103,9 +103,8 @@
       # the runtime dependency is satisfied without /etc/ld.so.conf changes.
       #
       # Build inputs:
-      #   pkgs.zfs           - provides libzfs.so, libzfs_core.so, and libzfs.h
-      #   pkgs.libnvpair     - provides libnvpair.so and sys/nvpair.h
-      #                        (usually provided by zfs, included explicitly for headers)
+      #   pkgs.zfs.dev       - provides libzfs.h and other headers (dev output)
+      #   pkgs.zfs           - provides libzfs.so, libzfs_core.so at runtime
       #   pkgs.gcc           - C compiler for cgo
       #
       # To build manually: nix build .#dplaneos-daemon-cgo
@@ -113,16 +112,18 @@
         pname        = "dplaneos-daemon-cgo";
         version      = dplaneosVersion;
         src          = nixpkgs.lib.cleanSource ./daemon;
-        env = {
-          CGO_ENABLED = "1";
-          # CGO bypasses the GCC wrapper and does not see NIX_CFLAGS_COMPILE,
-          # so we inject the dev-output include path explicitly.
-          CGO_CFLAGS  = "-I${pkgs.zfs.dev}/include";
-        };
+        env.CGO_ENABLED = "1";
         vendorHash   = null;
         subPackages  = [ "cmd/dplaned" "cmd/dplane-fenced" ];
         nativeBuildInputs = with pkgs; [ gcc pkg-config ];
         buildInputs  = with pkgs; [ zfs.dev zfs ];
+        # CGO bypasses the GCC wrapper and does not see NIX_CFLAGS_COMPILE.
+        # Export CGO_CFLAGS in the build shell so the path is certain at
+        # phase execution time (the Nix interpolation resolves at eval time).
+        preBuild = ''
+          export CGO_CFLAGS="-I${pkgs.zfs.dev}/include"
+          export CGO_LDFLAGS="-L${pkgs.zfs}/lib"
+        '';
         ldflags = [ "-s" "-w" "-X" "main.Version=${dplaneosVersion}" ];
         tags = [ "libzfs" ];
         meta = with nixpkgs.lib; {
