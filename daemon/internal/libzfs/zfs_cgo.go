@@ -12,6 +12,7 @@ package libzfs
 // of its handle. This matches the TrueNAS/OpenZFS recommended usage pattern.
 
 /*
+#cgo pkg-config: libzfs
 #cgo LDFLAGS: -lzfs -lnvpair -lzfs_core -luutil -lm
 #cgo CFLAGS: -D_GNU_SOURCE
 

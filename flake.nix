@@ -118,9 +118,11 @@
         nativeBuildInputs = with pkgs; [ gcc pkg-config ];
         buildInputs  = with pkgs; [ zfs.dev zfs ];
         # CGO bypasses the GCC wrapper and does not see NIX_CFLAGS_COMPILE.
-        # Export CGO_CFLAGS in the build shell so the path is certain at
-        # phase execution time (the Nix interpolation resolves at eval time).
+        # Set PKG_CONFIG_PATH explicitly so #cgo pkg-config: libzfs (in
+        # zfs_cgo.go) can find libzfs.pc regardless of setup-hook ordering.
+        # CGO_CFLAGS is a belt-and-suspenders fallback for the include path.
         preBuild = ''
+          export PKG_CONFIG_PATH="${pkgs.zfs.dev}/lib/pkgconfig:${pkgs.zfs.dev}/share/pkgconfig:$PKG_CONFIG_PATH"
           export CGO_CFLAGS="-I${pkgs.zfs.dev}/include"
           export CGO_LDFLAGS="-L${pkgs.zfs}/lib"
         '';
