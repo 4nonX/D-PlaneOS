@@ -113,11 +113,16 @@
         pname        = "dplaneos-daemon-cgo";
         version      = dplaneosVersion;
         src          = nixpkgs.lib.cleanSource ./daemon;
-        env.CGO_ENABLED = "1";
+        env = {
+          CGO_ENABLED = "1";
+          # CGO bypasses the GCC wrapper and does not see NIX_CFLAGS_COMPILE,
+          # so we inject the dev-output include path explicitly.
+          CGO_CFLAGS  = "-I${pkgs.zfs.dev}/include";
+        };
         vendorHash   = null;
         subPackages  = [ "cmd/dplaned" "cmd/dplane-fenced" ];
         nativeBuildInputs = with pkgs; [ gcc pkg-config ];
-        buildInputs  = with pkgs; [ zfs ];
+        buildInputs  = with pkgs; [ zfs.dev zfs ];
         ldflags = [ "-s" "-w" "-X" "main.Version=${dplaneosVersion}" ];
         tags = [ "libzfs" ];
         meta = with nixpkgs.lib; {
