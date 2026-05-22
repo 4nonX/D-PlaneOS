@@ -92,32 +92,6 @@ static int dplane_pool_is_member(libzfs_handle_t *hdl,
     return ctx.found;
 }
 
-// import_pool_iter_cb imports each pool found by dplane_pool_import_all.
-static int import_pool_iter_cb(nvpair_t *pair, libzfs_handle_t *hdl) {
-    nvlist_t *config;
-    if (nvpair_value_nvlist(pair, &config) != 0) return 0;
-    return zpool_import(hdl, config, NULL, NULL);
-}
-
-// dplane_pool_import_all searches search_path for importable pools and
-// imports all of them. Returns number of import errors.
-// Uses zpool_find_import (public API in OpenZFS 2.x replacing the removed
-// importargs_t / zpool_search_import interface).
-static int dplane_pool_import_all(libzfs_handle_t *hdl, const char *search_path) {
-    char *path = (char *)search_path;
-    nvlist_t *pools = zpool_find_import(hdl, 1, &path);
-    if (pools == NULL) return 0;
-
-    nvpair_t *elem = NULL;
-    int errors = 0;
-    while ((elem = nvlist_next_nvpair(pools, elem)) != NULL) {
-        if (import_pool_iter_cb(elem, hdl) != 0) {
-            errors++;
-        }
-    }
-    nvlist_free(pools);
-    return errors;
-}
 
 // dplane_pool_export exports the named pool, optionally with force.
 static int dplane_pool_export(libzfs_handle_t *hdl, const char *name, int force) {
@@ -311,6 +285,7 @@ static const char *dplane_last_error(libzfs_handle_t *hdl) {
 import "C"
 
 import (
+	"fmt"
 	"runtime"
 	"unsafe"
 
@@ -359,23 +334,17 @@ func PoolIsMember(device string) (PoolMembership, error) {
 	return result, err
 }
 
-// PoolImportAll imports all importable pools found under searchPath.
-// Errors from individual pool imports are counted; the first failing pool
-// does not prevent importing the rest.
+// PoolImportAll imports all importable pools found under /dev/disk/by-id.
+// The searchPath parameter is accepted for API compatibility but the
+// implementation always uses the security-whitelist-validated path.
+// Individual pool import failures are non-fatal: zpool import -a continues
+// after each failed pool and reports a non-zero exit only when all pools fail.
 func PoolImportAll(searchPath string) error {
-	if searchPath == "" {
-		searchPath = "/dev/disk/by-id"
+	out, err := cmdutil.RunZFS("zpool_import_all", "import", "-a", "-f", "-d", "/dev/disk/by-id")
+	if err != nil {
+		return fmt.Errorf("PoolImportAll: %w (output: %s)", err, out)
 	}
-	cPath := C.CString(searchPath)
-	defer C.free(unsafe.Pointer(cPath))
-
-	return withHandle(func(hdl *C.libzfs_handle_t) error {
-		nerr := C.dplane_pool_import_all(hdl, cPath)
-		if nerr < 0 {
-			return errFromHandle(hdl, "PoolImportAll")
-		}
-		return nil
-	})
+	return nil
 }
 
 // PoolExport exports the named pool. Pass force=true to mirror `zpool export -f`.
