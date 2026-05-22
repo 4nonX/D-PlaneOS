@@ -128,25 +128,103 @@ in {
       initialClusterState = "new";
     };
 
+    # ─── Patroni config auto-generation ──────────────────────────────────
+    # Generates /etc/dplaneos/patroni.yaml on first boot if not present.
+    # /etc/dplaneos is bind-mounted from /persist via impermanence.nix so the
+    # file survives OTA slot swaps. Random replication and superuser passwords
+    # are generated once and stay stable for the lifetime of the cluster.
+    systemd.services.dplaneos-patroni-init = {
+      description = "DPlaneOS Patroni Config Init";
+      after       = [ "local-fs.target" ];
+      before      = [ "patroni.service" ];
+      wantedBy    = [ "multi-user.target" ];
+      serviceConfig = {
+        Type            = "oneshot";
+        RemainAfterExit = true;
+        User            = "postgres";
+        Group           = "postgres";
+        ExecStart       = pkgs.writeShellScript "patroni-init" ''
+          set -eu
+          CONFIG="/etc/dplaneos/patroni.yaml"
+          if [ -f "$CONFIG" ]; then
+            echo "patroni-init: $CONFIG already exists, nothing to do"
+            exit 0
+          fi
+          echo "patroni-init: first boot - generating $CONFIG"
+          REPL_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+          SUPER_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+          mkdir -p /etc/dplaneos
+          cat > "$CONFIG" <<EOF
+scope: dplaneos
+name: dplaneos-${cfg.localAddress}
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: ${cfg.localAddress}:8008
+
+etcd3:
+  hosts: ${cfg.localAddress}:2379,${cfg.peerAddress}:2379,${cfg.witnessAddress}:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+  pg_hba:
+    - host replication replicator ${cfg.peerAddress}/32 md5
+    - host replication replicator 127.0.0.1/32 md5
+    - host all all 127.0.0.1/32 trust
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: ${cfg.localAddress}:5432
+  data_dir: /var/lib/dplaneos/pgsql
+  bin_dir: ${pkgs.postgresql_15}/bin
+  parameters:
+    max_connections: 200
+    shared_buffers: 256MB
+    wal_level: replica
+    max_wal_senders: 5
+    max_replication_slots: 5
+  authentication:
+    replication:
+      username: replicator
+      password: $REPL_PASS
+    superuser:
+      username: postgres
+      password: $SUPER_PASS
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+EOF
+          chmod 0600 "$CONFIG"
+          echo "patroni-init: config written to $CONFIG"
+        '';
+      };
+    };
+
     # ─── Patroni ──────────────────────────────────────────────────────────
-    # Managed via raw systemd service to respect the exact config/secret layout 
-    # requested: /etc/patroni/patroni.yml with 0600 permissions.
     systemd.services.patroni = {
       description = "Patroni High Availability PostgreSQL";
-      after = [ "network.target" "etcd.service" ];
-      requires = [ "etcd.service" ];
+      after = [ "network.target" "etcd.service" "dplaneos-patroni-init.service" ];
+      requires = [ "etcd.service" "dplaneos-patroni-init.service" ];
       wantedBy = [ "multi-user.target" ];
       environment = {
         PATH = lib.mkForce "${pkgs.patroni}/bin:${pkgs.postgresql_15}/bin:${pkgs.coreutils}/bin";
       };
       serviceConfig = {
-        Type = "simple";
-        User = "postgres";
-        Group = "postgres";
-        # Patroni configuration file is expected to be provisioned by the operator 
-        # or installer to safely store the replicator password.
-        ExecStart = "${pkgs.patroni}/bin/patroni /etc/patroni/patroni.yml";
-        Restart = "always";
+        Type       = "simple";
+        User       = "postgres";
+        Group      = "postgres";
+        ExecStart  = "${pkgs.patroni}/bin/patroni /etc/dplaneos/patroni.yaml";
+        Restart    = "always";
         RestartSec = "5s";
       };
     };
@@ -155,16 +233,12 @@ in {
     users.users.postgres = {
       isSystemUser = true;
       group = "postgres";
-      extraGroups = [ "dplaneos" ]; # Allow dplaneos to access postgres stuff if needed
+      extraGroups = [ "dplaneos" ];
     };
     users.groups.postgres = {};
 
-    # Setup the patroni config directory
     systemd.tmpfiles.rules = [
-      "d /etc/patroni 0700 postgres postgres -"
-      "d /var/lib/postgresql 0750 postgres postgres -"
-      "d /var/lib/postgresql/15 0750 postgres postgres -"
-      "d /var/lib/postgresql/15/data 0700 postgres postgres -"
+      "d /var/lib/dplaneos/pgsql 0700 postgres postgres -"
     ];
 
     # ─── HAProxy ──────────────────────────────────────────────────────────

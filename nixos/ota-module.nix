@@ -49,7 +49,9 @@ let
           pkgs.openssl
           pkgs.python3
           pkgs.zfs
-        ]}
+        ]} \
+        ${lib.optionalString (cfg.ota.signingKey != "")
+          "--set OTA_PUBLIC_KEY '${cfg.ota.signingKey}'"}
     '';
   };
 
@@ -77,6 +79,24 @@ in {
         How long after boot to wait before running the OTA health check.
         Must be a valid systemd time span (e.g. "90s", "2min").
         Increase this if your services take longer than 90 seconds to start.
+      '';
+    };
+
+    signingKey = lib.mkOption {
+      type    = lib.types.str;
+      default = "";
+      description = ''
+        Base64-encoded Ed25519 public key used to verify OTA update bundles.
+        When empty (the default), the OTA script refuses all update bundles
+        because signature verification fails - no unsigned updates are applied.
+        Set this to the DPlaneOS release signing public key before deploying.
+
+        Generate a keypair with:
+          openssl genpkey -algorithm ed25519 -out ota-signing.pem
+          openssl pkey -pubout -in ota-signing.pem | base64 -w0
+
+        Example (in your flake or configuration.nix):
+          services.dplaneos.ota.signingKey = "MCowBQYDK2VwAyEA...";
       '';
     };
 
