@@ -1025,7 +1025,7 @@ function WipeDiskModal({ device, onClose, onWiped }: { device: string; onClose: 
         </p>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)' }}>
           <input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} />
-          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text)' }}>
             I understand this will destroy all data on the disk
           </span>
         </label>

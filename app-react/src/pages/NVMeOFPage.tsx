@@ -160,7 +160,7 @@ export function NVMeOFPage() {
       )}
 
       <div className="card" style={{ borderRadius: 'var(--radius-lg)', padding: 18, marginBottom: 22, fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-        <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>When to use this</div>
+        <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--text)' }}>When to use this</div>
         <p style={{ margin: '0 0 8px' }}>
           <strong>ZFS send/recv</strong> (Replication page, GitOps) replicates datasets and snapshots. <strong>NVMe-oF</strong> exposes a{' '}
           <em>zvol</em> as a remote NVMe namespace so another machine can mount a VMFS, ext4, or clustered app on top.
@@ -306,7 +306,7 @@ export function NVMeOFPage() {
       </div>
 
       <div className="card" style={{ marginTop: 22, padding: 18, borderRadius: 'var(--radius-lg)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-        <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>Initiator (Linux) quick test</div>
+        <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--text)' }}>Initiator (Linux) quick test</div>
         <pre style={{ margin: 0, padding: 12, background: 'var(--surface-2)', borderRadius: 8, fontSize: 12, overflow: 'auto' }}>
           {`modprobe nvme-fabrics
 nvme discover -t tcp -a <this-host-ip> -s 4420

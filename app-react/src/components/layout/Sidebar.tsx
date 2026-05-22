@@ -82,10 +82,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           >
             <div style={{
               width: 24, height: 24, borderRadius: 6,
-              background: 'linear-gradient(135deg, var(--primary) 0%, #6b7fff 100%)',
+              background: 'linear-gradient(135deg, var(--primary) 0%, hsl(260, 50%, 58%) 100%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, boxShadow: '0 0 10px rgba(138,156,255,0.3)'}}>
-              <Icon name="dns" size={14} style={{ color: '#000' }} />
+              flexShrink: 0, boxShadow: 'var(--shadow-sm)'}}>
+              <Icon name="dns" size={14} style={{ color: 'var(--text-on-primary)' }} />
             </div>
             <span style={{
               fontWeight: 800, fontSize: 15,
@@ -222,9 +222,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{
               width: 26, height: 26, borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--primary) 0%, #6b7fff 100%)',
+              background: 'linear-gradient(135deg, var(--primary) 0%, hsl(260, 50%, 58%) 100%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, fontSize: 11, fontWeight: 800, color: '#000'}}>
+              flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-on-primary)'}}>
               {(user?.username ?? '?')[0].toUpperCase()}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -314,7 +314,7 @@ function LeafItem({ leaf, isActive, collapsed, indent = false, onClick }: LeafIt
         if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }
       }}
     >
-      <Icon name={leaf.icon} size={collapsed ? 21 : 17} style={{ flexShrink: 0, opacity: isActive ? 1 : 0.75, filter: isActive ? 'drop-shadow(0 0 6px var(--primary-glow))' : 'none' }} />
+      <Icon name={leaf.icon} size={collapsed ? 21 : 17} style={{ flexShrink: 0, opacity: isActive ? 1 : 0.65 }} />
       {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{leaf.label}</span>}
     </button>
   )
@@ -328,68 +328,69 @@ function LeafItem({ leaf, isActive, collapsed, indent = false, onClick }: LeafIt
 // ZFSEventsWidget
 // ---------------------------------------------------------------------------
 
+// Maps a raw ZFS event string to a short human-readable label and icon.
+function parseZFSEvent(raw: string): { label: string; icon: string; color: string } {
+  const r = raw.toLowerCase()
+  if (r.includes('scrub_finish') || r.includes('scrub.finish')) return { label: 'Scrub complete', icon: 'verified', color: 'var(--success)' }
+  if (r.includes('scrub_start') || r.includes('scrub.start'))   return { label: 'Scrub started',  icon: 'search',   color: 'var(--primary)' }
+  if (r.includes('resilver_finish'))                             return { label: 'Resilver done',  icon: 'build',    color: 'var(--success)' }
+  if (r.includes('resilver'))                                    return { label: 'Resilvering',    icon: 'build',    color: 'var(--warning)' }
+  if (r.includes('import'))                                      return { label: 'Pool imported',  icon: 'input',    color: 'var(--primary)' }
+  if (r.includes('export'))                                      return { label: 'Pool exported',  icon: 'output',   color: 'var(--text-secondary)' }
+  if (r.includes('fault') || r.includes('fail') || r.includes('error')) return { label: 'Fault detected', icon: 'warning', color: 'var(--error)' }
+  if (r.includes('trim'))                                        return { label: 'TRIM event',     icon: 'layers_clear', color: 'var(--primary)' }
+  return { label: 'ZFS event', icon: 'history', color: 'var(--text-tertiary)' }
+}
+
 function ZFSEventsWidget() {
   const eventsQ = useQuery({
     queryKey: ['zfs', 'events'],
-    queryFn: ({ signal }) => api.get<{ success: boolean; events: { raw: string }[] }>('/api/zfs/events?count=5', signal),
+    queryFn: ({ signal }) => api.get<{ success: boolean; events: { raw: string }[] }>('/api/zfs/events?count=4', signal),
     refetchInterval: 10_000,
   })
 
   const events = eventsQ.data?.events ?? []
 
   return (
-    <div style={{ 
-      margin: '6px 12px', 
-      padding: '12px',
+    <div style={{
+      margin: '6px 12px',
+      padding: '10px 12px',
       background: 'rgba(255,255,255,0.02)',
       border: '1px solid var(--border-subtle)',
       borderRadius: 'var(--radius-md)',
       display: 'flex',
       flexDirection: 'column',
-      gap: 8
+      gap: 6
     }}>
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 6,
+      <div style={{
         fontSize: 'var(--text-3xs)',
-        fontWeight: 800,
+        fontWeight: 700,
         color: 'var(--text-tertiary)',
         textTransform: 'uppercase',
         letterSpacing: '0.5px'
       }}>
-        <Icon name="history" size={12} />
-        Recent Activity
+        ZFS Activity
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {events.length === 0 ? (
-          <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
-            No recent events
-          </div>
-        ) : (
-          events.map((ev, i) => {
-            // Very basic parser for "class=X" or "type=Y" in raw string
-            const isError = ev.raw.toLowerCase().includes('fail') || ev.raw.toLowerCase().includes('error')
-            const isScrub = ev.raw.toLowerCase().includes('scrub')
-            
+      {events.length === 0 ? (
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', opacity: 0.6 }}>
+          No recent events
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {events.map((ev, i) => {
+            const { label, icon, color } = parseZFSEvent(ev.raw)
             return (
-              <div key={i} style={{
-                fontSize: '10px',
-                fontFamily: 'var(--font-mono)',
-                color: isError ? 'var(--error)' : isScrub ? 'var(--primary)' : 'var(--text-secondary)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                lineHeight: 1.4,
-                opacity: 0.85
-              }}>
-                {ev.raw.split(' ').slice(1).join(' ') || ev.raw}
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon name={icon} size={12} style={{ color, flexShrink: 0, opacity: 0.85 }} />
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
+                  {label}
+                </span>
               </div>
             )
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   )
 }

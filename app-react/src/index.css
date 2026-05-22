@@ -9,12 +9,12 @@
   --hue-primary: 236;
   --hue-bg: 228;
 
-  --primary:         hsl(var(--hue-primary), 100%, 72%);
-  --primary-bg:      hsla(var(--hue-primary), 100%, 72%, 0.12);
-  --primary-hover:   hsl(var(--hue-primary), 100%, 78%);
-  --primary-active:  hsl(var(--hue-primary), 100%, 65%);
-  --primary-glow:    hsla(var(--hue-primary), 100%, 72%, 0.35);
-  --primary-glow-lg: hsla(var(--hue-primary), 100%, 72%, 0.15);
+  --primary:         hsl(var(--hue-primary), 60%, 67%);
+  --primary-bg:      hsla(var(--hue-primary), 60%, 67%, 0.10);
+  --primary-hover:   hsl(var(--hue-primary), 60%, 74%);
+  --primary-active:  hsl(var(--hue-primary), 60%, 61%);
+  --primary-glow:    hsla(var(--hue-primary), 60%, 67%, 0.18);
+  --primary-glow-lg: hsla(var(--hue-primary), 60%, 67%, 0.08);
 
   --success:         hsl(148, 80%, 45%);
   --success-bg:      hsla(148, 80%, 45%, 0.12);
@@ -57,15 +57,17 @@
   --text-on-primary: hsl(var(--hue-bg), 25%, 10%);
 
   /* Modern, premium font stack */
-  --font-ui:   'Outfit', 'Inter', system-ui, sans-serif;
+  --font-ui:   'Outfit', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
 
   /* Refined typographic scale */
-  --text-2xs: 10px; --text-xs: 12px; --text-sm: 14px; --text-base: 15px;
+  --text-3xs: 9px; --text-2xs: 10px; --text-xs: 12px; --text-sm: 14px; --text-base: 15px;
   --text-md: 16px;  --text-lg: 18px; --text-xl: 22px; --text-2xl: 28px; --text-3xl: 36px;
 
   --space-1: 4px; --space-2: 8px;  --space-3: 12px; --space-4: 16px;
   --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+
+  --bg-hover: var(--surface-hover);
 
   --radius-xs: 6px; --radius-sm: 10px; --radius-md: 16px;
   --radius-lg: 20px; --radius-xl: 28px; --radius-full: 9999px;
@@ -99,12 +101,12 @@
    ============================================================ */
 [data-theme="light"] {
   /* Primary — darkened for contrast on light backgrounds */
-  --primary:         hsl(var(--hue-primary), 80%, 44%);
-  --primary-bg:      hsla(var(--hue-primary), 80%, 44%, 0.1);
-  --primary-hover:   hsl(var(--hue-primary), 80%, 52%);
-  --primary-active:  hsl(var(--hue-primary), 80%, 38%);
-  --primary-glow:    hsla(var(--hue-primary), 80%, 44%, 0.25);
-  --primary-glow-lg: hsla(var(--hue-primary), 80%, 44%, 0.1);
+  --primary:         hsl(var(--hue-primary), 55%, 44%);
+  --primary-bg:      hsla(var(--hue-primary), 55%, 44%, 0.1);
+  --primary-hover:   hsl(var(--hue-primary), 55%, 52%);
+  --primary-active:  hsl(var(--hue-primary), 55%, 38%);
+  --primary-glow:    hsla(var(--hue-primary), 55%, 44%, 0.15);
+  --primary-glow-lg: hsla(var(--hue-primary), 55%, 44%, 0.07);
 
   /* Semantic — darkened for light bg contrast */
   --success:         hsl(148, 65%, 32%);
@@ -183,10 +185,9 @@ html, body, #root {
 #root {
   /* A deeper, more dramatic and colorful background gradient for the glass to interact with */
   background-image:
-    radial-gradient(circle 800px at 15% 0%, hsla(var(--hue-primary), 80%, 65%, 0.08) 0%, transparent 100%),
-    radial-gradient(circle 1000px at 90% 90%, hsla(280, 80%, 55%, 0.05) 0%, transparent 100%),
-    radial-gradient(circle 600px at 50% 50%, hsla(var(--hue-bg), 80%, 30%, 0.02) 0%, transparent 100%);
-  background-attachment: fixed;
+    radial-gradient(circle 800px at 15% 0%, hsla(var(--hue-primary), 55%, 65%, 0.06) 0%, transparent 100%),
+    radial-gradient(circle 1000px at 90% 90%, hsla(280, 55%, 55%, 0.04) 0%, transparent 100%),
+    radial-gradient(circle 600px at 50% 50%, hsla(var(--hue-bg), 60%, 30%, 0.02) 0%, transparent 100%);
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -223,8 +224,8 @@ code, pre, .mono { font-family: var(--font-mono); font-size: 0.9em; }
 @keyframes slideInRight     { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes scaleIn          { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 @keyframes pulse-opacity    { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-@keyframes glow-pulse-green { 0%, 100% { box-shadow: 0 0 5px rgba(16,185,129,0.3); } 50% { box-shadow: 0 0 12px rgba(16,185,129,0.6), 0 0 24px rgba(16,185,129,0.2); } }
-@keyframes glow-pulse-blue  { 0%, 100% { box-shadow: 0 0 5px rgba(138,156,255,0.3); } 50% { box-shadow: 0 0 12px rgba(138,156,255,0.6), 0 0 24px rgba(138,156,255,0.2); } }
+@keyframes glow-pulse-green { 0%, 100% { box-shadow: 0 0 4px rgba(16,185,129,0.2); } 50% { box-shadow: 0 0 8px rgba(16,185,129,0.4); } }
+@keyframes glow-pulse-blue  { 0%, 100% { box-shadow: 0 0 4px rgba(138,156,255,0.15); } 50% { box-shadow: 0 0 8px rgba(138,156,255,0.3); } }
 
 /* ── Status dot ───────────────────────────────────────────── */
 .status-dot {
@@ -262,12 +263,12 @@ code, pre, .mono { font-family: var(--font-mono); font-size: 0.9em; }
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 .btn:active   { transform: scale(0.97); }
-.btn-primary  { background: var(--primary); color: var(--text-on-primary); box-shadow: inset 0 1px 0 hsla(0,0%,100%,0.3), 0 2px 8px var(--primary-glow); }
-.btn-primary:hover  { background: var(--primary-hover); box-shadow: inset 0 1px 0 hsla(0,0%,100%,0.4), 0 4px 16px var(--primary-glow); transform: translateY(-1px); }
+.btn-primary  { background: var(--primary); color: var(--text-on-primary); box-shadow: inset 0 1px 0 hsla(0,0%,100%,0.2), 0 2px 6px hsla(0,0%,0%,0.25); }
+.btn-primary:hover  { background: var(--primary-hover); box-shadow: inset 0 1px 0 hsla(0,0%,100%,0.25), 0 4px 12px hsla(0,0%,0%,0.3); transform: translateY(-1px); }
 .btn-ghost    { background: hsla(0,0%,100%,0.03); color: var(--text-secondary); border: 1px solid var(--border-subtle); box-shadow: inset 0 1px 0 hsla(0,0%,100%,0.02); }
 .btn-ghost:hover    { background: hsla(0,0%,100%,0.08); color: var(--text); border-color: var(--border); box-shadow: inset 0 1px 0 hsla(0,0%,100%,0.05), 0 2px 8px hsla(0,0%,0%,0.2); transform: translateY(-1px); }
 .btn-danger   { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); box-shadow: inset 0 1px 0 hsla(350,85%,60%,0.2); }
-.btn-danger:hover   { background: hsla(350,85%,60%,0.18); box-shadow: inset 0 1px 0 hsla(350,85%,60%,0.3), 0 4px 16px var(--error-glow); transform: translateY(-1px); }
+.btn-danger:hover   { background: hsla(350,85%,60%,0.18); box-shadow: inset 0 1px 0 hsla(350,85%,60%,0.3), 0 4px 12px hsla(0,0%,0%,0.3); transform: translateY(-1px); }
 .btn-sm { padding: 6px 12px; font-size: var(--text-xs); border-radius: var(--radius-sm); }
 .btn-xs { padding: 4px 10px; font-size: var(--text-2xs); gap: 4px; border-radius: var(--radius-xs); }
 .btn-icon { padding: 8px; border-radius: var(--radius-md); }
@@ -420,8 +421,8 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
 }
 
 .modal-close:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--surface);
+  color: var(--text);
   transform: rotate(90deg);
 }
 
@@ -490,7 +491,7 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 .tab-underline:hover { color: var(--text); }
-.tab-underline.active { color: var(--primary); border-bottom-color: var(--primary); text-shadow: 0 0 12px var(--primary-glow); }
+.tab-underline.active { color: var(--primary); border-bottom-color: var(--primary); }
 
 /* ── Empty state ──────────────────────────────────────────── */
 .empty-state {

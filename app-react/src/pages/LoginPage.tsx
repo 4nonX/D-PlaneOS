@@ -337,11 +337,7 @@ export function LoginPage() {
                       alignItems: 'center',
                       padding: 4}}
                   >
-                    {showPassword ? (
-                      <span style={{ fontSize: 18 }}>✓</span>
-                    ) : (
-                      <Icon name="visibility" size={18} />
-                    )}
+                    <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
                   </button>
                 </div>
               </div>

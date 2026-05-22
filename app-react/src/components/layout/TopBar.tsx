@@ -59,35 +59,40 @@ export function TopBar({ sidebarCollapsed, onSearchOpen, onHelpOpen }: TopBarPro
         boxShadow: '0 4px 30px rgba(0, 0, 0, 0.4)',
         transition: 'left var(--transition-bounce)'}}
     >
-      {/* ── Left: breadcrumb + title ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          width: 30, height: 30, borderRadius: 8,
-          background: 'var(--primary-bg)',
-          border: '1px solid hsla(var(--hue-primary),100%,72%,.2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-          <Icon name={pageIcon} size={16} style={{ color: 'var(--primary)' }} />
+      {/* ── Left: breadcrumb + title + pool monitor ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 8,
+            background: 'var(--primary-bg)',
+            border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <Icon name={pageIcon} size={16} style={{ color: 'var(--primary)' }} />
+          </div>
+
+          <div>
+            {groupLabel && (
+              <div style={{
+                fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)',
+                fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px',
+                lineHeight: 1, marginBottom: 3}}>
+                {groupLabel}
+              </div>
+            )}
+            <h1 style={{
+              fontSize: 'var(--text-md)', fontWeight: 700,
+              letterSpacing: '-0.3px', color: 'var(--text)', lineHeight: 1}}>
+              {pageTitle}
+            </h1>
+          </div>
         </div>
 
-        <div>
-          {groupLabel && (
-            <div style={{
-              fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)',
-              fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px',
-              lineHeight: 1, marginBottom: 3}}>
-              {groupLabel}
-            </div>
-          )}
-          <h1 style={{
-            fontSize: 'var(--text-md)', fontWeight: 700,
-            letterSpacing: '-0.3px', color: 'var(--text)', lineHeight: 1}}>
-            {pageTitle}
-          </h1>
-        </div>
+        {/* Separator */}
+        <div style={{ width: 1, height: 28, background: 'var(--border)', margin: '0 20px', flexShrink: 0 }} />
+
+        {/* Pool capacity bar — moved from center to left for conventional topbar layout */}
+        <PoolMonitor />
       </div>
-
-      {/* ── Center: Pool Capacity Bar ── */}
-      <PoolMonitor />
 
       {/* ── Right: search + user chip ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -155,40 +160,17 @@ export function TopBar({ sidebarCollapsed, onSearchOpen, onHelpOpen }: TopBarPro
         )}
 
         {user && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '6px 16px 6px 8px',
-            background: 'hsla(0,0%,100%,0.03)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-full)',
-            cursor: 'pointer',
-            transition: 'all var(--transition-fast)',
-            boxShadow: 'inset 0 1px 0 hsla(0,0%,100%,0.02)'}}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'hsla(0,0%,100%,0.08)'
-            e.currentTarget.style.borderColor = 'var(--border)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'hsla(0,0%,100%,0.03)'
-            e.currentTarget.style.borderColor = 'var(--border-subtle)'
-          }}>
+          <Tooltip content={user.role && user.role !== 'user' ? `${user.username} · ${user.role}` : user.username}>
             <div style={{
-              width: 26, height: 26, borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--primary) 0%, hsl(260, 100%, 75%) 100%)',
+              width: 30, height: 30, borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--primary) 0%, hsl(260, 55%, 62%) 100%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 800, color: '#000', flexShrink: 0,
-              boxShadow: '0 2px 8px var(--primary-glow)'}}>
+              fontSize: 13, fontWeight: 700, color: 'var(--text-on-primary)',
+              flexShrink: 0, userSelect: 'none', cursor: 'default',
+              boxShadow: 'var(--shadow-sm)'}}>
               {user.username[0].toUpperCase()}
             </div>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text)', fontWeight: 600 }}>
-              {user.username}
-            </span>
-            {user.role && user.role !== 'user' && (
-              <span className="badge badge-primary" style={{ fontSize: 9 }}>
-                {user.role}
-              </span>
-            )}
-          </div>
+          </Tooltip>
         )}
 
         <ThemeToggle />
@@ -249,7 +231,7 @@ function NotificationsBell() {
             borderRadius: '50%',
             background: isDirty ? 'var(--warning)' : 'var(--primary)',
             border: '2px solid var(--surface)',
-            boxShadow: `0 0 8px ${isDirty ? 'var(--warning)' : 'var(--primary-glow)'}`
+            boxShadow: isDirty ? '0 0 8px var(--warning)' : 'none'
           }} />
         )}
       </button>
@@ -400,12 +382,11 @@ function PoolMonitor() {
   const color = pct >= 90 ? 'var(--error)' : pct >= 75 ? 'var(--warning)' : 'var(--primary)'
 
   return (
-    <div style={{ 
-      flex: 1, 
-      maxWidth: 400, 
-      margin: '0 40px',
-      display: 'flex', 
-      flexDirection: 'column', 
+    <div style={{
+      width: 220,
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
       gap: 5,
       position: 'relative'
     }}>

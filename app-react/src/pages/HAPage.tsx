@@ -444,7 +444,7 @@ function WitnessConfigForm() {
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 'var(--text-xs)' }}>
               <Icon name={r.reachable ? 'check' : 'close'} size={13}
                 style={{ color: r.reachable ? 'var(--success)' : 'var(--error)', flexShrink: 0 }} />
-              <span style={{ fontFamily: 'var(--font-mono)', color: r.reachable ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{r.url}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', color: r.reachable ? 'var(--text)' : 'var(--text-tertiary)' }}>{r.url}</span>
               <span style={{ color: r.reachable ? 'var(--success)' : 'var(--error)' }}>{r.reachable ? 'reachable' : 'unreachable'}</span>
             </div>
           ))}

@@ -353,7 +353,7 @@ function BranchSwitcher({ repo, onSelect }: { repo: Repo; onSelect: (b: string) 
                   <button key={b} onClick={() => { onSelect(b); setOpen(false) }} style={{
                     display:'flex', alignItems:'center', gap:8, width:'100%', textAlign:'left',
                     padding:'8px 14px', background: b === current ? 'var(--primary-bg)' : 'transparent',
-                    color: b === current ? 'var(--primary)' : 'var(--text-primary)',
+                    color: b === current ? 'var(--primary)' : 'var(--text)',
                     fontSize:'var(--text-xs)', fontFamily:'var(--font-mono)', border:'none',
                     borderBottom:'1px solid var(--border)', cursor:'pointer',
                   }}>
