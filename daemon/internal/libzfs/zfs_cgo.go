@@ -26,7 +26,7 @@ package libzfs
 // find_device_in_vdev recursively walks an nvlist vdev tree and returns 1
 // if the given device path appears anywhere in the tree.
 static int find_device_in_vdev(nvlist_t *nv, const char *device) {
-    char *path = NULL;
+    const char *path = NULL;
     if (nvlist_lookup_string(nv, ZPOOL_CONFIG_PATH, &path) == 0 && path != NULL) {
         if (strcmp(path, device) == 0) {
             return 1;
@@ -100,16 +100,12 @@ static int import_pool_iter_cb(nvpair_t *pair, libzfs_handle_t *hdl) {
 }
 
 // dplane_pool_import_all searches search_path for importable pools and
-// imports all of them with force (-f). Returns number of import errors.
+// imports all of them. Returns number of import errors.
+// Uses zpool_find_import (public API in OpenZFS 2.x replacing the removed
+// importargs_t / zpool_search_import interface).
 static int dplane_pool_import_all(libzfs_handle_t *hdl, const char *search_path) {
     char *path = (char *)search_path;
-    importargs_t idata;
-    memset(&idata, 0, sizeof(idata));
-    idata.path  = &path;
-    idata.paths = 1;
-    idata.can_be_active = 0;
-
-    nvlist_t *pools = zpool_search_import(hdl, &idata, NULL);
+    nvlist_t *pools = zpool_find_import(hdl, 1, &path);
     if (pools == NULL) return 0;
 
     nvpair_t *elem = NULL;
@@ -157,7 +153,7 @@ static int dplane_dataset_get_prop(libzfs_handle_t *hdl,
         if (user_props != NULL) {
             nvlist_t *propval;
             if (nvlist_lookup_nvlist(user_props, propname, &propval) == 0) {
-                char *value;
+                const char *value;
                 if (nvlist_lookup_string(propval, ZPROP_VALUE, &value) == 0) {
                     strncpy(buf, value, buflen - 1);
                     buf[buflen - 1] = '\0';
@@ -231,7 +227,7 @@ static int dplane_vdev_offline(libzfs_handle_t *hdl,
 static int dplane_pool_clear(libzfs_handle_t *hdl, const char *pool) {
     zpool_handle_t *zhp = zpool_open(hdl, pool);
     if (zhp == NULL) return -1;
-    int rc = zpool_clear(zhp, NULL);
+    int rc = zpool_clear(zhp, NULL, NULL);
     zpool_close(zhp);
     return rc;
 }
@@ -266,7 +262,7 @@ static int dplane_snapshot_hold(libzfs_handle_t *hdl,
                                   const char *tag) {
     zfs_handle_t *zhp = zfs_open(hdl, snapshot, ZFS_TYPE_SNAPSHOT);
     if (zhp == NULL) return -1;
-    int rc = zfs_hold(zhp, tag, B_FALSE, -1);
+    int rc = zfs_hold(zhp, tag, NULL, B_FALSE, -1);
     zfs_close(zhp);
     return rc;
 }
@@ -277,7 +273,7 @@ static int dplane_snapshot_release(libzfs_handle_t *hdl,
                                      const char *tag) {
     zfs_handle_t *zhp = zfs_open(hdl, snapshot, ZFS_TYPE_SNAPSHOT);
     if (zhp == NULL) return -1;
-    int rc = zfs_release(zhp, tag, B_FALSE);
+    int rc = zfs_release(zhp, tag, NULL, B_FALSE);
     zfs_close(zhp);
     return rc;
 }
