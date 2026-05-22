@@ -223,7 +223,7 @@
           ./nixos/modules/samba.nix
           ./nixos/dplane-generated.nix
           applianceConfig
-          (let d = mkDaemon { inherit system pkgs dplaneosVersion nixpkgs; pkgsStatic = pkgs.pkgsStatic; }; in {
+          (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; }; in {
             services.dplaneos.daemonPackage    = d;
             services.dplaneos.fenced.package   = d;
           })
@@ -244,7 +244,7 @@
           ./nixos/modules/samba.nix
           ./nixos/dplane-generated.nix
           applianceConfig
-          (let d = mkDaemon { inherit system pkgs dplaneosVersion nixpkgs; pkgsStatic = pkgs.pkgsStatic; }; in {
+          (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; }; in {
             services.dplaneos.daemonPackage    = d;
             services.dplaneos.fenced.package   = d;
           })

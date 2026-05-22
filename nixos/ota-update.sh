@@ -288,7 +288,8 @@ cmd_health_check() {
     local checks_failed=0
 
     # Check 1: daemon is up and responding
-    if curl -sf --max-time 10 http://127.0.0.1:9000/api/system/info >/dev/null 2>&1; then
+    # /api/system/health is explicitly whitelisted in sessionMiddleware (no auth required)
+    if curl -sf --max-time 10 http://127.0.0.1:9000/api/system/health >/dev/null 2>&1; then
         log "PASS: daemon API is responding"
         checks_passed=$((checks_passed + 1))
     else

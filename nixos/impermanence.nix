@@ -122,12 +122,41 @@
         mode      = "0755";
       }
 
+      # ── systemd-networkd unit files (DPlaneOS 50-dplane-* managed) ────────
+      # The root ext4 slot is replaced on every OTA update. Without this,
+      # 50-dplane-*.{network,netdev} written by networkdwriter are lost after
+      # the next OTA and network reverts to NixOS defaults on reboot.
+      # NixOS activation writes its own 10-/20- prefixed files into this same
+      # directory; both sets coexist because the bind-mount is set up before
+      # NixOS activation runs.
+      {
+        directory = "/etc/systemd/network";
+        user      = "root";
+        group     = "root";
+        mode      = "0755";
+      }
+
       # ── systemd-networkd lease files ────────────────────────────────────
       {
         directory = "/var/lib/systemd/network";
         user      = "systemd-network";
         group     = "systemd-network";
         mode      = "0755";
+      }
+
+      # ── etcd cluster data ────────────────────────────────────────────────
+      # etcd stores its WAL and snap data here. Without persistence, a node
+      # that OTA-updates and reboots starts with an empty data dir. etcd then
+      # attempts to bootstrap a NEW cluster while its peers still run the
+      # existing one - this splits or stalls the cluster. With persistence,
+      # etcd detects its existing WAL on startup and rejoins the running
+      # cluster transparently regardless of initialClusterState in the Nix
+      # config (etcd ignores that flag when the data dir is non-empty).
+      {
+        directory = "/var/lib/etcd";
+        user      = "etcd";
+        group     = "etcd";
+        mode      = "0700";
       }
 
       # ── Avahi host database ──────────────────────────────────────────────

@@ -99,6 +99,18 @@ in {
       builtins.substring 0 8 (builtins.hashString "md5" cfg.localAddress)
     );
 
+    # ─── HA Firewall ─────────────────────────────────────────────────────
+    # The base module.nix opens only 80 and 443. HA requires additional ports
+    # between cluster members. Without these, etcd cannot form a cluster,
+    # Patroni cannot check peer health via HAProxy, and streaming replication
+    # cannot connect.
+    networking.firewall.allowedTCPPorts = [
+      2379  # etcd client API
+      2380  # etcd peer (raft) communication
+      5432  # PostgreSQL - streaming replication between Patroni nodes
+      8008  # Patroni REST API - HAProxy health checks against both nodes
+    ];
+
     # ─── Etcd ─────────────────────────────────────────────────────────────
     # Standard 3-node etcd cluster for reliable DCS and Patroni leader election
     services.etcd = {
@@ -222,8 +234,10 @@ in {
       requires = [ "patroni.service" ];
       preStart = ''
         echo "HA GUARD: Waiting for Patroni leadership determination..."
-        while true; do
-          status=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" http://localhost:8008/primary || echo "000")
+        deadline=120
+        elapsed=0
+        while [ $elapsed -lt $deadline ]; do
+          status=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:8008/primary || echo "000")
           if [ "$status" = "200" ]; then
             echo "HA GUARD: Node is Primary. Proceeding to mount ZFS volumes over Native Cache."
             exit 0
@@ -232,7 +246,10 @@ in {
             exit 1
           fi
           sleep 2
+          elapsed=$((elapsed + 2))
         done
+        echo "HA GUARD: Timed out after $deadline s waiting for Patroni. Aborting ZFS mount (fail-safe)."
+        exit 1
       '';
     };
 
@@ -241,8 +258,10 @@ in {
       requires = [ "patroni.service" ];
       preStart = ''
         echo "HA GUARD: Waiting for Patroni leadership determination..."
-        while true; do
-          status=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" http://localhost:8008/primary || echo "000")
+        deadline=120
+        elapsed=0
+        while [ $elapsed -lt $deadline ]; do
+          status=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:8008/primary || echo "000")
           if [ "$status" = "200" ]; then
             echo "HA GUARD: Node is Primary. Proceeding to mount ZFS volumes over Native Scan."
             exit 0
@@ -251,7 +270,10 @@ in {
             exit 1
           fi
           sleep 2
+          elapsed=$((elapsed + 2))
         done
+        echo "HA GUARD: Timed out after $deadline s waiting for Patroni. Aborting ZFS mount (fail-safe)."
+        exit 1
       '';
     };
 

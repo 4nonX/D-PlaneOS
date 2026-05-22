@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v11.6.0 (2026-05-22) - "Infrastructure"
+
+Upgrade from: v11.5.0 - Drop-in. No schema changes. No configuration changes.
+
+### Fixed
+- **OTA auto-revert after every successful update (`nixos/ota-update.sh`)**: The post-boot health check was hitting `/api/system/info`, which is not a registered route. curl's `-f` flag treats 404 as failure, so the daemon check always failed, always triggering an auto-revert. Fixed: endpoint changed to `/api/system/health`, which is registered and explicitly whitelisted as public in `sessionMiddleware`.
+- **HA ZFS import guard infinite loop (`nixos/ha.nix`)**: The `preStart` scripts for `zfs-import-cache` and `zfs-import-scan` used a `while true` loop that only exited on Patroni HTTP 200 (primary) or 503 (standby). Any other response (connection refused, timeout, 5xx) looped forever with no escape. If Patroni was slow to start or returned an unexpected status, ZFS pools never mounted and the node was unrecoverable without manual intervention. Fixed: added a 120-second deadline with fail-safe exit on timeout; also added `--max-time 3` to each curl poll.
+- **HA cluster firewall ports not opened (`nixos/ha.nix`)**: The HA module bound etcd on `0.0.0.0:2379` (client) and `0.0.0.0:2380` (raft peer) and relied on Patroni REST API port 8008 for HAProxy health checks, but never added these ports to the firewall. The base `module.nix` only opens 80 and 443. Without these rules, etcd cannot elect a leader, Patroni cannot manage failover, and HAProxy routes to the wrong node. Fixed: added `allowedTCPPorts = [2379 2380 5432 8008]` in the HA module.
+- **Network config lost after OTA slot swap (`nixos/impermanence.nix`)**: `networkdwriter` writes `50-dplane-*.{network,netdev}` to `/etc/systemd/network/`. The root ext4 partition is replaced on every OTA update, so these files were lost after each OTA and network reverted to NixOS defaults on the next reboot. Fixed: added `/etc/systemd/network` to the impermanence persistence list.
+- **etcd cluster state lost after OTA slot swap (`nixos/impermanence.nix`)**: etcd's WAL and snap data in `/var/lib/etcd` were on the ephemeral root. After an OTA update on any node, etcd started with an empty data directory. With `initialClusterState = "new"`, the node attempted to bootstrap a new cluster while its peers still ran the existing one. Fixed: added `/var/lib/etcd` (mode 0700, user/group etcd) to the impermanence persistence list.
+
+### Changed
+- **Production daemon now uses libzfs CGO path (`flake.nix`)**: Both NAS `nixosConfigurations` (`dplaneos` and `dplaneos-arm`) now use `mkDaemonCGO` (CGO_ENABLED=1, build tag `libzfs`) instead of `mkDaemon` (static musl). The `zfs_cgo.go` bindings now compile and link against the system libzfs, replacing the subprocess fallback (`zfs_fallback.go`) in production. The ISO installer retains the static musl build for portability.
+
+---
+
 ## v11.5.0 (2026-05-21) - "Auth"
 
 Upgrade from: v11.4.0 - Drop-in. No schema changes. No configuration changes.
