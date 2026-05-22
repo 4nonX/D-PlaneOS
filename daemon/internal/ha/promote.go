@@ -15,9 +15,9 @@ import (
 // on a standby node to primary, forcing pool imports and reloading services.
 func ExecutePromotion(candidate, leader string) {
 	// 1. Force import any detached storage pools.
-	// libzfs.PoolImportAll walks /dev/disk/by-id directly via the kernel
-	// ioctl path instead of spawning a subprocess, so it is resilient to
-	// PATH issues during early failover.
+	// libzfs.PoolImportAll runs: zpool import -a -f -d /dev/disk/by-id
+	// through the security allowlist. Stable by-id paths are required
+	// so pool discovery is not sensitive to kernel name assignment order.
 	log.Printf("HA Failover: Forcing import of all pools...")
 	if err := libzfs.PoolImportAll("/dev/disk/by-id"); err != nil {
 		log.Printf("HA Failover Error: zpool import failed: %v", err)
