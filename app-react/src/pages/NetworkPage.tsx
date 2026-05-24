@@ -18,7 +18,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, getSessionId, getUsername, getCsrfToken } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
@@ -643,13 +643,10 @@ function DiagnosticsTab() {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'X-Session-ID': sessionStorage.getItem('session_id') || '',
-        'X-User': sessionStorage.getItem('username') || '',
+        'X-Session-ID': getSessionId() ?? '',
+        'X-User': getUsername() ?? '',
+        'X-CSRF-Token': getCsrfToken(),
       }
-
-      const resCsrf = await fetch('/api/csrf')
-      const csrfData = await resCsrf.json()
-      if (csrfData.success) headers['X-CSRF-Token'] = csrfData.csrf_token
 
       const response = await fetch('/api/system/diagnostics', {
         method: 'POST',

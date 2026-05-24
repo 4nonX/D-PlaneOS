@@ -10,6 +10,7 @@ import { Icon } from '@/components/ui/Icon'
 import { api } from '@/lib/api'
 import { useNotificationsStore } from '@/stores/notifications'
 import { LoadingState } from '@/components/ui/LoadingSpinner'
+import { toast } from '@/hooks/useToast'
 
 interface Change {
   path: string
@@ -35,7 +36,8 @@ export function PendingChangesSidebar() {
       queryClient.invalidateQueries({ queryKey: ['nixos', 'status'] })
       queryClient.invalidateQueries({ queryKey: ['nixos', 'diff-intent'] })
       setSidebarOpen(false)
-    }
+    },
+    onError: (e: Error) => toast.error(`Reconciliation failed: ${e.message}`),
   })
 
   if (!isSidebarOpen) return null
