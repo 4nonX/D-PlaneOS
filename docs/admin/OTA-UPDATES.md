@@ -51,12 +51,12 @@ If the health check passes, the system is on the new version. If it fails, the s
 
 The post-boot health check (`dplaneos-ota-health`) verifies four things:
 
-1. **Daemon API** - `GET http://localhost:9000/api/health` returns 200 within 10 seconds
-2. **ZFS pool health** - `zpool status` reports all pools as ONLINE with no faulted devices
-3. **PostgreSQL** - `psql` can connect and execute `SELECT 1`
-4. **Samba** - `smbcontrol smbd ping` receives a response from the Samba process
+1. **Daemon API** - `GET http://127.0.0.1:9000/api/system/health` returns 200 within 10 seconds
+2. **ZFS pool health** - `zpool list` reports all pools as ONLINE; a non-zero exit from `zpool list` also counts as failure
+3. **/persist mounted** - `/persist` is verified as an active mountpoint; not mounted counts as failure
+4. **Samba** (conditional) - if active SMB shares exist in the database, `smbd` must be running; if no shares are configured this check is skipped
 
-If all four pass, the pending-revert marker is cleared and the update is committed. If any check fails after 3 retries, the revert sequence starts.
+If all checks pass, the pending-revert marker is cleared and the update is committed. Any failure triggers the auto-revert sequence immediately.
 
 The check fires 90 seconds after boot by default. This delay gives all services time to start fully. Adjust in `configuration.nix`:
 ```nix

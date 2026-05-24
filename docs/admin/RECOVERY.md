@@ -102,12 +102,32 @@ sudo systemctl start dplaned
 
 ### Interactive Recovery CLI
 
-The fastest option:
+The fastest option for most recovery tasks. Run from SSH or a local console:
 
 ```bash
 sudo dplaneos-recovery
-# Select option 5: Reset Admin Password
 ```
+
+Available options:
+
+| # | Option | What it does |
+|---|--------|--------------|
+| 1 | System Status | Hostname, kernel, uptime, RAM, disk, service status |
+| 2 | Check Services | nginx and dplaned status with port availability |
+| 3 | Restart Services | Restarts nginx and dplaned |
+| 4 | Check Database | PostgreSQL service, connection, user and session counts |
+| 5 | Reset Admin Password | Prompts for a new password and updates the database |
+| 6 | Check ZFS Pools | Full `zpool status` output |
+| 7 | Import/Export Pool | Interactive pool name input for import or export |
+| 8 | Check Network | `ip addr` and `ip route` output |
+| 9 | Fix Permissions | Resets ownership on `/var/lib/dplaneos`, `/var/log/dplaneos`, `/etc/dplaneos` |
+| 10 | UPS Status | Reads from NUT (`upsc`) or apcupsd (`apcaccess`) |
+| 11 | View Logs | journalctl for dplaned, errors, nixos-rebuild, kernel, or last 5 minutes |
+| 12 | Run Diagnostics | Service loop, ZFS pool summary, disk space, memory, load |
+| 13 | Emergency Shutdown | Power off or reboot with confirmation prompt |
+| 14 | Exit | |
+
+Requires `dialog` to be installed. On NixOS: `nix-env -iA nixpkgs.dialog`.
 
 ### Locked Out - Clear All Sessions
 
@@ -121,8 +141,18 @@ sudo -u postgres psql dplaneos -c "DELETE FROM sessions;"
 ### Reset Admin User Directly
 
 ```bash
-# Generate a bcrypt hash (example using python)
-NEW_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt(12)).decode())")
+# Write the password to a temp file to avoid shell quoting issues
+PASS_TMP=$(mktemp)
+chmod 600 "$PASS_TMP"
+printf '%s' 'your-new-password' > "$PASS_TMP"
+
+NEW_HASH=$(python3 -c "
+import bcrypt, sys
+with open(sys.argv[1], 'rb') as f:
+    pw = f.read().strip()
+print(bcrypt.hashpw(pw, bcrypt.gensalt(rounds=12)).decode())
+" "$PASS_TMP")
+rm -f "$PASS_TMP"
 
 sudo -u postgres psql dplaneos -c "
   INSERT INTO users (id, username, password_hash, display_name, email, active, source)
