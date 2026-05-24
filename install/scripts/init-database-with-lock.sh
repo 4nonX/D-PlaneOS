@@ -56,7 +56,12 @@ init_database() {
     if [ -n "$DB_DSN" ]; then
         echo "Verifying PostgreSQL connectivity: $DB_DSN"
         if command -v pg_isready &>/dev/null; then
-            echo "PostgreSQL check enabled"
+            echo "Checking PostgreSQL readiness: $DB_DSN"
+            if ! pg_isready "$DB_DSN" --timeout=10; then
+                echo "ERROR: PostgreSQL is not ready at $DB_DSN" >&2
+                exit 1
+            fi
+            echo "PostgreSQL is ready"
         fi
     else
         echo "ERROR: DATABASE_DSN is mandatory in v7.1.0." >&2

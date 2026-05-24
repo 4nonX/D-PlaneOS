@@ -307,18 +307,25 @@ run_install() {
                 --no-channel-copy"
     fi
 
+    _PASS_TMP=$(mktemp)
+    chmod 600 "$_PASS_TMP"
+    printf '%s' "$ADMIN_PASS" > "$_PASS_TMP"
+
     progress_step \
         "Setting admin credentials..." \
         "
         HASH=\$(python3 -c \"
 import bcrypt, sys
-pw = sys.stdin.buffer.read().strip()
+with open(sys.argv[1], 'rb') as f:
+    pw = f.read().strip()
 print(bcrypt.hashpw(pw, bcrypt.gensalt(rounds=12)).decode())
-\" <<< '$ADMIN_PASS')
+\" $_PASS_TMP)
         mkdir -p /mnt/var/lib/dplaneos
         printf '%s' \"\$HASH\" > /mnt/var/lib/dplaneos/.first-boot-password
         chmod 600 /mnt/var/lib/dplaneos/.first-boot-password
         "
+
+    rm -f "$_PASS_TMP"
 
     PRIMARY_IP=$(ip route get 1.1.1.1 2>/dev/null \
         | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' \

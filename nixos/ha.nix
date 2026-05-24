@@ -364,6 +364,7 @@ EOF
         Type            = "oneshot";
         RemainAfterExit = true;
         ExecStart       = pkgs.writeShellScript "dplaneos-sbd-init" ''
+          set -eu
           DATASET="${cfg.sbd.pool}/${cfg.sbd.dataset}"
           if zfs list -H "$DATASET" > /dev/null 2>&1; then
             echo "dplaneos-sbd-init: dataset $DATASET already exists"
