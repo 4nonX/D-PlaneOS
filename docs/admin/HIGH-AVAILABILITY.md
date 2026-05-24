@@ -13,7 +13,7 @@ Two supported paths. Choose based on how the storage is connected.
 | Topology | Machines required | Fencing mechanism | When to use |
 |----------|-------------------|-------------------|-------------|
 | **Shared-SAS / shared-block** | 2 data nodes | SCSI-3 Persistent Reservations | Two nodes connected to one DAS shelf or SAN LUN; disks physically accessible from both nodes simultaneously |
-| **Replicated / stretched-ZFS** | 2 data nodes + 1 witness | IPMI, SBD, or SCSI-3 | Nodes in separate enclosures with ZFS send/recv replication; no shared physical disk path |
+| **Replicated / stretched-ZFS** | 2 data nodes + 1 witness | IPMI or SBD | Nodes in separate enclosures with ZFS send/recv replication; no shared physical disk path |
 
 If you are running two mini-PCs against a single JBODs or a dual-controller array, use Path A. If the nodes are in separate racks or buildings and connected only by network replication, use Path B.
 
@@ -138,7 +138,7 @@ GET /api/ha/fenced/status
 etcdctl --endpoints=http://NODE_A_IP:2379,http://NODE_B_IP:2379,http://NODE_A_IP:2381 endpoint health
 
 # Patroni cluster state
-patronictl -c /etc/patroni/patroni.yml list
+patronictl -c /etc/dplaneos/patroni.yaml list
 ```
 
 Expected Patroni output:
@@ -317,7 +317,7 @@ To fail over intentionally (e.g., for maintenance):
 
 ```bash
 # Graceful switchover via Patroni (no data loss)
-patronictl -c /etc/patroni/patroni.yml switchover dplaneos
+patronictl -c /etc/dplaneos/patroni.yaml switchover dplaneos
 
 # Or via the daemon API
 POST /api/ha/failover
@@ -340,7 +340,7 @@ Enable this before rebooting or making changes to prevent a false-positive autom
 ### Rolling OTA Update (zero downtime)
 
 1. Put node B (standby) in maintenance mode
-2. Trigger OTA on node B: `POST /api/ota/update`
+2. Trigger OTA on node B: `sudo nixos-rebuild switch --flake github:4nonX/DPlaneOS#dplaneos` (or via Settings - System - Updates in the web UI)
 3. Node B reboots into the new system slot
 4. Verify node B is healthy: `GET /api/ha/status` from node B
 5. Switchover to node B: `POST /api/ha/failover`
@@ -370,7 +370,7 @@ Total RTO: approximately 10-30 seconds.
 When node A is repaired and reboots, it rejoins as a Patroni replica, streams missing WAL from node B, and waits in standby with pools unmounted. To fail back:
 
 ```bash
-patronictl -c /etc/patroni/patroni.yml switchover dplaneos --master node-b --candidate node-a
+patronictl -c /etc/dplaneos/patroni.yaml switchover dplaneos --primary node-b --candidate node-a
 ```
 
 ### Adding a Disk to the Active Pool
