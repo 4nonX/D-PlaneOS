@@ -132,7 +132,7 @@ TOTP two-factor authentication is available per user. When enabled, login issues
 
 ### RBAC
 
-Four roles (viewer, user, operator, admin) with 34 discrete permissions enforced at the handler level via `permRoute()` middleware. System roles are immutable in the database (`is_system = 1`). Role assignments support expiry dates.
+Four roles (viewer, user, operator, admin) with 31 discrete permissions enforced at the handler level via `permRoute()` middleware. System roles are immutable in the database (`is_system = 1`). Role assignments support expiry dates.
 
 ### Audit Chain
 

@@ -110,7 +110,7 @@ Returned when user input fails the security allowlist before reaching any system
 
 | Role | Description |
 |------|-------------|
-| `admin` | Full access (all 34 permissions) |
+| `admin` | Full access (all 31 permissions) |
 | `operator` | Start/stop services, manage containers, view all |
 | `user` | Read storage, files, and own profile |
 | `viewer` | Read-only access to dashboards and status |

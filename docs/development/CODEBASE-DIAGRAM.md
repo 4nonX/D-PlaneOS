@@ -165,9 +165,7 @@ flowchart TD
     J --> G
     F --> K{"Severity >= warning?"}
     K -->|Yes| L["Alert dispatcher\n(SMTP / Webhook / Telegram)"]
-    B --> M{"Severity = critical\nand daemon down?"}
-    M -->|Yes| N["Read telegram_config\nfrom PostgreSQL directly"]
-    N --> O["POST to Telegram Bot API\n(bypass daemon)"]
+    D -->|Not connected| P["Log to syslog only"]
 ```
 
 ---

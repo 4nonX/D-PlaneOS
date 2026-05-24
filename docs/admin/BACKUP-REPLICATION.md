@@ -135,14 +135,14 @@ This is also declarable in `state.yaml` under `replication:`:
 replication:
   - name: offsite
     source_dataset: tank/data
-    remote_id: <peer-id-from-ui>
+    remote_host: backup.example.com
+    remote_user: root
+    remote_port: 22
     remote_pool: backup
-    interval: daily
+    ssh_key_path: /root/.ssh/dplaneos_replication
+    interval: daily           # hourly | daily | weekly | manual
     trigger_on_snapshot: true
-    incremental: true
-    resume: true
     compress: true
-    non_recursive: false   # true = send this dataset only, false (default) = include child datasets (-R)
     rate_limit_mb: 100
     enabled: true
 ```

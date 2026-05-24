@@ -228,8 +228,8 @@ replication:
     remote_user: replication
     remote_port: 22
     remote_pool: backup
-    ssh_key_path: /var/lib/dplaneos/keys/replication_ed25519
-    interval: "0 2 * * *"      # cron expression
+    ssh_key_path: /root/.ssh/dplaneos_replication
+    interval: daily             # hourly | daily | weekly | manual
     trigger_on_snapshot: true
     compress: true
     rate_limit_mb: 100

@@ -10,16 +10,7 @@ Standard protocols (SMB, NFS) are covered in [ADMIN-GUIDE.md](ADMIN-GUIDE.md). F
 
 iSCSI presents a ZFS zvol as a block device to a network initiator. The initiator sees the zvol as a raw disk and can format it with any filesystem. Typical use cases: booting ESXi, presenting block storage to a Windows server, or providing disks to VMs.
 
-DPlaneOS uses the Linux kernel's `nvmet` subsystem for iSCSI via the configfs interface.
-
-### Enable in NixOS
-
-```nix
-# In configuration.nix
-services.dplaneos.iscsi.enable = true;
-```
-
-Run `nixos-rebuild switch`.
+DPlaneOS uses the Linux LIO target stack (targetcli-fb) for iSCSI. `targetcli-fb` is included in the NixOS module's system packages and requires no additional NixOS configuration.
 
 ### Create a zvol for iSCSI
 
@@ -97,14 +88,7 @@ NVMe-oF over TCP presents ZFS zvols as NVMe namespaces to initiators. It provide
 
 NVMe-oF is not enabled by default. It requires a kernel with NVMe/TCP support (included in the Linux 6.6 LTS kernel that DPlaneOS pins).
 
-### Enable in NixOS
-
-```nix
-# In configuration.nix
-services.dplaneos.nvmeof.enable = true;
-```
-
-The NixOS module loads `nvmet-tcp` and mounts configfs at `/sys/kernel/config/nvmet`.
+The `nvmet` and `nvmet-tcp` kernel modules are loaded at boot by the NixOS module. No additional NixOS configuration is required.
 
 ### Create a zvol for NVMe-oF
 
@@ -178,11 +162,13 @@ FTP and FTPS are for file transfer to clients that cannot use SMB or NFS - legac
 
 **Note:** Plain FTP transmits credentials unencrypted. Use FTPS (FTP over TLS, explicit mode) wherever possible.
 
-### Enable in NixOS
+The daemon manages vsftpd via systemctl. To install vsftpd, add it to your system packages in `configuration.nix`:
 
 ```nix
-services.dplaneos.ftp.enable = true;
+environment.systemPackages = [ pkgs.vsftpd ];
 ```
+
+Run `nixos-rebuild switch`, then configure via the UI. Start/stop is controlled by the daemon through its API.
 
 ### Configure via UI
 
@@ -228,9 +214,11 @@ FTP uses the same local user accounts as the web UI. Users are chrooted to their
 ### API
 
 ```
-GET  /api/ftp/config        # current vsftpd configuration
-POST /api/ftp/config        # update configuration
 GET  /api/ftp/status        # vsftpd running state + connected clients
+GET  /api/ftp/config        # current vsftpd configuration
+PUT  /api/ftp/config        # update configuration
+POST /api/ftp/start         # start vsftpd
+POST /api/ftp/stop          # stop vsftpd
 POST /api/ftp/restart       # restart vsftpd (applies config changes)
 ```
 
@@ -247,16 +235,13 @@ Use MinIO when you need:
 
 MinIO is distinct from Cloud Sync - Cloud Sync uploads data to external providers. MinIO makes your NAS act as the S3 provider.
 
-### Enable in NixOS
+The daemon manages MinIO via systemctl and writes `/etc/minio.env`. To install MinIO, add it to your system packages in `configuration.nix`:
 
 ```nix
-services.dplaneos.minio = {
-  enable = true;
-  dataDir = "/mnt/tank/minio";
-};
+environment.systemPackages = [ pkgs.minio ];
 ```
 
-The data directory must be on a ZFS dataset (not the boot disk).
+Run `nixos-rebuild switch`, then configure via the UI. The data directory must be on a ZFS dataset (not the boot disk).
 
 ### Configure via UI
 
@@ -322,10 +307,10 @@ Port 9900 (S3 API) should be accessible to application servers. Port 9901 (conso
 ### API
 
 ```
-GET  /api/minio/status      # MinIO running state, version
-POST /api/minio/enable      # start MinIO
-POST /api/minio/disable     # stop MinIO
-GET  /api/minio/config      # current configuration
-POST /api/minio/config      # update data directory, ports
-POST /api/minio/restart     # restart MinIO (applies config changes)
+GET  /api/s3/status         # MinIO running state, version
+GET  /api/s3/config         # current configuration
+PUT  /api/s3/config         # update data directory, ports
+POST /api/s3/start          # start MinIO
+POST /api/s3/stop           # stop MinIO
+POST /api/s3/restart        # restart MinIO (applies config changes)
 ```
