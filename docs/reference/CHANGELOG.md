@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v11.6.4 (2026-05-24) - "OTA Health Check Hardening"
+
+Upgrade from: v11.6.3 - Drop-in. No schema changes. No configuration changes.
+
+### Fixed
+
+- **OTA health check commits update when ZFS command fails (`nixos/ota-update.sh`)**: The ZFS pool health check used `zpool list ... 2>/dev/null | awk ... || echo ""`. If `zpool list` failed for any reason (module not loaded, driver issue, command not found), the pipeline produced an empty string, `degraded_pools=""` evaluated as "no degraded pools", and the health check passed. A catastrophically broken ZFS subsystem after an OTA slot swap would be silently committed rather than triggering a revert to the previous slot. Fixed: `zpool list` exit code is now captured explicitly; a non-zero exit is logged as a FAIL and increments `checks_failed`, guaranteeing auto-revert.
+- **OTA health check skips smbd gate when database is unreachable (`nixos/ota-update.sh`)**: The Samba service check queried PostgreSQL to count active shares, with `|| echo "0"` as the fallback. If `psql` could not reach the database, `share_count` became "0" and the smbd check was silently skipped. A broken PostgreSQL after an OTA (detectable state) would cause this check to report "SKIP: no active shares" and count as neither pass nor fail - potentially allowing the OTA to be committed with a dead database. Fixed: psql failure or empty result now increments `checks_failed` directly.
+
+---
+
 ## v11.6.3 (2026-05-24) - "Security & Error Propagation"
 
 Upgrade from: v11.6.2 - Drop-in. No schema changes. No configuration changes.
