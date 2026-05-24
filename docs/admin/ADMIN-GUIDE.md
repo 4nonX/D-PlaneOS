@@ -52,7 +52,7 @@ For deeper dives into operational areas, see the dedicated guides:
 4. Optionally set an expiry date
 5. Click **Assign**
 
-Role changes take effect immediately (permission cache expires within ~5 minutes).
+Role changes take effect immediately. The permission cache is invalidated on each assignment or removal. The 5-minute TTL is only a fallback for changes made directly to the database outside the daemon.
 
 ### Resetting a User's Password
 
@@ -62,7 +62,7 @@ Use this when a user is locked out or needs a forced credential rotation.
 2. Enter a temporary password (full strength requirements apply)
 3. Click **Set Temporary Password**
 
-The user's existing sessions are immediately revoked. On their next login they are blocked at the system level until they change the temporary password - no route works except `POST /api/auth/change-password`. LDAP accounts cannot have their password reset here; direct users to their directory server.
+The user's existing sessions are immediately revoked. On their next login they are blocked at the system level until they change the temporary password - only `/api/auth/change-password`, `/api/auth/logout`, and `/api/auth/session` are accessible until the flag is cleared. LDAP accounts cannot have their password reset here; direct users to their directory server.
 
 ### Removing Users
 
@@ -79,7 +79,7 @@ On deletion: the account, role assignments, and active sessions are all removed.
 
 ### Built-in Roles
 
-**Admin** - All 34 permissions. Can manage users, roles, and system settings. Cannot be deleted (system role).
+**Admin** - All 24 permissions. Can manage users, roles, and system settings. Cannot be deleted (system role).
 
 **Operator** - Storage, Docker, and file management. Cannot create users or assign roles.
 
@@ -97,17 +97,22 @@ On deletion: the account, role assignments, and active sessions are all removed.
 
 ### Permission Reference
 
-**Storage:** `storage:read` `storage:write` `storage:delete` `storage:scrub` `storage:import` `storage:export`
+Permissions are `resource:action` pairs. Actions are always `read`, `write`, or `admin`.
 
-**Docker:** `docker:read` `docker:write` `docker:delete` `docker:logs` `docker:exec`
+| Resource | read | write | admin |
+|----------|------|-------|-------|
+| `storage` | View pools, datasets, snapshots, files | Create/modify datasets, snapshots, file operations | Encrypt/decrypt datasets, manage replication remotes |
+| `shares` | View SMB/NFS shares and config | Create/modify shares | Reload SMB/NFS config, test config |
+| `docker` | List containers, images, logs, stats | Deploy, start/stop, pull, compose | Safe-update containers, prune |
+| `system` | View network, logs, hardware, UPS | Modify network, UPS config, SMART schedules | Reboot, poweroff, rotate audit logs, reset LDAP circuit breaker |
+| `users` | List users and sessions | Create/modify/deactivate users | Delete users, manage groups |
+| `roles` | List roles and permissions | Create/modify roles and permission assignments | - |
+| `network` | View network interfaces and routes | Modify network configuration | - |
+| `firewall` | View firewall rules | Modify firewall rules | - |
+| `certificates` | View TLS certificates | Upload/manage TLS certificates | - |
+| `audit` | View and verify the audit log chain | - | - |
 
-**Files:** `files:read` `files:write` `files:delete` `files:share`
-
-**System:** `system:read` `system:write` `system:reboot` `system:update`
-
-**Users:** `users:read` `users:write` `users:delete` `users:reset_password`
-
-**Roles:** `roles:read` `roles:write` `roles:delete` `roles:assign`
+File Explorer operations (browse, upload, download, rename, move, delete) use `storage:read` and `storage:write` - there is no separate `files` resource.
 
 ---
 
@@ -180,8 +185,6 @@ For granular access control beyond standard owner/group permissions, the File Ex
 
 > [!IMPORTANT]
 > To use ACLs, the underlying ZFS dataset must have `acltype=posixacl` set. The installer enables this by default for new pools created through the UI.
-
----
 
 ---
 
@@ -310,7 +313,7 @@ sudo zpool import tank   # import by name
 - `/tmp/*` (Temporary files)
 - `/var/lib/dplaneos/` (Application data)
 
-**Passwords:** Minimum 8 characters with uppercase, lowercase, digit, and special character (12+ recommended). On first install the setup wizard creates the admin account - no pre-generated password is printed; you set it during wizard Step 1. The forced-change flag (`must_change_password`) is server-enforced: all API routes except change-password and logout return HTTP 403 until the flag is cleared. When changing a password, all other active sessions are revoked automatically.
+**Passwords:** Minimum 8 characters with uppercase, lowercase, digit, and special character (12+ recommended). On first install the setup wizard creates the admin account - no pre-generated password is printed; you set it during wizard Step 1. The forced-change flag (`must_change_password`) is server-enforced: all API routes except `/api/auth/change-password`, `/api/auth/logout`, and `/api/auth/session` return HTTP 403 until the flag is cleared. When changing a password, all other active sessions are revoked automatically.
 
 To reset a forgotten or compromised password, an admin uses **Settings → Users → lock_reset icon** to set a temporary password (see User Management above). There is no self-service password reset - this is intentional for a NAS with no email integration.
 
