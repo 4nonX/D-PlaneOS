@@ -130,6 +130,12 @@ func (h *AuditRotationHandler) VerifyAuditChain(w http.ResponseWriter, r *http.R
 		prevHashSeen = storedRowHash
 		checked++
 	}
+	if err := rows.Err(); err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"success": false, "error": "audit log query error: " + err.Error(),
+		})
+		return
+	}
 
 	result := map[string]interface{}{
 		"success":      true,

@@ -33,7 +33,9 @@ func (h *SystemStatusHandler) HandleStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	// Ensure table exists - this is the first endpoint hit on fresh installs
-	h.db.Exec(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`)
+	if _, err := h.db.Exec(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`); err != nil {
+		log.Printf("WARN: system_config DDL: %v", err)
+	}
 	var setupDone int
 	h.db.QueryRow(`SELECT COUNT(*) FROM system_config WHERE key = 'setup_complete' AND value = '1'`).Scan(&setupDone)
 	var userCount int
@@ -76,7 +78,9 @@ func (h *SystemStatusHandler) HandleSetupComplete(w http.ResponseWriter, r *http
 		respondErrorSimple(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	h.db.Exec(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`)
+	if _, err := h.db.Exec(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`); err != nil {
+		log.Printf("WARN: system_config DDL: %v", err)
+	}
 	var body struct {
 		Hostname string `json:"hostname"`
 		Timezone string `json:"timezone"`
@@ -85,9 +89,14 @@ func (h *SystemStatusHandler) HandleSetupComplete(w http.ResponseWriter, r *http
 		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	h.db.Exec(`INSERT INTO system_config (key, value) VALUES ('setup_complete', '1') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`)
+	if _, err := h.db.Exec(`INSERT INTO system_config (key, value) VALUES ('setup_complete', '1') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`); err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Failed to mark setup complete"})
+		return
+	}
 	if body.Hostname != "" {
-		h.db.Exec(`INSERT INTO system_config (key, value) VALUES ('hostname', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, body.Hostname)
+		if _, err := h.db.Exec(`INSERT INTO system_config (key, value) VALUES ('hostname', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, body.Hostname); err != nil {
+			log.Printf("WARN: system_config hostname: %v", err)
+		}
 		if _, err := cmdutil.RunFast("hostnamectl", "set-hostname", body.Hostname); err != nil {
 			log.Printf("WARN: hostnamectl: %v", err)
 		}
@@ -95,7 +104,9 @@ func (h *SystemStatusHandler) HandleSetupComplete(w http.ResponseWriter, r *http
 		persistHostname(body.Hostname)
 	}
 	if body.Timezone != "" {
-		h.db.Exec(`INSERT INTO system_config (key, value) VALUES ('timezone', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, body.Timezone)
+		if _, err := h.db.Exec(`INSERT INTO system_config (key, value) VALUES ('timezone', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, body.Timezone); err != nil {
+			log.Printf("WARN: system_config timezone: %v", err)
+		}
 		if _, err := cmdutil.RunFast("timedatectl", "set-timezone", body.Timezone); err != nil {
 			log.Printf("WARN: timedatectl: %v", err)
 		}
@@ -227,7 +238,9 @@ func (h *SystemStatusHandler) HandlePreflight(w http.ResponseWriter, r *http.Req
 }
 
 func (h *SystemStatusHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
-	h.db.Exec(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`)
+	if _, err := h.db.Exec(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`); err != nil {
+		log.Printf("WARN: system_config DDL: %v", err)
+	}
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := h.db.Query(`SELECT key, value FROM system_config ORDER BY key`)
@@ -239,8 +252,15 @@ func (h *SystemStatusHandler) HandleSettings(w http.ResponseWriter, r *http.Requ
 		settings := map[string]string{}
 		for rows.Next() {
 			var k, v string
-			rows.Scan(&k, &v)
+			if err := rows.Scan(&k, &v); err != nil {
+				log.Printf("WARN: system_config scan: %v", err)
+				continue
+			}
 			settings[k] = v
+		}
+		if err := rows.Err(); err != nil {
+			respondErrorSimple(w, "Failed to read settings", http.StatusInternalServerError)
+			return
 		}
 		respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "settings": settings})
 	case http.MethodPost:
@@ -250,7 +270,9 @@ func (h *SystemStatusHandler) HandleSettings(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		for k, v := range body {
-			h.db.Exec(`INSERT INTO system_config (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, k, v)
+			if _, err := h.db.Exec(`INSERT INTO system_config (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, k, v); err != nil {
+				log.Printf("WARN: system_config upsert key=%s: %v", k, err)
+			}
 		}
 		// Persist system-level changes to Nix fragment so they survive nixos-rebuild
 		if hn, ok := body["hostname"]; ok && hn != "" {
@@ -483,7 +505,9 @@ func (h *SystemStatusHandler) HandleSetupAdmin(w http.ResponseWriter, r *http.Re
 
 	// Ensure system_config table exists (may not on a completely fresh DB
 	// if HandleSetupAdmin is called before HandleSetupComplete or HandleStatus)
-	h.db.Exec(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`)
+	if _, err := h.db.Exec(`CREATE TABLE IF NOT EXISTS system_config (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`); err != nil {
+		log.Printf("WARN: system_config DDL: %v", err)
+	}
 
 	// Gate: only allow if setup is NOT yet complete (Pre-check, Finding 26)
 	tx, err := h.db.Begin()
@@ -495,7 +519,9 @@ func (h *SystemStatusHandler) HandleSetupAdmin(w http.ResponseWriter, r *http.Re
 
 	// Use a session-level advisory lock to serialize setup attempts on fresh installs (Finding 26)
 	// 1337 is an arbitrary key for the "setup lock"
-	tx.Exec(`SELECT pg_advisory_xact_lock(1337)`)
+	if _, err := tx.Exec(`SELECT pg_advisory_xact_lock(1337)`); err != nil {
+		log.Printf("WARN: advisory lock: %v", err)
+	}
 
 	var setupDone int
 	tx.QueryRow(`SELECT COUNT(*) FROM system_config WHERE key = 'setup_complete' AND value = '1'`).Scan(&setupDone)

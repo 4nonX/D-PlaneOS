@@ -58,12 +58,18 @@ func (h *GitReposHandler) ListCredentials(w http.ResponseWriter, r *http.Request
 		var id int
 		var name, host, authType, notes, createdAt string
 		var hasToken, hasSSH int
-		rows.Scan(&id, &name, &host, &authType, &notes, &createdAt, &hasToken, &hasSSH)
+		if err := rows.Scan(&id, &name, &host, &authType, &notes, &createdAt, &hasToken, &hasSSH); err != nil {
+			log.Printf("GIT CREDS LIST SCAN ERROR: %v", err)
+			continue
+		}
 		creds = append(creds, map[string]interface{}{
 			"id": id, "name": name, "host": host, "auth_type": authType,
 			"notes": notes, "created_at": createdAt,
 			"has_token": hasToken == 1, "has_ssh": hasSSH == 1,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("GIT CREDS LIST ROWS ERROR: %v", err)
 	}
 	if creds == nil {
 		creds = []map[string]interface{}{}
@@ -102,15 +108,20 @@ func (h *GitReposHandler) SaveCredential(w http.ResponseWriter, r *http.Request)
 	// buildCredentialEnv writes it to a temp file only when needed for a git operation.
 	if req.ID != nil {
 		// Update existing - only update token/key if non-empty (empty = keep existing)
+		var execErr error
 		if req.Token != "" && req.AuthType == "token" {
-			h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, token=$4, ssh_key='', notes=$5 WHERE id=$6`,
+			_, execErr = h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, token=$4, ssh_key='', notes=$5 WHERE id=$6`,
 				req.Name, req.Host, req.AuthType, req.Token, req.Notes, *req.ID)
 		} else if req.AuthType == "ssh" && req.SSHKey != "" {
-			h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, token='', ssh_key=$4, notes=$5 WHERE id=$6`,
+			_, execErr = h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, token='', ssh_key=$4, notes=$5 WHERE id=$6`,
 				req.Name, req.Host, req.AuthType, req.SSHKey, req.Notes, *req.ID)
 		} else {
-			h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, notes=$4 WHERE id=$5`,
+			_, execErr = h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, notes=$4 WHERE id=$5`,
 				req.Name, req.Host, req.AuthType, req.Notes, *req.ID)
+		}
+		if execErr != nil {
+			respondJSON(w, 500, map[string]interface{}{"success": false, "error": execErr.Error()})
+			return
 		}
 		respondJSON(w, 200, map[string]interface{}{"success": true})
 		return
@@ -197,7 +208,10 @@ func (h *GitReposHandler) DeleteCredential(w http.ResponseWriter, r *http.Reques
 		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "id required"})
 		return
 	}
-	h.db.Exec(`DELETE FROM git_credentials WHERE id = $1`, idStr)
+	if _, err := h.db.Exec(`DELETE FROM git_credentials WHERE id = $1`, idStr); err != nil {
+		respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
 	respondJSON(w, 200, map[string]interface{}{"success": true})
 }
 
@@ -397,11 +411,14 @@ func (h *GitReposHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		var id, autoSync, syncInterval, enabled, credID int
 		var name, repoURL, branch, localPath, composePath,
 			commitName, commitEmail, lastSyncAt, lastCommit, lastError, credName string
-		rows.Scan(&id, &name, &repoURL, &branch, &localPath,
+		if err := rows.Scan(&id, &name, &repoURL, &branch, &localPath,
 			&composePath, &autoSync, &syncInterval,
 			&commitName, &commitEmail,
 			&lastSyncAt, &lastCommit, &lastError,
-			&enabled, &credName, &credID)
+			&enabled, &credName, &credID); err != nil {
+			log.Printf("GIT REPOS LIST SCAN ERROR: %v", err)
+			continue
+		}
 
 		repos = append(repos, map[string]interface{}{
 			"id": id, "name": name, "repo_url": repoURL, "branch": branch,
@@ -417,6 +434,9 @@ func (h *GitReposHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 				return nil
 			}(),
 		})
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("GIT REPOS LIST ROWS ERROR: %v", err)
 	}
 	if repos == nil {
 		repos = []map[string]interface{}{}
@@ -498,12 +518,15 @@ func (h *GitReposHandler) SaveRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.ID != nil {
-		h.db.Exec(`UPDATE git_sync_repos SET name=$1, repo_url=$2, branch=$3, local_path=$4,
+		if _, err := h.db.Exec(`UPDATE git_sync_repos SET name=$1, repo_url=$2, branch=$3, local_path=$4,
 			compose_path=$5, auto_sync=$6, sync_interval=$7, auth_type=$8, auth_token=$9,
 			commit_name=$10, commit_email=$11, enabled=$12 WHERE id=$13`,
 			req.Name, req.RepoURL, req.Branch, localPath,
 			req.ComposePath, autoSyncInt, req.SyncInterval, authType, authToken,
-			req.CommitName, req.CommitEmail, enabledInt, *req.ID)
+			req.CommitName, req.CommitEmail, enabledInt, *req.ID); err != nil {
+			respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
 		respondJSON(w, 200, map[string]interface{}{"success": true, "id": *req.ID})
 		return
 	}
@@ -537,7 +560,10 @@ func (h *GitReposHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	// Optionally delete local clone too
 	var localPath string
 	h.db.QueryRow(`SELECT local_path FROM git_sync_repos WHERE id=$1`, idStr).Scan(&localPath)
-	h.db.Exec(`DELETE FROM git_sync_repos WHERE id=$1`, idStr)
+	if _, err := h.db.Exec(`DELETE FROM git_sync_repos WHERE id=$1`, idStr); err != nil {
+		respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
 	respondJSON(w, 200, map[string]interface{}{"success": true, "local_path": localPath})
 }
 
@@ -567,15 +593,19 @@ func (h *GitReposHandler) PullRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		h.db.Exec(`UPDATE git_sync_repos SET last_error=$1, last_sync_at=NOW() WHERE id=$2`,
-			out, idStr)
+		if _, dbErr := h.db.Exec(`UPDATE git_sync_repos SET last_error=$1, last_sync_at=NOW() WHERE id=$2`,
+			out, idStr); dbErr != nil {
+			log.Printf("GIT-REPOS: failed to save pull error for %s: %v", idStr, dbErr)
+		}
 		respondJSON(w, 500, map[string]interface{}{"success": false, "error": out})
 		return
 	}
 
 	commit := getHeadCommit(repo.LocalPath)
-	h.db.Exec(`UPDATE git_sync_repos SET last_sync_at=NOW(), last_commit=$1, last_error='' WHERE id=$2`,
-		commit, idStr)
+	if _, dbErr := h.db.Exec(`UPDATE git_sync_repos SET last_sync_at=NOW(), last_commit=$1, last_error='' WHERE id=$2`,
+		commit, idStr); dbErr != nil {
+		log.Printf("GIT-REPOS: failed to update pull status for %s: %v", idStr, dbErr)
+	}
 	log.Printf("GIT-REPOS: Pulled %s - %s", repo.Name, commit)
 	respondJSON(w, 200, map[string]interface{}{"success": true, "commit": commit, "output": out})
 }
@@ -614,8 +644,10 @@ func (h *GitReposHandler) PushRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	commit := getHeadCommit(repo.LocalPath)
-	h.db.Exec(`UPDATE git_sync_repos SET last_commit=$1, last_sync_at=NOW() WHERE id=$2`,
-		commit, idStr)
+	if _, dbErr := h.db.Exec(`UPDATE git_sync_repos SET last_commit=$1, last_sync_at=NOW() WHERE id=$2`,
+		commit, idStr); dbErr != nil {
+		log.Printf("GIT-REPOS: failed to update push status for %s: %v", idStr, dbErr)
+	}
 	log.Printf("GIT-REPOS: Pushed %s - %s", repo.Name, commit)
 	respondJSON(w, 200, map[string]interface{}{"success": true, "commit": commit})
 }
@@ -999,6 +1031,9 @@ func (h *GitReposHandler) runAutoSyncCycle() {
 		}
 		h.autoSyncOne(repo)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("GIT-REPOS: auto-sync rows error: %v", err)
+	}
 }
 
 func (h *GitReposHandler) autoSyncOne(repo repoAutoSync) {
@@ -1021,15 +1056,19 @@ func (h *GitReposHandler) autoSyncOne(repo repoAutoSync) {
 	}
 
 	if syncErr != nil {
-		h.db.Exec(`UPDATE git_sync_repos SET last_error=$1, last_sync_at=NOW() WHERE id=$2`,
-			syncErr.Error(), repo.id)
+		if _, dbErr := h.db.Exec(`UPDATE git_sync_repos SET last_error=$1, last_sync_at=NOW() WHERE id=$2`,
+			syncErr.Error(), repo.id); dbErr != nil {
+			log.Printf("GIT-REPOS: failed to save auto-sync error for %s: %v", repo.name, dbErr)
+		}
 		log.Printf("GIT-REPOS: Auto-sync failed for %s: %v", repo.name, syncErr)
 		return
 	}
 
 	commit := getHeadCommit(repo.localPath)
-	h.db.Exec(`UPDATE git_sync_repos SET last_sync_at=NOW(), last_commit=$1, last_error='' WHERE id=$2`,
-		commit, repo.id)
+	if _, dbErr := h.db.Exec(`UPDATE git_sync_repos SET last_sync_at=NOW(), last_commit=$1, last_error='' WHERE id=$2`,
+		commit, repo.id); dbErr != nil {
+		log.Printf("GIT-REPOS: failed to update auto-sync status for %s: %v", repo.name, dbErr)
+	}
 	log.Printf("GIT-REPOS: Auto-sync complete for %s - %s", repo.name, commit)
 
 	// Notify GitOps handler so it can trigger a drift check if this is the state.yaml repo

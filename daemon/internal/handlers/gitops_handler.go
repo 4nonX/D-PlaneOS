@@ -321,12 +321,14 @@ func (h *GitOpsHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	h.approvalsMu.Unlock()
 
 	// Persist approval to DB so it survives a daemon restart
-	h.db.Exec(`
+	if _, err := h.db.Exec(`
 		INSERT INTO gitops_approvals (kind, name, reason, approved_at)
 		VALUES ($1, $2, $3, NOW())
 		ON CONFLICT(kind, name) DO UPDATE SET reason=EXCLUDED.reason, approved_at=NOW()`,
 		req.Kind, req.Name, req.Reason,
-	)
+	); err != nil {
+		log.Printf("GITOPS: failed to persist approval for %s/%s: %v", req.Kind, req.Name, err)
+	}
 
 	log.Printf("GITOPS APPROVE: %s/%s approved - reason: %q", req.Kind, req.Name, req.Reason)
 	respondOK(w, map[string]interface{}{

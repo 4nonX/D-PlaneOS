@@ -148,8 +148,15 @@ func (h *APITokenHandler) listTokens(w http.ResponseWriter, userID int) {
 	var tokens []apiToken
 	for rows.Next() {
 		var t apiToken
-		rows.Scan(&t.ID, &t.Name, &t.Prefix, &t.Scopes, &t.LastUsed, &t.ExpiresAt, &t.CreatedAt)
+		if err := rows.Scan(&t.ID, &t.Name, &t.Prefix, &t.Scopes, &t.LastUsed, &t.ExpiresAt, &t.CreatedAt); err != nil {
+			log.Printf("API TOKEN LIST SCAN ERROR: %v", err)
+			continue
+		}
 		tokens = append(tokens, t)
+	}
+	if err := rows.Err(); err != nil {
+		respondErrorSimple(w, "Failed to list tokens", http.StatusInternalServerError)
+		return
 	}
 	if tokens == nil {
 		tokens = []apiToken{}

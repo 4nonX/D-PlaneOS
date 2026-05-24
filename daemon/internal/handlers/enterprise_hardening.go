@@ -689,6 +689,9 @@ func (h *AuditRotationHandler) GetAuditLogs(w http.ResponseWriter, r *http.Reque
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		log.Printf("WARN: audit log list rows: %v", err)
+	}
 	if logs == nil {
 		logs = []map[string]interface{}{}
 	}

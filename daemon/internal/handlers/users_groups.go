@@ -77,7 +77,10 @@ func (h *UserGroupHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var id, active int
 		var username, email, role, createdAt string
-		rows.Scan(&id, &username, &email, &role, &active, &createdAt)
+		if err := rows.Scan(&id, &username, &email, &role, &active, &createdAt); err != nil {
+			log.Printf("USER LIST SCAN ERROR: %v", err)
+			continue
+		}
 		users = append(users, map[string]interface{}{
 			"id":         id,
 			"username":   username,
@@ -86,6 +89,10 @@ func (h *UserGroupHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 			"active":     active == 1,
 			"created_at": createdAt,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		respondError(w, http.StatusInternalServerError, "Error iterating users", err)
+		return
 	}
 
 	if users == nil {
@@ -442,7 +449,9 @@ func (h *UserGroupHandler) ResetUserPassword(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Revoke all sessions so the user must log in with the new temp password
-	h.db.Exec(`DELETE FROM sessions WHERE username = $1`, username)
+	if _, err := h.db.Exec(`DELETE FROM sessions WHERE username = $1`, username); err != nil {
+		log.Printf("RESET PASSWORD: failed to revoke sessions for %s: %v", username, err)
+	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -531,6 +540,10 @@ func (h *UserGroupHandler) listGroups(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		respondError(w, http.StatusInternalServerError, "Error iterating groups", err)
+		return
+	}
 	if groups == nil {
 		groups = []map[string]interface{}{}
 	}

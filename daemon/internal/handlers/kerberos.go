@@ -61,9 +61,13 @@ func kerberosRenewTick(db *sql.DB) {
 	for rows.Next() {
 		var name, realm, principal string
 		if err := rows.Scan(&name, &realm, &principal); err != nil {
+			log.Printf("Kerberos renewer: scan error: %v", err)
 			continue
 		}
 		renewKerberosDomain(db, name, realm, principal)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("Kerberos renewer: rows error: %v", err)
 	}
 }
 
@@ -103,7 +107,9 @@ func renewKerberosDomain(db *sql.DB, name, realm, principal string) {
 	}
 
 	// Update domain renewal status.
-	db.Exec(`UPDATE ad_domains SET last_kinit_at=NOW(), kinit_ok=$1, updated_at=NOW() WHERE name=$2`, ok, name)
+	if _, err := db.Exec(`UPDATE ad_domains SET last_kinit_at=NOW(), kinit_ok=$1, updated_at=NOW() WHERE name=$2`, ok, name); err != nil {
+		log.Printf("Kerberos renewer: failed to update domain status for %s: %v", name, err)
+	}
 }
 
 // ticketValid returns true if klist -s exits 0 (valid, non-expired TGT exists).

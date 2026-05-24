@@ -112,6 +112,9 @@ func (h *WebhookHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 		// Never return the secret value in list responses.
 		configs = append(configs, c)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("WARN: webhook list rows: %v", err)
+	}
 
 	respondOK(w, map[string]interface{}{
 		"success":  true,
@@ -304,6 +307,9 @@ func SendWebhookAlert(db *sql.DB, event, severity, message string, data map[stri
 				log.Printf("webhook alert FAILED name=%s event=%s err=%v", c.Name, p.Event, err)
 			}
 		}(cfg, payload)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("WARN: dispatch webhook rows: %v", err)
 	}
 }
 

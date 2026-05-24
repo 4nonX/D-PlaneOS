@@ -105,6 +105,9 @@ func collectAuditTail(db *sql.DB) bundleSection {
 		}
 		entries = append(entries, r)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("WARN: support bundle audit rows: %v", err)
+	}
 
 	data, _ := json.MarshalIndent(entries, "", "  ")
 	return bundleSection{name: name, content: data}

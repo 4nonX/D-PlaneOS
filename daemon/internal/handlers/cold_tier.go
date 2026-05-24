@@ -456,4 +456,7 @@ func (h *ColdTierHandler) ReMountAll() {
 			}
 		}(m)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("cold_tier: re-mount rows error: %v", err)
+	}
 }

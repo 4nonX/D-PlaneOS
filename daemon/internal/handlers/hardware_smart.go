@@ -128,6 +128,9 @@ func ListSMARTSchedules(w http.ResponseWriter, r *http.Request) {
 		}
 		schedules = append(schedules, s)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("WARN: smart schedules list rows: %v", err)
+	}
 
 	respondOK(w, map[string]interface{}{
 		"success":   true,

@@ -84,6 +84,9 @@ func (h *ShareCRUDHandler) listShares(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		log.Printf("WARN: smb_shares list rows: %v", err)
+	}
 	if shares == nil {
 		shares = []map[string]interface{}{}
 	}
@@ -538,7 +541,10 @@ func (h *ShareCRUDHandler) regenerateSMBConf() {
 	for rows.Next() {
 		var name, path, comment, validUsers, writeList, createMask, dirMask string
 		var browsable, readOnly, guestOk int
-		rows.Scan(&name, &path, &comment, &browsable, &readOnly, &guestOk, &validUsers, &writeList, &createMask, &dirMask)
+		if err := rows.Scan(&name, &path, &comment, &browsable, &readOnly, &guestOk, &validUsers, &writeList, &createMask, &dirMask); err != nil {
+			log.Printf("SMB REGEN SCAN ERROR: %v", err)
+			continue
+		}
 
 		// Sanitize values to prevent injection
 		name = sanitizeSMBConfValue(name)
@@ -604,6 +610,10 @@ func (h *ShareCRUDHandler) regenerateSMBConf() {
 
 		conf.WriteString("\n")
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("SMB REGEN: rows error, aborting config write: %v", err)
+		return
+	}
 
 	err = os.WriteFile(h.smbConfPath, []byte(conf.String()), 0644)
 	if err != nil {
@@ -653,20 +663,32 @@ func (h *ShareCRUDHandler) UpdateSMBSettings(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	setSetting := func(key string, val *bool) {
+	setSetting := func(key string, val *bool) error {
 		if val == nil {
-			return
+			return nil
 		}
 		v := "0"
 		if *val {
 			v = "1"
 		}
-		h.db.Exec(`INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, key, v)
+		if _, err := h.db.Exec(`INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, key, v); err != nil {
+			return fmt.Errorf("save %s: %w", key, err)
+		}
+		return nil
 	}
 
-	setSetting("smb_time_machine", req.TimeMachine)
-	setSetting("smb_shadow_copy", req.ShadowCopy)
-	setSetting("smb_recycle_bin", req.RecycleBin)
+	if err := setSetting("smb_time_machine", req.TimeMachine); err != nil {
+		respondErrorSimple(w, "Failed to save settings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := setSetting("smb_shadow_copy", req.ShadowCopy); err != nil {
+		respondErrorSimple(w, "Failed to save settings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := setSetting("smb_recycle_bin", req.RecycleBin); err != nil {
+		respondErrorSimple(w, "Failed to save settings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	if req.TimeMachine != nil {
 		if *req.TimeMachine {

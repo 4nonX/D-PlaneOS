@@ -196,6 +196,9 @@ func (h *NFSHandler) ListNFSExports(w http.ResponseWriter, r *http.Request) {
 		e.Enabled = enabled == 1
 		exports = append(exports, e)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("WARN: nfs_exports list rows: %v", err)
+	}
 	if exports == nil {
 		exports = []NFSExport{}
 	}

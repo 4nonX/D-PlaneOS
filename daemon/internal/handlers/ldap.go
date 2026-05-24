@@ -477,6 +477,9 @@ func (h *LDAPHandler) GetMappings(w http.ResponseWriter, r *http.Request) {
 		if rid.Valid { v := int(rid.Int64); m.RoleID = &v }
 		list = append(list, m)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("WARN: ldap_group_mappings rows: %v", err)
+	}
 	if list == nil { list = []mapping{} }
 	writeJSON(w, 200, ldapResp{Success: true, Data: list})
 }
@@ -571,8 +574,14 @@ func (h *LDAPHandler) GetSyncLog(w http.ResponseWriter, r *http.Request) {
 	var list []entry
 	for rows.Next() {
 		var e entry
-		rows.Scan(&e.ID, &e.SyncType, &e.Success, &e.UsersSynced, &e.UsersCreated, &e.UsersUpdated, &e.UsersDisabled, &e.ErrorMsg, &e.DurationMs, &e.CreatedAt)
+		if err := rows.Scan(&e.ID, &e.SyncType, &e.Success, &e.UsersSynced, &e.UsersCreated, &e.UsersUpdated, &e.UsersDisabled, &e.ErrorMsg, &e.DurationMs, &e.CreatedAt); err != nil {
+			log.Printf("LDAP SYNC LOG SCAN ERROR: %v", err)
+			continue
+		}
 		list = append(list, e)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("LDAP SYNC LOG ROWS ERROR: %v", err)
 	}
 	if list == nil { list = []entry{} }
 	writeJSON(w, 200, ldapResp{Success: true, Data: list})
@@ -702,6 +711,10 @@ func (h *LDAPHandler) ListDomains(w http.ResponseWriter, r *http.Request) {
 			d.LastKinitAt = kinitAt.String
 		}
 		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, 500, ldapResp{Error: "row iteration error: " + err.Error()})
+		return
 	}
 	writeJSON(w, 200, ldapResp{Success: true, Data: out})
 }
@@ -951,7 +964,9 @@ func (h *LDAPHandler) LeaveDomain(w http.ResponseWriter, r *http.Request) {
 		}
 		j.Log("Domain leave successful")
 
-		db.Exec(`UPDATE ad_domains SET domain_joined=false, domain_joined_at=NULL, updated_at=NOW() WHERE name=$1`, name)
+		if _, err := db.Exec(`UPDATE ad_domains SET domain_joined=false, domain_joined_at=NULL, updated_at=NOW() WHERE name=$1`, name); err != nil {
+			log.Printf("AD: failed to update domain_joined for %s: %v", name, err)
+		}
 		syncIDMAPToNixwriter(db)
 
 		audit.Log(audit.AuditLog{
@@ -989,6 +1004,10 @@ func syncIDMAPToNixwriter(db *sql.DB) {
 			anyJoined = true
 		}
 		domains = append(domains, d)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("AD: syncIDMAP: rows error: %v", err)
+		return
 	}
 
 	// Always include a catch-all "*" entry with tdb if not already present.

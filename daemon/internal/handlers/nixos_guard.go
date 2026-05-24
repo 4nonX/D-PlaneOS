@@ -479,6 +479,9 @@ func (h *NixOSGuardHandler) ListPreUpgradeSnapshots(w http.ResponseWriter, r *ht
 		}
 		snaps = append(snaps, s)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("WARN: pre-upgrade snapshots rows: %v", err)
+	}
 
 	respondOK(w, map[string]interface{}{
 		"success":   true,

@@ -533,7 +533,9 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Revoke all other sessions - the current session remains active
-	h.db.Exec(`DELETE FROM sessions WHERE username = $1 AND session_id != $2`, username, sessionID)
+	if _, err := h.db.Exec(`DELETE FROM sessions WHERE username = $1 AND session_id != $2`, username, sessionID); err != nil {
+		log.Printf("AUTH: failed to revoke other sessions for %s: %v", username, err)
+	}
 
 	clientIP := security.RealIP(r)
 	h.auditLog(username, "password_changed", "Password changed", clientIP)

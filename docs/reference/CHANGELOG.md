@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v11.6.2 (2026-05-24) - "Error Handling & Reliability"
+
+Upgrade from: v11.6.1 - Drop-in. No schema changes. No configuration changes.
+
+### Fixed
+
+- **Silent database write failures across all handler files**: Every `db.Exec` and `tx.Exec` call that previously discarded its error return is now checked. Affected paths: `system_status.go` (DDL provisioning, setup_complete INSERT, hostname and timezone inserts, settings upsert loop, advisory lock), `auth.go` (session revocation on password change), `kerberos.go` (domain renewal status update), `users_groups.go` (ResetUserPassword session revocation), `api_tokens.go`, `ldap.go` (LeaveDomain goroutine), `shares_crud.go` (UpdateSMBSettings settings loop now returns HTTP 500 on failure; previously silently succeeded), `git_sync.go` (SaveConfig, Pull, Push, AutoSync status updates), `git_sync_repos.go` (SaveCredential UPDATE paths, DeleteCredential, DeleteRepo, SaveRepo, PullRepo, PushRepo, autoSyncOne status updates), `gitops_handler.go` (approval persist). Previously, failures in these calls were silently discarded and the client received `{"success": true}` regardless.
+- **Missing `rows.Err()` checks after every iteration loop**: All `for rows.Next()` loops now check `rows.Err()` after iteration to detect mid-stream database errors that cut a result set short. Previously, a DB error mid-iteration would silently return a truncated list with no indication of failure. Affected files: `alerting_webhook.go` (list and dispatch loops), `audit_verify.go` (chain verification - now returns HTTP 500 on incomplete read rather than a potentially false "chain intact"), `cold_tier.go` (background remount loop), `enterprise_hardening.go` (audit log list), `hardware_smart.go` (SMART schedules list), `git_sync_repos.go` (auto-sync loop), `ldap.go` (group mappings list, domain list, IDMAP sync helper), `nixos_guard.go` (pre-upgrade snapshots list), `shares_crud.go` (SMB config regeneration - aborts config write on rows error to prevent writing a partial smb.conf), `support_bundle.go` (audit log bundle collection), `nfs_handler.go` (exports list).
+- **Unchecked `rows.Scan` in iteration loops**: All scan calls inside `for rows.Next()` loops now check their error return and log or skip on failure. Previously, a failed scan silently left variables at zero values, which in `regenerateSMBConf` would write corrupted share sections into smb.conf.
+- **Security: session revocation failures now logged on password change and admin password reset**: If the `DELETE FROM sessions` call fails after a password change (`auth.go`) or admin-forced password reset (`users_groups.go`), the failure is now logged. Previously a silent failure left the old sessions active.
+
+---
+
 ## v11.6.1 (2026-05-23) - "UI Polish"
 
 Upgrade from: v11.6.0 - Drop-in. No schema changes. No configuration changes.
