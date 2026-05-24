@@ -121,7 +121,7 @@ Full enterprise HA is implemented across three layers. Two deployment topologies
 - Full HMAC audit trail on every fencing event
 - Maintenance mode (`POST /api/ha/maintenance`, 0-3600 s) suppresses fencing during scheduled maintenance
 
-**Split-brain protection:** On startup, daemon queries Patroni at `http://localhost:8008/primary`. A non-200 response (node is not the primary) blocks automatic ZFS pool import so a standby node never acquires the pools.
+**Split-brain protection:** On startup, daemon queries Patroni at `http://localhost:8008/health`. A 503 response (replica role) blocks automatic ZFS pool import so a standby node never acquires the pools.
 
 **RTO:** ~10-30 seconds for shared-SAS deployments (SCSI-3 PR fencing is near-instant once the preempt command completes). ~90 seconds for replicated deployments (45-second heartbeat timeout + IPMI power-off confirmation + startup). No human intervention required in either case.
 

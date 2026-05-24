@@ -49,9 +49,11 @@ The release tarball for the current version is at:
 **Symptom:** ZFS disk failures do not appear in the UI immediately; alerts are delayed until the next poll cycle (30 seconds).
 
 **Fix:**
+
+The ZED hook is managed by the NixOS module. If it is missing, the system state has diverged from the declared configuration. Restore it by rebuilding the system:
+
 ```bash
-sudo cp /opt/dplaneos/install/zed/dplaneos-notify.sh /etc/zfs/zed.d/
-sudo chmod +x /etc/zfs/zed.d/dplaneos-notify.sh
+sudo nixos-rebuild switch
 sudo systemctl restart zed
 ```
 
@@ -160,17 +162,26 @@ sudo journalctl -u docker -n 50
 docker info | grep -i proxy
 ```
 
-**Fix - Configure Docker proxy:**
+**Fix - Configure Docker proxy (NixOS - persistent):**
+
+Add to `configuration.nix` and run `sudo nixos-rebuild switch`:
+```nix
+systemd.services.docker.serviceConfig.Environment = [
+  "HTTP_PROXY=http://proxy.example.com:8080"
+  "HTTPS_PROXY=http://proxy.example.com:8080"
+  "NO_PROXY=localhost,127.0.0.1"
+];
+```
+
+**Fix - Configure Docker proxy (temporary, cleared on next nixos-rebuild switch):**
 ```bash
 sudo mkdir -p /etc/systemd/system/docker.service.d
-
 sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf <<EOF
 [Service]
 Environment="HTTP_PROXY=http://proxy.example.com:8080"
 Environment="HTTPS_PROXY=http://proxy.example.com:8080"
 Environment="NO_PROXY=localhost,127.0.0.1"
 EOF
-
 sudo systemctl daemon-reload
 sudo systemctl restart docker
 docker pull hello-world:latest
@@ -248,11 +259,9 @@ sudo journalctl -u dplaned -n 20 | grep -i "disk"
 sudo cp /opt/dplaneos/install/udev/99-dplaneos-hotswap.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 
-# Reinstall notification scripts
-sudo cp /opt/dplaneos/install/scripts/notify-disk-added.sh /opt/dplaneos/scripts/
-sudo cp /opt/dplaneos/install/scripts/notify-disk-removed.sh /opt/dplaneos/scripts/
-sudo chmod +x /opt/dplaneos/scripts/notify-disk-added.sh
-sudo chmod +x /opt/dplaneos/scripts/notify-disk-removed.sh
+# Ensure the notification scripts are executable
+sudo chmod +x /opt/dplaneos/install/scripts/notify-disk-added.sh
+sudo chmod +x /opt/dplaneos/install/scripts/notify-disk-removed.sh
 
 # Trigger a manual rescan
 udevadm trigger --subsystem-match=block
@@ -435,7 +444,7 @@ sudo journalctl -u dplaned | grep -i "replicate\|replication"
 
 **Common causes:**
 - Daemon was restarted after the schedule was created - the in-memory monitor reinitializes on start and will pick up the schedule on the next tick (within 5 minutes)
-- SSH key not installed on the remote - test with: `ssh -i /etc/dplaneos/replication-key <user>@<host> zfs list`
+- SSH key not installed on the remote - test with: `ssh -i /root/.ssh/dplaneos_replication <user>@<host> zfs list`
 - Remote host is unreachable - the pre-flight test in ReplicationPage verifies connectivity
 
 ---
@@ -446,18 +455,21 @@ sudo journalctl -u dplaned | grep -i "replicate\|replication"
 - `trigger_on_snapshot: true` is set on the replication schedule
 - Snapshots are created on schedule but replication does not follow
 
-**Cause:** The cron hook endpoint is called by the snapshot cron job. If the cron job was set up before v4.3.0, it may still call `zfs snapshot` directly rather than the hook endpoint.
+**Cause:** Snapshot schedules use systemd timer units. If a schedule was created before the systemd timer migration, a legacy cron file may still be active instead of the current timer.
 
-**Fix - Regenerate the snapshot cron:**
+**Fix - Regenerate the snapshot timer:**
 1. Open Snapshot Scheduler page
 2. Edit the schedule and click Save (even with no changes)
-3. This regenerates the cron entry to use `POST /api/zfs/snapshots/cron-hook`
+3. This removes any legacy cron file and registers a new systemd timer unit that calls `POST /api/zfs/snapshots/cron-hook`
 
 **Verify:**
 ```bash
-cat /etc/cron.d/dplaneos-snapshots
+# Current schedules run as systemd timers
+systemctl list-timers 'dplaneos-snapshot-*'
+
+# Confirm the timer unit calls the cron-hook endpoint
+cat /etc/systemd/system/dplaneos-snapshot-<name>.service
 # Should show: curl ... /api/zfs/snapshots/cron-hook
-# Not: zfs snapshot ...
 ```
 
 ---
@@ -559,12 +571,11 @@ systemctl status dplaneos-realtime
 # Daemon (most useful)
 sudo journalctl -u dplaned -f
 
-# Web server
+# Web server (nginx logs go to journald on NixOS)
 sudo journalctl -u nginx -f
-sudo tail -f /var/log/nginx/error.log
 
 # DPlaneOS application log
-sudo tail -f /var/log/dplaneos/error.log
+sudo journalctl -u dplaned -p err -f
 ```
 
 ### Step 3: Check File Paths
@@ -577,16 +588,15 @@ The installer places files in these locations:
 | Web UI (static files) | `/opt/dplaneos/app/` |
 | Configuration database | `/var/lib/dplaneos/pgsql/` |
 | Disk registry | Stored in the main PostgreSQL database (`disk_registry` table) |
-| Application logs | `/var/log/dplaneos/` |
-| Install log | `/var/log/dplaneos-install.log` |
+| Application logs | journald (`journalctl -u dplaned`) and `/var/log/dplaneos/` |
 | Version file | `/opt/dplaneos/VERSION` |
-| nginx config | `/etc/nginx/sites-available/dplaneos` |
+| nginx config | Managed by NixOS (`services.nginx` in `configuration.nix`); read-only at `/etc/nginx/nginx.conf` |
 | Daemon systemd unit | `/etc/systemd/system/dplaned.service` |
-| ZED hook | `/etc/zfs/zed.d/dplaneos-notify.sh` |
+| ZED hook | `/etc/zfs/zed.d/dplaneos-notify.sh` (managed by NixOS module) |
 | udev hot-swap rules | `/etc/udev/rules.d/99-dplaneos-hotswap.rules` |
 | udev removable media rules | `/etc/udev/rules.d/99-dplaneos-removable-media.rules` |
-| Snapshot cron | `/etc/cron.d/dplaneos-snapshots` |
-| Scrub cron | `/etc/cron.d/dplaneos-scrub` |
+| Snapshot schedules | systemd timers: `/etc/systemd/system/dplaneos-snapshot-*.timer` |
+| Scrub schedules | systemd timers: `/etc/systemd/system/dplaneos-scrub-*.timer` |
 
 ### Step 4: Check Permissions
 
@@ -666,32 +676,37 @@ This provides a menu-driven interface for: service restart, database checks, adm
 
 ### Manual Full Reset
 
+DPlaneOS runs on NixOS. A full reset means reinstalling the OS from the ISO and then restoring configuration from Git and data from ZFS pools:
+
+1. Boot from the DPlaneOS ISO and reinstall to the OS disk
+2. After first boot, import data pools: `sudo zpool import -a`
+3. Configure the GitOps repository: Settings - GitOps
+4. Apply: `POST /api/gitops/apply` or run `sudo dplaned --apply-only`
+5. Restore the PostgreSQL database from backup if needed (see [BACKUP-REPLICATION.md](BACKUP-REPLICATION.md))
+
+ZFS data pools are on separate disks and are completely unaffected by a boot disk reinstall.
+
+Before reinstalling, back up the PostgreSQL database if the data pools do not hold a ZFS snapshot of it:
+
 ```bash
-# Stop services
-sudo systemctl stop dplaned nginx
-
-# Backup data (database + config + custom icons)
-sudo tar -czf /tmp/dplaneos-backup.tar.gz \
-  /var/lib/dplaneos \
-  /etc/dplaneos
-
-# Remove and reinstall
-sudo rm -rf /opt/dplaneos
-sudo ./install.sh
-
-# Restore data
-sudo tar -xzf /tmp/dplaneos-backup.tar.gz -C /
-sudo systemctl restart dplaned
+sudo -u postgres pg_dump dplaneos | gzip > /tmp/dplaneos-db-$(date +%Y%m%d).sql.gz
+# Copy to a safe location before reinstalling
 ```
 
 ### Rollback an Upgrade
 
-Each upgrade creates a timestamped backup. To roll back:
+Updates use an A/B slot system. To revert to the previous version:
 
 ```bash
-ls /var/lib/dplaneos/backups/
-sudo bash /var/lib/dplaneos/backups/pre-upgrade-<timestamp>/rollback.sh
+# Revert to the previous NixOS generation (other slot)
+sudo dplaneos-ota-update --revert
+
+# If the system will not boot at all:
+# Select the previous NixOS generation from the systemd-boot menu,
+# press 'd' to set it as default, then Enter to boot it.
 ```
+
+See [OTA-UPDATES.md](OTA-UPDATES.md) for full details on the A/B slot mechanism and automatic post-boot health checks.
 
 ---
 
@@ -730,5 +745,5 @@ sudo journalctl -u dplaned -n 50 > daemon.log
 | Pool creation rejected | Low | Raw `/dev/sdX` path submitted | Reload udev, re-open Hardware page |
 | Alerts not firing | Medium | Alert not wired or de-duplicated | Test each channel; check event subscription |
 | Custom icon not showing | Low | File missing or label typo | Verify file in `custom_icons/`, check label |
-| Post-snapshot replication not firing | Low | Old cron format (pre-4.3.0) | Resave schedule to regenerate cron hook |
+| Post-snapshot replication not firing | Low | Stale schedule (pre-timer migration) | Resave schedule to regenerate systemd timer |
 
