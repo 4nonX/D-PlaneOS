@@ -149,17 +149,11 @@ For direct Telegram notifications, DPlaneOS can send messages to a Telegram bot.
 
 ### ZED Integration (ZFS Event Daemon)
 
-For ZFS disk and pool events, the ZFS Event Daemon (ZED) can send Telegram alerts directly - bypassing the DPlaneOS daemon - which means disk fault alerts arrive even if the daemon is down.
+For ZFS disk and pool events, the ZFS Event Daemon (ZED) sends events to the DPlaneOS daemon via Unix socket (`/run/dplaneos/dplaneos.sock`). The daemon then dispatches them to all configured alert channels (SMTP, Telegram, webhooks). If the daemon is down, ZED events are logged to syslog only.
 
-Configure in `/etc/zfs/zed.d/dplaneos-notify.sh`:
-```bash
-# The ZED hook reads telegram_config from the DPlaneOS database.
-# Enable via:
-services.dplaneos.zed.telegramAlerts = true;
-# in configuration.nix, then nixos-rebuild switch.
-```
+The ZED hook is installed automatically by the NixOS module (`services.zfs.zed.d/dplaneos-notify.sh`). No additional configuration is required.
 
-The ZED hook delivers events to the daemon via Unix socket. `zed_listener.go` dispatches them to typed WebSocket events and forwards warning/error severity events to all configured alert channels. Handled subclasses: `scrub_start`, `scrub_finish`, `scrub_abort`, `resilver_start`, `resilver_finish`, `trim_start`, `trim_finish`, `trim_abort`, `vdev_clear`, `vdev_online`, `pool_import`, `data_loss`, `deadman`, `statechange`, `checksum`, `io`, `pool_destroy`, `vdev_remove`, `device_removal`. All other subclasses emit a generic `zfs.event.<subclass>` WebSocket event.
+`zed_listener.go` dispatches ZED events to typed WebSocket events and forwards warning/error severity events to all configured alert channels. Handled subclasses: `scrub_start`, `scrub_finish`, `scrub_abort`, `resilver_start`, `resilver_finish`, `trim_start`, `trim_finish`, `trim_abort`, `vdev_clear`, `vdev_online`, `pool_import`, `data_loss`, `deadman`, `statechange`, `checksum`, `io`, `pool_destroy`, `vdev_remove`, `device_removal`. All other subclasses emit a generic `zfs.event.<subclass>` WebSocket event.
 
 ### Via API
 
@@ -289,45 +283,39 @@ On TOTP setup, 8 single-use backup codes are generated. Each code:
 - Is stored as a bcrypt hash (the plaintext is shown only during setup)
 - Bypasses the TOTP requirement entirely
 
-Use a backup code if your authenticator device is lost. After using a backup code, re-enroll TOTP immediately.
-
-**To generate new backup codes** (invalidates all existing codes):
-Settings: Account: Two-Factor Authentication: Regenerate Backup Codes.
-
-Enter the current TOTP code or a backup code to confirm.
+Use a backup code if your authenticator device is lost. After using a backup code, re-enroll TOTP immediately (delete and re-setup via `DELETE /api/auth/totp/setup` followed by `POST`).
 
 ### Admin Reset (Account Recovery)
 
-If a user loses access to both their authenticator and backup codes, an admin can reset their TOTP:
+There is no in-app admin path for resetting another user's TOTP. If a non-admin user loses both their authenticator and all backup codes, an admin must disable TOTP directly in the database:
 
-Settings: Users: select user: Reset 2FA.
+```sql
+UPDATE totp_secrets SET enabled = 0 WHERE user_id = <id>;
+```
 
-This disables TOTP for the account and forces re-enrollment on next login. The action is logged in the audit trail.
+This forces re-enrollment on the user's next login.
 
-The local admin (user ID 1) cannot have their TOTP reset by anyone else. If user 1 is locked out, use SSH access to the NAS and the `dplaneos-admin-reset` CLI tool (available when logged in as root via SSH).
+If user 1 (the local admin) is locked out, use SSH access to the NAS and the `dplaneos-recovery` CLI tool (option 5: Reset Admin Password, available when logged in as root via SSH).
 
 ### TOTP API
 
 ```
-GET  /api/auth/totp/status           # current TOTP state for authenticated user
-POST /api/auth/totp/setup            # initiate setup, returns QR URI and backup codes
-POST /api/auth/totp/confirm          # confirm setup with a valid TOTP code
-POST /api/auth/totp/disable          # disable TOTP (requires current TOTP code)
-POST /api/auth/totp/regenerate-codes # generate new backup codes (requires TOTP code)
+GET    /api/auth/totp/setup   # get current TOTP state and QR URI (when not yet enabled)
+POST   /api/auth/totp/setup   # confirm setup with a valid 6-digit TOTP code; returns backup codes
+DELETE /api/auth/totp/setup   # disable TOTP (requires password + current TOTP code in body)
 
-# Admin endpoints
-POST /api/users/{id}/totp/reset      # admin: disable TOTP for user (requires roles:write)
+POST   /api/auth/totp/verify  # step 2 of login: exchange pending_token + TOTP code for a session
 ```
 
 ### Login Flow with TOTP
 
 ```
 1. POST /api/auth/login {"username": "alice", "password": "..."}
-   Response: {"totp_required": true, "session_token": "<temp-token>"}
+   Response: {"requires_totp": true, "pending_token": "<temp-token>"}
 
-2. POST /api/auth/totp/verify {"code": "123456", "session_token": "<temp-token>"}
-   Response: {"token": "<full-session-token>"}
-   # Use this token for all subsequent requests
+2. POST /api/auth/totp/verify {"code": "123456", "pending_token": "<temp-token>"}
+   Response: {"session_id": "<full-session-token>"}
+   # Use this session_id for all subsequent requests
 ```
 
 If the code is wrong: the request fails. After 5 consecutive failures, the account is temporarily locked (60 seconds). Persistent failures generate a `auth.login.locked` alert.
