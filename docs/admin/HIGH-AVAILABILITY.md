@@ -82,7 +82,7 @@ On each node, add the HA block to `configuration.nix`. The co-located etcd witne
 ```nix
 services.dplaneos.ha = {
   enable = true;
-  role   = "primary";    # "standby" on node B
+  role   = "primary";    # "secondary" on node B
 
   localAddress   = "NODE_A_IP";
   peerAddress    = "NODE_B_IP";
@@ -94,18 +94,12 @@ services.dplaneos.ha = {
     "http://NODE_A_IP:2381"    # co-located witness etcd member
   ];
 
-  fence = {
-    mechanism = "scsi3";
-    # dplane-fenced manages PR keys automatically.
-    # No bmcIP or SBD device required.
-  };
+  # No fence options needed for SCSI-3 PR.
+  # dplane-fenced.service manages PR keys automatically via the fenced module.
 
-  keepalived = {
-    vip       = "VIP_ADDRESS";
-    interface = "eth0";
-    priority  = 100;           # 90 on node B
-    authPass  = "KEEPALIVED_PASS";
-  };
+  virtualIP    = "VIP_ADDRESS";
+  interface    = "eth0";
+  vrrpPassword = "KEEPALIVED_PASS";
 };
 ```
 
@@ -116,20 +110,13 @@ sudo nixos-rebuild switch
 
 #### Step 3: Verify SCSI-3 reservation acquisition
 
-On the primary node, confirm `dplane-fenced` holds the reservation on all shared disks:
+On the primary node, confirm `dplane-fenced` holds the reservation on all shared disks via the API:
 
-```bash
-dplane-fenced-ctl keys
-# Shows the registered key for this node on each disk
-
-dplane-fenced-ctl status
-# Shows reservation holder and registered key count
-```
-
-Via the API:
 ```
 GET /api/ha/fenced/status
 ```
+
+This returns the registered key for this node and the list of devices currently holding a WERO reservation.
 
 #### Step 4: Check Patroni and etcd
 
@@ -154,8 +141,11 @@ Expected Patroni output:
 #### Step 5: Verify HAProxy and VIP
 
 ```bash
-# HAProxy health check - returns 200 on primary, 503 on standby
+# Patroni primary check (also used internally by HAProxy) - 200 on primary, 503 on standby
 curl http://localhost:8008/primary
+
+# HAProxy routes PostgreSQL connections - confirm it is up
+curl http://localhost:5000 2>/dev/null || systemctl status haproxy
 
 # VIP is on the primary
 ip addr show eth0 | grep VIP_ADDRESS
@@ -252,7 +242,7 @@ sudo nixos-rebuild switch
 ```nix
 services.dplaneos.ha = {
   enable = true;
-  role   = "primary";    # "standby" on node B
+  role   = "primary";    # "secondary" on node B
 
   localAddress   = "NODE_A_IP";
   peerAddress    = "NODE_B_IP";
@@ -264,23 +254,19 @@ services.dplaneos.ha = {
     "http://WITNESS_IP:2379"
   ];
 
-  fence = {
-    mechanism = "ipmi";    # or "sbd"
-    ipmi = {
-      peerBmcAddress = "PEER_BMC_IP";
-      username       = "admin";
-      passwordFile   = "/etc/dplaneos/ipmi-fence.pw";
-    };
-    # SBD alternative:
-    # sbd.device = "/dev/disk/by-id/...";
+  fencing = {
+    enable          = true;
+    bmcIP           = "PEER_BMC_IP";
+    bmcUser         = "admin";
+    bmcPasswordFile = "/etc/dplaneos/ipmi-fence.pw";
   };
+  # SBD alternative (ZFS dataset-based, set fencing.enable = false):
+  # sbd.pool    = "tank";
+  # sbd.dataset = "sbd-lease";   # optional, defaults to "sbd-lease"
 
-  keepalived = {
-    vip       = "VIP_ADDRESS";
-    interface = "eth0";
-    priority  = 100;    # 90 on node B
-    authPass  = "KEEPALIVED_PASS";
-  };
+  virtualIP    = "VIP_ADDRESS";
+  interface    = "eth0";
+  vrrpPassword = "KEEPALIVED_PASS";
 };
 ```
 
@@ -340,7 +326,7 @@ Enable this before rebooting or making changes to prevent a false-positive autom
 ### Rolling OTA Update (zero downtime)
 
 1. Put node B (standby) in maintenance mode
-2. Trigger OTA on node B: `sudo nixos-rebuild switch --flake github:4nonX/DPlaneOS#dplaneos` (or via Settings - System - Updates in the web UI)
+2. Trigger OTA on node B: `sudo dplaneos-ota-update` (or via Settings - System - Updates in the web UI)
 3. Node B reboots into the new system slot
 4. Verify node B is healthy: `GET /api/ha/status` from node B
 5. Switchover to node B: `POST /api/ha/failover`
@@ -395,9 +381,12 @@ Requirements:
 - `dplane-fenced.service` running on both nodes
 
 ```bash
-dplane-fenced-ctl status    # active reservations and key state
-dplane-fenced-ctl keys      # registered keys per disk
-GET /api/ha/fenced/status   # same via daemon API
+# Active reservations and key state
+GET /api/ha/fenced/status
+
+# Service and journal logs
+systemctl status dplane-fenced
+journalctl -u dplane-fenced -n 50
 ```
 
 ### IPMI / Redfish
@@ -422,10 +411,12 @@ Requirements:
 - Block device (zvol, LUN, or iSCSI target) accessible from both nodes
 - Must be paired with a witness node in two-node clusters (SBD cannot distinguish partition from failure without a quorum tiebreaker)
 
-Initialize the SBD device:
+The SBD lease dataset is created automatically at first boot by the `dplaneos-sbd-init` systemd service when `ha.sbd.pool` is non-empty. No manual initialization is needed.
+
+Verify the dataset exists:
 ```bash
-sbd -d /dev/disk/by-id/... create
-sbd -d /dev/disk/by-id/... message <node-b-hostname> test
+zfs list <pool>/sbd-lease
+# or whatever ha.sbd.dataset is set to
 ```
 
 ---
@@ -442,5 +433,5 @@ sbd -d /dev/disk/by-id/... message <node-b-hostname> test
 | Old primary still writing after SCSI-3 failover | `sg_persist --in -k /dev/sdX` on old primary | RESERVATION CONFLICT confirms fencing is working; if writes succeed, the HBA or disk firmware does not support SCSI-3 PR |
 | `dplane-fenced` preempt fails | `journalctl -u dplane-fenced` | Check machine-id key derivation; verify physical disk path is reachable from both nodes |
 | etcd quorum lost | `etcdctl endpoint health` | At least 2 of 3 etcd members must be reachable |
-| Patroni not finding etcd | `journalctl -u patroni` | Verify etcd endpoints in `/etc/patroni/patroni.yml`; check firewall on etcd ports |
+| Patroni not finding etcd | `journalctl -u patroni` | Verify etcd endpoints in `/etc/dplaneos/patroni.yaml`; check firewall on etcd ports |
 | Witness not reachable (Path B) | `etcdctl endpoint health http://WITNESS_IP:2379` | Check firewall rules; restart etcd on witness |
