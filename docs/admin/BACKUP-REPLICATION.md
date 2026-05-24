@@ -15,7 +15,7 @@ For the persistence model (what survives reboots vs. what is ephemeral), see [AR
 | NAS configuration (OS-level) | `configuration.nix` / `flake.nix` | Git push to remote |
 | Database (users, roles, audit) | `/var/lib/dplaneos/pgsql/` | `pg_dump` or ZFS snapshot of the dataset |
 | Docker container state | `/var/lib/docker/` | ZFS snapshot (if on a ZFS dataset) or container volume backup |
-| TLS certificates | `/etc/dplaneos/` (persisted) | Included in ZFS snapshot of `/persist` or `pg_dump` |
+| TLS certificates | `/etc/dplaneos/ssl/` (persisted) | Included in ZFS snapshot of `/persist` |
 
 **What you do NOT need to back up:** The NixOS system closure itself. If the boot disk fails, you reinstall from the ISO and import your ZFS pools. The ISO always contains the correct system closure for the pinned nixpkgs revision.
 
@@ -67,7 +67,7 @@ zfs set com.sun:auto-snapshot=false tank/scratch
 
 Storage UI: Snapshots tab on any dataset. Set a cron schedule, retention count, and whether to include child datasets.
 
-These schedules are stored in the database and survive reboots. They can also be declared in `state.yaml` under `smart_tasks` (for SMART) - snapshot schedules are managed via the UI/API separately.
+These schedules are stored in `/etc/dplaneos/snapshot-schedules.json` and survive reboots (the `/etc/dplaneos/` directory is bind-mounted from `/persist`). SMART task schedules are separate and can be declared in `state.yaml` under `smart_tasks`.
 
 ---
 
@@ -266,15 +266,27 @@ sudo -u postgres pg_dump dplaneos | gzip > /mnt/backup/dplaneos-$(date +%Y%m%d).
 
 ### Continuous archiving (WAL)
 
-For point-in-time recovery, configure WAL archiving in PostgreSQL:
-```bash
-# In /var/lib/dplaneos/pgsql/postgresql.conf (append):
-archive_mode = on
-archive_command = 'cp %p /mnt/backup/wal/%f'
-wal_level = replica
-```
+For point-in-time recovery, configure WAL archiving via the NixOS module. Do not edit `postgresql.conf` directly - NixOS regenerates it on every `nixos-rebuild switch`.
 
-Then run `systemctl restart postgresql`.
+**Standalone (no HA):** add to `configuration.nix`:
+```nix
+services.postgresql.settings = {
+  archive_mode    = "on";
+  archive_command = "cp %p /mnt/backup/wal/%f";
+  wal_level       = "replica";
+};
+```
+Then run `sudo nixos-rebuild switch`.
+
+**HA (Patroni):** `wal_level = replica` is already set. Add the archive settings through Patroni's DCS config so they are not overwritten:
+```bash
+patronictl -c /etc/dplaneos/patroni.yaml edit-config
+```
+Add under `postgresql.parameters`:
+```yaml
+archive_mode: 'on'
+archive_command: 'cp %p /mnt/backup/wal/%f'
+```
 
 ### Restore
 
