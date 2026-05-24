@@ -44,8 +44,6 @@ CGO_ENABLED=1 go build -mod=vendor \
 The release tarball for the current version is at:
 `https://github.com/4nonX/DPlaneOS/releases/latest`
 
-**Fix:** DPlaneOS uses PostgreSQL. To move the data directory, follow standard PostgreSQL/Patroni procedures or update the mountpoint for `/var/lib/dplaneos/pgsql`.
-
 ### ZED Hook Not Installed
 
 **Symptom:** ZFS disk failures do not appear in the UI immediately; alerts are delayed until the next poll cycle (30 seconds).
@@ -97,7 +95,7 @@ If the module itself is not present, run `sudo nixos-rebuild switch` to restore 
 - Daemon logs: `Failed to initialize database tables`
 - Second boot works
 
-**Cause:** Race condition - the daemon starts before the DB file is fully initialized. The `dplaneos-init-db.service` unit normally prevents this; if it is absent the daemon may start too early.
+**Cause:** Race condition - the daemon starts before PostgreSQL is fully initialized. The `dplaneos-init-db.service` unit normally prevents this; if it is absent the daemon may start too early.
 
 **Diagnosis:**
 ```bash
@@ -122,8 +120,17 @@ sudo dplaneos-recovery
 ```bash
 sudo systemctl stop dplaned
 
-# Generate a bcrypt hash (example using python)
-NEW_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'your-new-password', bcrypt.gensalt(12)).decode())")
+PASS_TMP=$(mktemp)
+chmod 600 "$PASS_TMP"
+printf '%s' 'your-new-password' > "$PASS_TMP"
+
+NEW_HASH=$(python3 -c "
+import bcrypt, sys
+with open(sys.argv[1], 'rb') as f:
+    pw = f.read().strip()
+print(bcrypt.hashpw(pw, bcrypt.gensalt(rounds=12)).decode())
+" "$PASS_TMP")
+rm -f "$PASS_TMP"
 
 sudo -u postgres psql dplaneos -c "
   INSERT INTO users (id, username, password_hash, display_name, email, active, source)
