@@ -298,14 +298,21 @@ cmd_health_check() {
     fi
 
     # Check 2: ZFS pools are ONLINE
-    local degraded_pools
-    degraded_pools=$(zpool list -H -o name,health 2>/dev/null | awk '$2 != "ONLINE" {print $1}' || echo "")
-    if [ -z "${degraded_pools}" ]; then
-        log "PASS: all ZFS pools ONLINE"
-        checks_passed=$((checks_passed + 1))
-    else
-        log "FAIL: degraded/faulted pools: ${degraded_pools}"
+    local zpool_out zpool_rc=0
+    zpool_out=$(zpool list -H -o name,health 2>&1) || zpool_rc=$?
+    if [ "${zpool_rc}" -ne 0 ]; then
+        log "FAIL: zpool list failed (exit ${zpool_rc}): ${zpool_out}"
         checks_failed=$((checks_failed + 1))
+    else
+        local degraded_pools
+        degraded_pools=$(echo "${zpool_out}" | awk '$2 != "ONLINE" {print $1}')
+        if [ -z "${degraded_pools}" ]; then
+            log "PASS: all ZFS pools ONLINE"
+            checks_passed=$((checks_passed + 1))
+        else
+            log "FAIL: degraded/faulted pools: ${degraded_pools}"
+            checks_failed=$((checks_failed + 1))
+        fi
     fi
 
     # Check 3: /persist is mounted
@@ -318,11 +325,12 @@ cmd_health_check() {
     fi
 
     # Check 4: Samba is running (if smb_shares exist in DB)
-    local share_count
-    # Default DSN for NixOS standalone
-    local dsn="postgres://dplaneos@localhost/dplaneos?sslmode=disable"
-    share_count=$(psql "$dsn" -t -c "SELECT COUNT(*) FROM smb_shares WHERE enabled=1" 2>/dev/null | tr -d '[:space:]' || echo "0")
-    if [ "${share_count:-0}" -gt 0 ]; then
+    local share_count dsn="postgres://dplaneos@localhost/dplaneos?sslmode=disable"
+    if ! share_count=$(psql "$dsn" -t -c "SELECT COUNT(*) FROM smb_shares WHERE enabled=1" 2>/dev/null | tr -d '[:space:]') \
+            || [ -z "${share_count}" ]; then
+        log "FAIL: cannot reach database to check active share count"
+        checks_failed=$((checks_failed + 1))
+    elif [ "${share_count}" -gt 0 ]; then
         if systemctl is-active --quiet smbd; then
             log "PASS: smbd running (${share_count} active shares)"
             checks_passed=$((checks_passed + 1))
