@@ -58,7 +58,7 @@ DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), c
 - **CSRF:** HMAC-SHA256 double-submit tokens on all mutating requests
 - **2FA:** TOTP (RFC 6238) with ±1 window clock drift tolerance, bcrypt-hashed backup codes
 - **API tokens:** SHA-256 hashed, prefixed `dpl_`, scope-limited (read/write/admin)
-- **RBAC:** 4 roles (viewer, user, operator, admin) enforced at handler level, with 34 discrete permissions
+- **RBAC:** 4 roles (viewer, user, operator, admin) enforced at handler level, with 31 discrete permissions
 - **LDAP account segregation:** `users.source` ('local'/'ldap') is returned in `GET /api/auth/session`. The password-change UI disables itself for LDAP accounts and directs users to the directory server. The admin `reset-password` endpoint rejects LDAP accounts with an explicit error.
 - **Command execution (ZFS):** All ZFS mutation operations (pool export/destroy/clear, dataset create/destroy/rename/promote, snapshot create/destroy/clone, vdev add/attach/replace/remove/online/offline, property get/set) now go through `internal/libzfs` (cgo direct C API call or subprocess fallback). Both paths pre-validate all arguments with the same allowlist validators before any system call or subprocess is created. No shell expansion occurs in either path. Read-only list queries retain subprocess calls with strict whitelist validation.
 - **Command execution (other):** Docker, Samba, NFS, and network tools use allowlist-based validation via `internal/security/whitelist.go`; arguments passed as separate slice elements to `exec.Command` - no shell. **v6.1.0 Hardening:** Strict `by-id` path enforcement and pool-membership safety checks for disk operations ensure enterprise-grade storage security.

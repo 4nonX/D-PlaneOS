@@ -10,7 +10,7 @@ DPlaneOS runs on any reasonable Linux-capable hardware, from Raspberry Pi to ent
 
 | Component | Minimum |
 |-----------|---------|
-| CPU | 1 core, x86_64 / ARM64 / ARMv7 |
+| CPU | 1 core, x86_64 or ARM64 (64-bit only) |
 | RAM | 2 GB |
 | OS storage | 8 GB |
 | Network | 100 Mbps Ethernet |
