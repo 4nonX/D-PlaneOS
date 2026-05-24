@@ -45,7 +45,10 @@ func (h *NixOSGuardHandler) BackupConfig(w http.ResponseWriter, r *http.Request)
 	const nixDir = "/etc/nixos"
 	// Get repo details (URL/Branch) to initialize if needed
 	var repoURL, branch string
-	h.db.QueryRow(`SELECT repo_url, branch FROM git_sync_repos WHERE id=$1`, repoID.Int64).Scan(&repoURL, &branch)
+	if err := h.db.QueryRow(`SELECT repo_url, branch FROM git_sync_repos WHERE id=$1`, repoID.Int64).Scan(&repoURL, &branch); err != nil {
+		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to fetch repo config"})
+		return
+	}
 
 	if err := gitops.EnsureRepoRootDir(nixDir, repoURL, branch, nil); err != nil {
 		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to initialize Git in /etc/nixos: " + err.Error()})
@@ -58,7 +61,9 @@ func (h *NixOSGuardHandler) BackupConfig(w http.ResponseWriter, r *http.Request)
 
 	// We use the same identity as the NixOS repo if set, otherwise default
 	var name, email string
-	h.db.QueryRow(`SELECT commit_name, commit_email FROM git_sync_repos WHERE id=$1`, repoID.Int64).Scan(&name, &email)
+	if err := h.db.QueryRow(`SELECT commit_name, commit_email FROM git_sync_repos WHERE id=$1`, repoID.Int64).Scan(&name, &email); err != nil {
+		log.Printf("nixos-guard: failed to fetch commit identity for repo %d: %v", repoID.Int64, err)
+	}
 
 	if err := gitops.CommitAndPush(nixDir, env, "feat: NixOS configuration backup via DPlaneOS", name, email, branch); err != nil {
 		respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})

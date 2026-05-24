@@ -559,7 +559,9 @@ func (h *GitReposHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	// Optionally delete local clone too
 	var localPath string
-	h.db.QueryRow(`SELECT local_path FROM git_sync_repos WHERE id=$1`, idStr).Scan(&localPath)
+	if err := h.db.QueryRow(`SELECT local_path FROM git_sync_repos WHERE id=$1`, idStr).Scan(&localPath); err != nil {
+		log.Printf("WARN: git-repos: failed to fetch local_path for %s: %v", idStr, err)
+	}
 	if _, err := h.db.Exec(`DELETE FROM git_sync_repos WHERE id=$1`, idStr); err != nil {
 		respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
 		return

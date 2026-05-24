@@ -524,7 +524,10 @@ func (h *SystemStatusHandler) HandleSetupAdmin(w http.ResponseWriter, r *http.Re
 	}
 
 	var setupDone int
-	tx.QueryRow(`SELECT COUNT(*) FROM system_config WHERE key = 'setup_complete' AND value = '1'`).Scan(&setupDone)
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM system_config WHERE key = 'setup_complete' AND value = '1'`).Scan(&setupDone); err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Internal error"})
+		return
+	}
 	if setupDone > 0 {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
 			"success": false, "error": "Setup already completed",
@@ -567,7 +570,10 @@ func (h *SystemStatusHandler) HandleSetupAdmin(w http.ResponseWriter, r *http.Re
 
 	// First, check if there's any user with an admin role (Finding 26)
 	var adminCount int
-	tx.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount)
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Internal error"})
+		return
+	}
 
 	if adminCount > 0 {
 		// Admin already exists, update the specific seeded 'admin' account or return error

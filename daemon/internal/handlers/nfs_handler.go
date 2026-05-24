@@ -385,7 +385,9 @@ func (h *NFSHandler) DeleteNFSExport(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch path for audit before deleting
 	var path string
-	h.db.QueryRow(`SELECT path FROM nfs_exports WHERE id = $1`, id).Scan(&path)
+	if err := h.db.QueryRow(`SELECT path FROM nfs_exports WHERE id = $1`, id).Scan(&path); err != nil {
+		log.Printf("WARN: nfs: failed to fetch export path for audit id=%d: %v", id, err)
+	}
 
 	if _, err := h.db.Exec(`DELETE FROM nfs_exports WHERE id = $1`, id); err != nil {
 		respondErrorSimple(w, "database error: "+err.Error(), http.StatusInternalServerError)

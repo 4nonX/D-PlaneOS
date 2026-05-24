@@ -163,8 +163,11 @@ func (h *UserGroupHandler) userAction(w http.ResponseWriter, r *http.Request) {
 		if req.Action != "create" {
 			var targetRole string
 			var targetID int
-			h.db.QueryRow(`SELECT id, role FROM users WHERE id = $1`, req.ID).Scan(&targetID, &targetRole)
-			
+			if err := h.db.QueryRow(`SELECT id, role FROM users WHERE id = $1`, req.ID).Scan(&targetID, &targetRole); err != nil {
+				respondErrorSimple(w, "Failed to fetch target user", http.StatusInternalServerError)
+				return
+			}
+
 			// Editing someone else?
 			if targetID != int(requester.ID) {
 				// 1. HARD RULE: Only admins can manage other admin accounts
@@ -280,8 +283,14 @@ func (h *UserGroupHandler) updateUser(w http.ResponseWriter, req userActionReque
 			// Ensure we don't deactivate the last admin
 			var currentRole string
 			var adminCount int
-			h.db.QueryRow(`SELECT role FROM users WHERE id = $1`, req.ID).Scan(&currentRole)
-			h.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1`).Scan(&adminCount)
+			if err := h.db.QueryRow(`SELECT role FROM users WHERE id = $1`, req.ID).Scan(&currentRole); err != nil {
+				respondErrorSimple(w, "Failed to fetch user role", http.StatusInternalServerError)
+				return
+			}
+			if err := h.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1`).Scan(&adminCount); err != nil {
+				respondErrorSimple(w, "Failed to check admin count", http.StatusInternalServerError)
+				return
+			}
 			if currentRole == "admin" && adminCount <= 1 {
 				respondErrorSimple(w, "Cannot deactivate the last remaining active admin account", http.StatusForbidden)
 				return

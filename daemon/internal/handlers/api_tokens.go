@@ -260,7 +260,9 @@ func (h *APITokenHandler) revokeByID(w http.ResponseWriter, tokenID, userID int,
 
 	// Get token name for audit before deleting
 	var name string
-	h.db.QueryRow(`SELECT name FROM api_tokens WHERE id = $1 AND user_id = $2`, tokenID, userID).Scan(&name)
+	if err := h.db.QueryRow(`SELECT name FROM api_tokens WHERE id = $1 AND user_id = $2`, tokenID, userID).Scan(&name); err != nil {
+		log.Printf("WARN: api_tokens: failed to fetch token name for audit: %v", err)
+	}
 
 	result, err := h.db.Exec(`DELETE FROM api_tokens WHERE id = $1 AND user_id = $2`, tokenID, userID)
 	if err != nil {
