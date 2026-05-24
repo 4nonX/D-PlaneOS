@@ -148,18 +148,21 @@ The NixOS module opens TCP 80 and 443 by default (`services.dplaneos.openFirewal
 
 ## OTA Upgrades
 
-DPlaneOS uses an A/B slot upgrade system. The installed system receives updates via the OTA mechanism:
+DPlaneOS uses an A/B slot upgrade system. Updates write to the inactive boot slot; if the post-boot health check fails the system automatically reverts to the previous slot.
+
+**Via the web UI (recommended):** Settings - System - Updates - Check for Updates.
+
+**Via CLI:**
 
 ```bash
-sudo dplaneos-ota-update
+# Pull the latest DPlaneOS flake and rebuild into the inactive slot
+sudo nixos-rebuild switch --flake github:4nonX/DPlaneOS#dplaneos
 ```
 
-The upgrade fetches the new system closure, writes it to the inactive boot slot, and reboots. If the post-boot health check fails, the system automatically reverts to the previous slot.
-
-**Manual NixOS rebuild** (advanced):
+For manual rollback to the previous slot after a committed update:
 
 ```bash
-sudo nixos-rebuild switch --flake github:4nonX/DPlaneOS#dplaneos
+sudo dplaneos-ota-update --revert
 ```
 
 ---

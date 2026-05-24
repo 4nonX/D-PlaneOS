@@ -79,7 +79,7 @@ On deletion: the account, role assignments, and active sessions are all removed.
 
 ### Built-in Roles
 
-**Admin** - All 24 permissions. Can manage users, roles, and system settings. Cannot be deleted (system role).
+**Admin** - All 31 permissions. Can manage users, roles, and system settings. Cannot be deleted (system role).
 
 **Operator** - Storage, Docker, and file management. Cannot create users or assign roles.
 
@@ -97,22 +97,23 @@ On deletion: the account, role assignments, and active sessions are all removed.
 
 ### Permission Reference
 
-Permissions are `resource:action` pairs. Actions are always `read`, `write`, or `admin`.
+Permissions are `resource:action` pairs. Not all resources expose all actions.
 
-| Resource | read | write | admin |
-|----------|------|-------|-------|
-| `storage` | View pools, datasets, snapshots, files | Create/modify datasets, snapshots, file operations | Encrypt/decrypt datasets, manage replication remotes |
-| `shares` | View SMB/NFS shares and config | Create/modify shares | Reload SMB/NFS config, test config |
-| `docker` | List containers, images, logs, stats | Deploy, start/stop, pull, compose | Safe-update containers, prune |
-| `system` | View network, logs, hardware, UPS | Modify network, UPS config, SMART schedules | Reboot, poweroff, rotate audit logs, reset LDAP circuit breaker |
-| `users` | List users and sessions | Create/modify/deactivate users | Delete users, manage groups |
-| `roles` | List roles and permissions | Create/modify roles and permission assignments | - |
-| `network` | View network interfaces and routes | Modify network configuration | - |
-| `firewall` | View firewall rules | Modify firewall rules | - |
-| `certificates` | View TLS certificates | Upload/manage TLS certificates | - |
-| `audit` | View and verify the audit log chain | - | - |
-
-File Explorer operations (browse, upload, download, rename, move, delete) use `storage:read` and `storage:write` - there is no separate `files` resource.
+| Resource | Actions | What it covers |
+|----------|---------|----------------|
+| `storage` | read, write, delete, admin | Pools, datasets, quotas, encryption, replication |
+| `snapshots` | read, write | Snapshot schedules and management |
+| `shares` | read, write, admin | SMB/NFS share configuration and reload |
+| `files` | read, write | File Explorer: browse/download and upload/modify/delete |
+| `docker` | read, write, delete, admin | Containers, images, compose, prune |
+| `network` | read, write | Network interfaces and routing |
+| `firewall` | read, write | Firewall rules |
+| `users` | read, write, admin | User accounts, groups, and sessions |
+| `roles` | read, write | Role and permission management |
+| `system` | read, write, admin | System settings, reboot, poweroff, audit log rotation |
+| `monitoring` | read | Metrics and health dashboard |
+| `audit` | read | Audit log chain view and verification |
+| `certificates` | read, write | TLS certificate management |
 
 ---
 
