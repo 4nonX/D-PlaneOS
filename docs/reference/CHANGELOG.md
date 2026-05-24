@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v11.6.3 (2026-05-24) - "Security & Error Propagation"
+
+Upgrade from: v11.6.2 - Drop-in. No schema changes. No configuration changes.
+
+### Fixed
+
+- **Security: RBAC hierarchy enforcement silently bypassed on DB read failure (`users_groups.go`)**: `ManageUser` fetched the target user's role and ID via a bare `QueryRow().Scan()` with no error check. If the scan failed (e.g., transient DB error, row not found), `targetRole` and `targetID` stayed at their zero values (`""` and `0`). The admin-protection check (`targetRole == "admin"`) then evaluated false, and the hierarchy check used `roleRank[""] = 0`, which is never larger than any valid rank, so the block was also skipped. A non-admin user sending a valid request during a transient DB error could modify or delete an admin account. Fixed: added error check with HTTP 500 response and early return before any authorization logic runs on the fetched values.
+- **Security: Last-admin deactivation guard silently bypassed on DB read failure (`users_groups.go`)**: The guard that prevents deactivating the final active admin account used two consecutive bare `QueryRow().Scan()` calls - one for the target user's role and one for the admin count. If either scan failed, the role check (`currentRole == "admin"`) evaluated false and the guard was bypassed, allowing all admin accounts to be deactivated and locking every operator out. Fixed: both scans now check errors and return HTTP 500 on failure.
+- **First-boot setup gate silent failure (`system_status.go`)**: The endpoint that configures initial admin credentials used a bare `tx.QueryRow().Scan()` to check whether setup was already complete. Scan failure left `setupDone = 0`, so the gate evaluated "not complete" and allowed re-running setup. A second bare scan for admin count used the same pattern, with the same silent-zero-value problem. Fixed: both scans now return HTTP 500 on failure before any credential changes are attempted.
+- **NixOS backup-config crashes with empty git identity on scan failure (`nixos_guard.go`)**: `BackupConfig` fetched the repo's URL and branch via a bare scan; failure left both as empty strings, causing `gitops.EnsureRepoRootDir` to fail with an opaque "failed to initialize Git" message rather than a clear DB error. A second bare scan for commit name and email silently produced anonymous commits. Fixed: repo URL/branch scan now returns HTTP 500 on failure; identity scan logs the error and continues (empty identity is valid for some git configurations).
+- **Audit log silent on pre-delete query failure (`api_tokens.go`, `git_sync_repos.go`, `nfs_handler.go`)**: Three delete handlers read a display name or path for the audit log using bare `QueryRow().Scan()` calls before performing the actual delete. Scan failure left the variable at `""`, so the audit entry showed an empty name/path with no indication of the lookup failure. Fixed: added `log.Printf(WARN)` on scan error so the failure is visible in the daemon log without blocking the delete.
+
+---
+
 ## v11.6.2 (2026-05-24) - "Error Handling & Reliability"
 
 Upgrade from: v11.6.1 - Drop-in. No schema changes. No configuration changes.
