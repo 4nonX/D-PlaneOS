@@ -74,18 +74,21 @@ Resource profile:
 
 ### Current State
 
-`install.sh --upgrade` creates a timestamped backup before making any changes:
+Updates use an A/B slot system. The new system closure is written to the inactive slot while the running slot is untouched. After reboot, a post-boot health check fires 90 seconds after startup and evaluates four conditions:
 
-1. PostgreSQL database (logical dump), nginx config, and systemd unit backed up to `/var/lib/dplaneos/backups/pre-upgrade-YYYY-MM-DD-HH-MM/`
-2. Installer verifies each phase, halting on first failure
-3. On failure, the trap handler automatically restores the backup and restarts services
-4. A `rollback.sh` is written to the backup directory for manual recovery
+1. Daemon API responds 200 within 10 seconds (`GET http://127.0.0.1:9000/api/system/health`)
+2. All ZFS pools are ONLINE (`zpool list` exits 0)
+3. `/persist` is an active mountpoint
+4. If SMB shares are configured, `smbd` is running
 
-**To roll back manually:**
+If all checks pass, the update is committed. Any single failure triggers an automatic revert to the previous slot immediately - no human intervention required. The system never enters a partially-upgraded state.
+
+**To roll back manually** (if a regression is discovered after the health check already passed):
 ```bash
-ls /var/lib/dplaneos/backups/
-sudo bash /var/lib/dplaneos/backups/pre-upgrade-<timestamp>/rollback.sh
+sudo dplaneos-ota-update --revert
 ```
+
+If the system will not boot at all: select the previous NixOS generation from the systemd-boot menu at startup, press `d` to set it as default, then `Enter` to boot.
 
 ---
 
@@ -118,7 +121,7 @@ Full enterprise HA is implemented across three layers. Two deployment topologies
 - Full HMAC audit trail on every fencing event
 - Maintenance mode (`POST /api/ha/maintenance`, 0-3600 s) suppresses fencing during scheduled maintenance
 
-**Split-brain protection:** On startup, daemon queries Patroni `/health`. If replica role is confirmed, automatic ZFS pool import is blocked.
+**Split-brain protection:** On startup, daemon queries Patroni at `http://localhost:8008/primary`. A non-200 response (node is not the primary) blocks automatic ZFS pool import so a standby node never acquires the pools.
 
 **RTO:** ~10-30 seconds for shared-SAS deployments (SCSI-3 PR fencing is near-instant once the preempt command completes). ~90 seconds for replicated deployments (45-second heartbeat timeout + IPMI power-off confirmation + startup). No human intervention required in either case.
 
@@ -139,7 +142,7 @@ The Go daemon (`dplaned`) ships as a compiled binary. Users who require source-l
 The full daemon source is included in the release tarball under `daemon/`.
 
 ```bash
-CGO_ENABLED=0 go build \
+CGO_ENABLED=0 go build -mod=vendor \
   -ldflags "-s -w -X main.Version=$(cat ../VERSION)" \
   -o dplaned-local ./cmd/dplaned/
 
@@ -168,7 +171,7 @@ Guaranteed by NixOS. Every node builds from a pinned flake with locked inputs (`
 | Offsite backup / replication | Ready | Zero-touch via Peers tab; one-time password authorization, unattended thereafter |
 | Monitored active/standby | Ready | Full automatic failover with STONITH fencing, RTO ~90 seconds |
 | Security audit required | Usable | Build from source; NixOS flake guarantees reproducibility |
-| Auto-failover / 99.99% SLA | Ready | Fully implemented in v7.3.0 |
+| Auto-failover | Ready | Full automatic failover with STONITH fencing |
 | Active/active shared storage | Out of scope by design | DPlaneOS uses active/passive HA with automatic STONITH failover |
 
 ---
@@ -191,5 +194,5 @@ Shipped items verified in product and docs:
 | Active/standby coordination layer | Done (automated failover) |
 | Reproducible build verification | Done (NixOS Flake, pinned inputs) |
 | Automated failover with fencing | Done |
-| Active Directory domain join | Done (v7.3.0) |
-| Offline installer ISO | Done (v7.2.0) |
+| Active Directory domain join | Done |
+| Offline installer ISO | Done |
