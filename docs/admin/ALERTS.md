@@ -46,7 +46,9 @@ Click **Send Test Email** after saving. A test message is sent immediately to co
 ### Via API
 
 ```
-POST /api/alerts/smtp/config
+GET  /api/alerts/smtp
+
+POST /api/alerts/smtp
 {
   "host": "smtp.example.com",
   "port": 587,
@@ -158,7 +160,9 @@ The ZED hook is installed automatically by the NixOS module (`services.zfs.zed.d
 ### Via API
 
 ```
-POST /api/alerts/telegram/config
+GET  /api/alerts/telegram
+
+POST /api/alerts/telegram
 {"bot_token": "...", "chat_id": "...", "enabled": true}
 
 POST /api/alerts/telegram/test
@@ -318,7 +322,7 @@ POST   /api/auth/totp/verify  # step 2 of login: exchange pending_token + TOTP c
    # Use this session_id for all subsequent requests
 ```
 
-If the code is wrong: the request fails. After 5 consecutive failures, the account is temporarily locked (60 seconds). Persistent failures generate a `auth.login.locked` alert.
+If the code is wrong: the request fails with 401. There is no per-attempt lockout at the TOTP step. Rate limiting applies at the password step (`POST /api/auth/login`) and is IP-based with exponential backoff: delays grow from 2 seconds after the second failure to a 30-second cap after six or more failures. The counter resets after 15 minutes of inactivity.
 
 ### Clock Synchronization
 

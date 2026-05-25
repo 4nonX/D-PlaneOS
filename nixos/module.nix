@@ -27,6 +27,18 @@ in {
       '';
     };
 
+    frontendPackage = lib.mkOption {
+      type        = lib.types.package;
+      description = ''
+        Pre-built frontend static files served by nginx. Set this to the
+        output of the flake's dplaneos-frontend derivation. In flake.nix
+        this is wired automatically; standalone users set it to a local
+        derivation or the pre-built store path.
+        Example (in configuration.nix with flake):
+          services.dplaneos.frontendPackage = self.packages.x86_64-linux.dplaneos-frontend;
+      '';
+    };
+
     listenAddress = lib.mkOption {
       type    = lib.types.str;
       default = "127.0.0.1";
@@ -202,7 +214,7 @@ in {
     services.nginx = {
       enable = true;
       virtualHosts."_" = {
-        root       = "/opt/dplaneos/app";
+        root       = "${cfg.frontendPackage}";
         locations."/" = {
           tryFiles = "$uri $uri/ /index.html";
         };
@@ -324,7 +336,6 @@ in {
       "d /var/lib/dplaneos        0775 root root -"
       "d /var/log/dplaneos        0755 root root -"
       "d /etc/dplaneos            0755 root root -"
-      "d /opt/dplaneos/app        0755 root root -"
       "d /run/dplaneos            0700 root root -"
       # Cold Tier root: rclone FUSE mounts land under this directory.
       # The daemon creates per-remote subdirectories at mount time.

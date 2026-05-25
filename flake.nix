@@ -135,6 +135,13 @@
         };
       };
 
+      # Package the pre-built frontend (app/ is the vite build output committed to git).
+      # nginx serves from the resulting Nix store path so the content is immutable
+      # and atomically replaced on every nixos-rebuild switch.
+      mkFrontend = { pkgs }: pkgs.runCommand "dplaneos-frontend-${dplaneosVersion}" {} ''
+        cp -a ${./app}/. $out
+      '';
+
       # Shared inline config applied to all nixosConfigurations
       applianceConfig = { config, lib, pkgs, ... }: {
         # ... (unchanged)
@@ -165,6 +172,7 @@
         pkgsStatic = pkgs.pkgsStatic;
         daemon     = mkDaemon { inherit system pkgs pkgsStatic dplaneosVersion nixpkgs; };
         daemonDyn  = mkDaemonDynamic { inherit system pkgs dplaneosVersion nixpkgs; };
+        frontend   = mkFrontend { inherit pkgs; };
         
         # Pick the correct NAS closure per architecture so the baked-in
         # offline system matches the ISO's own CPU target.
@@ -191,6 +199,7 @@
         packages.dplaneos-daemon         = daemon;
         packages.dplaneos-daemon-dynamic = daemonDyn;
         packages.dplaneos-daemon-cgo     = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
+        packages.dplaneos-frontend       = frontend;
         packages.iso = iso;
         packages.default = daemon;
 
@@ -231,9 +240,12 @@
           ./nixos/modules/samba.nix
           ./nixos/dplane-generated.nix
           applianceConfig
-          (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; }; in {
+          (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
+               f = mkFrontend { inherit pkgs; };
+           in {
             services.dplaneos.daemonPackage    = d;
             services.dplaneos.fenced.package   = d;
+            services.dplaneos.frontendPackage  = f;
           })
         ];
       };
@@ -252,9 +264,12 @@
           ./nixos/modules/samba.nix
           ./nixos/dplane-generated.nix
           applianceConfig
-          (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; }; in {
+          (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
+               f = mkFrontend { inherit pkgs; };
+           in {
             services.dplaneos.daemonPackage    = d;
             services.dplaneos.fenced.package   = d;
+            services.dplaneos.frontendPackage  = f;
           })
           # Hard override: ensure no x86_64-only Intel packages are evaluated for aarch64.
           # intel-media-driver, intel-compute-runtime, and intel-microcode all declare
