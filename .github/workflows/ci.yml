@@ -537,7 +537,7 @@ jobs:
             ${{ steps.meta.outputs.arm64_sha }}
           draft: true
           prerelease: false
-          make_latest: true
+          make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
