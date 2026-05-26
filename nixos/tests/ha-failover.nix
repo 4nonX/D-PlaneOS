@@ -107,6 +107,7 @@ let
       services.dplaneos = {
         enable = true;
         daemonPackage = daemonPkg;
+        frontendPackage = pkgs.runCommand "dplaneos-frontend-test" {} "mkdir $out";
         # listenAddress 0.0.0.0 so the peer node and the test driver can reach
         # /health and /api/ha/* (default is 127.0.0.1).
         listenAddress = "0.0.0.0";
