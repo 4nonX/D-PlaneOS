@@ -29,6 +29,7 @@ in {
 
     frontendPackage = lib.mkOption {
       type        = lib.types.package;
+      default     = pkgs.runCommand "dplaneos-frontend-empty" {} "mkdir $out";
       description = ''
         Pre-built frontend static files served by nginx. Set this to the
         output of the flake's dplaneos-frontend derivation. In flake.nix
