@@ -173,34 +173,11 @@
         daemon     = mkDaemon { inherit system pkgs pkgsStatic dplaneosVersion nixpkgs; };
         daemonDyn  = mkDaemonDynamic { inherit system pkgs dplaneosVersion nixpkgs; };
         frontend   = mkFrontend { inherit pkgs; };
-        
-        # Pick the correct NAS closure per architecture so the baked-in
-        # offline system matches the ISO's own CPU target.
-        nasConf = if system == "aarch64-linux"
-          then self.nixosConfigurations.dplaneos-arm
-          else self.nixosConfigurations.dplaneos;
-
-        iso = (nixpkgs.lib.nixosSystem {
-          inherit system;
-          specialArgs = {
-            inherit self;
-            targetSystem = nasConf.config.system.build.toplevel;
-          };
-          modules = [
-            ./nixos/installer.nix
-            disko.nixosModules.disko
-            impermanence.nixosModules.impermanence
-            applianceConfig
-            { services.dplaneos.daemonPackage  = daemon;
-              services.dplaneos.fenced.package  = daemon; }
-          ];
-        }).config.system.build.isoImage;
       in {
         packages.dplaneos-daemon         = daemon;
         packages.dplaneos-daemon-dynamic = daemonDyn;
         packages.dplaneos-daemon-cgo     = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
         packages.dplaneos-frontend       = frontend;
-        packages.iso = iso;
         packages.default = daemon;
 
         # HA multi-node failover VM test (Tier 3).

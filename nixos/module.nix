@@ -173,7 +173,7 @@ in {
         logger -t "$LOG_TAG" "[$SEVERITY] Pool=$ZEVENT_POOL Event=$ZEVENT_SUBCLASS State=$ZEVENT_VDEV_STATE_STR Device=$ZEVENT_VDEV_PATH"
 
         if [ -S "$DAEMON_SOCKET" ]; then
-            echo "zfs_event:$SEVERITY:$ZEVENT_POOL:$ZEVENT_SUBCLASS:$ZEVENT_VDEV_STATE_STR" | timeout 2 nc -U "$DAEMON_SOCKET" 2>/dev/null || true
+            echo "zfs_event:$SEVERITY:$ZEVENT_POOL:$ZEVENT_SUBCLASS:$ZEVENT_VDEV_STATE_STR" | ${pkgs.socat}/bin/socat -t2 - UNIX-CONNECT:"$DAEMON_SOCKET" 2>/dev/null || true
         fi
         exit 0
       '';
@@ -246,7 +246,6 @@ in {
 
       serviceConfig = {
         Type            = "simple";
-        Environment     = lib.optionals cfg.ha.enable [ "PGPASSFILE=/etc/dplaneos/pg-password" ];
         ExecStartPre    = [
           "${pkgs.coreutils}/bin/mkdir -p /var/lib/dplaneos /var/log/dplaneos /run/dplaneos /etc/dplaneos"
           "${pkgs.coreutils}/bin/chmod 755 /run/dplaneos"

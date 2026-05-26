@@ -141,8 +141,6 @@ in {
       serviceConfig = {
         Type            = "oneshot";
         RemainAfterExit = true;
-        User            = "postgres";
-        Group           = "postgres";
         ExecStart       = pkgs.writeShellScript "patroni-init" ''
           set -eu
           CONFIG="/etc/dplaneos/patroni.yaml"
@@ -205,6 +203,7 @@ tags:
   nosync: false
 EOF
           chmod 0600 "$CONFIG"
+          chown postgres:postgres "$CONFIG"
           echo "patroni-init: config written to $CONFIG"
         '';
       };
