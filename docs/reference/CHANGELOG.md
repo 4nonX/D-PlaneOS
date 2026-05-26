@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v11.6.5 (2026-05-26) - "Docker Compose Editor Fix"
+
+Upgrade from: v11.6.4 - Drop-in. No schema changes. No configuration changes.
+
+### Fixed
+
+- **Docker: Compose create flow missing `.env` editor and not sending env on deploy (`app-react/src/pages/DockerPage.tsx`)**: The `ComposeManager` new-stack panel (`isCreating` state) rendered only a `docker-compose.yml` textarea with no `.env` editor, and the `deployNew` mutation sent `{ name, yaml }` to `POST /api/docker/stacks/deploy` without the `env` field. The backend `DeployStack` handler has always accepted and written a `.env` file when `env` is provided - the omission was purely in the frontend. Users creating a new stack had no way to supply environment variables at deploy time. Fixed: added a `.env` textarea to the create flow (matching the layout of the existing stack edit panel), and updated `deployNew` to include `env` in the request body.
+
+- **Docker: Compose editor blank immediately after deploying a new stack (`app-react/src/pages/DockerPage.tsx`)**: After `deployNew` succeeded, `selectStack(name)` was called immediately after `qc.invalidateQueries({ queryKey: ['docker', 'stacks'] })`. `invalidateQueries` marks the query stale and triggers a background refetch but does not await it. At the moment `selectStack` ran, the stacks list still held pre-deploy data, `stacks.find(s => s.name === selected)` returned `undefined`, the `selected && !isCreating && selectedInfo` render condition evaluated false, and the editor panel did not render - leaving the user on the empty "Select a stack to edit" state until the refetch completed on its own. Fixed: replaced `invalidateQueries` with `qc.refetchQueries(...).then(() => selectStack(name))` so `selectStack` is only called after the stacks list has been updated and `selectedInfo` is guaranteed to resolve.
+
 ## v11.6.4 (2026-05-24) - "OTA Health Check Hardening"
 
 Upgrade from: v11.6.3 - Drop-in. No schema changes. No configuration changes.

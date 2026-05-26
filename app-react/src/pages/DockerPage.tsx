@@ -1522,15 +1522,15 @@ function ComposeManager() {
   const deployNew = useMutation({
     mutationFn: async () => {
       if (!newName.trim()) throw new Error('Stack name required')
-      const res = await api.post<{ success: boolean; output?: string; error?: string }>('/api/docker/stacks/deploy', { name: newName.trim(), yaml })
+      const res = await api.post<{ success: boolean; output?: string; error?: string }>('/api/docker/stacks/deploy', { name: newName.trim(), yaml, env })
       if (!res.success) throw new Error(res.error ?? 'Deploy failed')
       return res
     },
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['docker', 'stacks'] })
+    onSuccess: () => {
+      const name = newName.trim()
+      qc.refetchQueries({ queryKey: ['docker', 'stacks'] }).then(() => selectStack(name))
       qc.invalidateQueries({ queryKey: ['docker', 'containers'] })
-      selectStack(newName.trim())
-      if (res.output) toast.success('Stack deployed')
+      toast.success('Stack deployed')
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -1644,6 +1644,13 @@ function ComposeManager() {
             </div>
             <textarea value={yaml} onChange={e => setYaml(e.target.value)} spellCheck={false}
               style={{ flex: 1, width: '100%', padding: '16px 20px', fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.6, background: 'var(--bg)', color: 'var(--text)', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ borderTop: '1px solid var(--border)', padding: '6px 20px 0', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface-2)', flexShrink: 0 }}>
+              <Icon name="key" size={12} />.env <span style={{ marginLeft: 4, opacity: 0.5 }}>(optional)</span>
+            </div>
+            <textarea value={env} onChange={e => setEnv(e.target.value)} spellCheck={false}
+              placeholder={'# KEY=value\nDATABASE_URL=postgres://...'}
+              style={{ width: '100%', height: 90, padding: '8px 20px', fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.5, background: 'var(--bg)', color: 'rgba(255,255,255,0.6)', border: 'none', borderTop: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box', flexShrink: 0 }}
             />
             {terminalArea}
           </div>
