@@ -1,10 +1,12 @@
 /**
- * pages/SettingsPage.tsx - System Settings (Phase 6)
+ * pages/SettingsPage.tsx - System Settings
  *
- * Tabs: General | NixOS
+ * Tabs: General | NixOS | SSO / OIDC | Security | Maintenance
  *
  * General: hostname, timezone, MOTD - backed by /api/system/settings (key-value store)
  * NixOS: detect, validate, apply (with 60s confirm), generations list & rollback
+ * Security: AES-256-GCM key rotation  POST /api/system/secrets/rotate
+ * Maintenance: DB backup/restore      GET /api/system/db/backup, POST /api/system/db/restore
  *
  * Calls:
  *   GET  /api/system/settings              → { success, settings: Record<string,string> }
@@ -15,6 +17,9 @@
  *   POST /api/nixos/confirm                → confirm applied generation
  *   GET  /api/nixos/generations            → { success, generations: Generation[] }
  *   POST /api/nixos/rollback { generation } → { success }
+ *   POST /api/system/secrets/rotate        → { success, rotated_count: number }
+ *   GET  /api/system/db/backup             → octet-stream download
+ *   POST /api/system/db/restore            → { success }
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -512,25 +517,172 @@ function OIDCTab() {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// SecurityTab - encryption key rotation
+// ---------------------------------------------------------------------------
+
+function SecurityTab() {
+  const [confirming, setConfirming] = useState(false)
+
+  const rotate = useMutation({
+    mutationFn: () => api.post<{ success: boolean; rotated_count: number }>('/api/system/secrets/rotate', {}),
+    onSuccess: (data) => {
+      setConfirming(false)
+      toast.success(`Key rotated. ${data.rotated_count} secret${data.rotated_count === 1 ? '' : 's'} re-encrypted.`)
+    },
+    onError: (e: Error) => {
+      setConfirming(false)
+      toast.error(e.message)
+    },
+  })
+
+  return (
+    <div style={{ maxWidth: 620, display: 'flex', flexDirection: 'column', gap: 20, paddingTop: 24 }}>
+      <div className="card" style={{ padding: 20 }}>
+        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, marginBottom: 8 }}>Encryption Key Rotation</h3>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 4 }}>
+          All secrets at rest (SMTP password, LDAP credentials, TOTP seeds, git tokens, OIDC client secret, Telegram bot token)
+          are encrypted with AES-256-GCM under a 32-byte key stored at{' '}
+          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>/var/lib/dplaneos/secrets.key</code>.
+        </p>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 16 }}>
+          Rotation generates a new key, re-encrypts every stored secret in a single atomic transaction,
+          then atomically replaces the key file. Use this if the key file may have been compromised.
+        </p>
+
+        {!confirming ? (
+          <button onClick={() => setConfirming(true)} className="btn btn-ghost">
+            <Icon name="key" size={14} /> Rotate Encryption Key
+          </button>
+        ) : (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+              Generate a new key and re-encrypt all secrets now?
+            </span>
+            <button
+              onClick={() => rotate.mutate()}
+              disabled={rotate.isPending}
+              className="btn btn-primary"
+              style={{ minWidth: 90 }}
+            >
+              <Icon name="key" size={14} />{rotate.isPending ? 'Rotating...' : 'Confirm Rotate'}
+            </button>
+            <button onClick={() => setConfirming(false)} disabled={rotate.isPending} className="btn btn-ghost">
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// MaintenanceTab - database backup / restore
+// ---------------------------------------------------------------------------
+
+function MaintenanceTab() {
+  const [restoreFile, setRestoreFile] = useState<File | null>(null)
+  const [restoring, setRestoring] = useState(false)
+
+  function handleDownload() {
+    const a = document.createElement('a')
+    a.href = '/api/system/db/backup'
+    a.click()
+  }
+
+  async function handleRestore() {
+    if (!restoreFile) return
+    setRestoring(true)
+    try {
+      const form = new FormData()
+      form.append('backup', restoreFile)
+      const res = await fetch('/api/system/db/restore', {
+        method: 'POST',
+        headers: { 'X-Session-ID': sessionStorage.getItem('session_id') ?? '' },
+        body: form,
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(body.error ?? res.statusText)
+      }
+      toast.success('Database restored. Reload the page.')
+      setRestoreFile(null)
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 620, display: 'flex', flexDirection: 'column', gap: 20, paddingTop: 24 }}>
+      <div className="card" style={{ padding: 20 }}>
+        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, marginBottom: 8 }}>Database Backup</h3>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 16 }}>
+          Downloads a full <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>pg_dump</code> of
+          the control-plane database (sessions, audit logs, cluster state, all configuration). ZFS pool state is
+          intentionally excluded - it lives in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>state.yaml</code>.
+        </p>
+        <button onClick={handleDownload} className="btn btn-primary">
+          <Icon name="download" size={14} /> Download Backup
+        </button>
+      </div>
+
+      <div className="card" style={{ padding: 20 }}>
+        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, marginBottom: 8 }}>Database Restore</h3>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 16 }}>
+          Restores the control-plane database from a backup file. The current database is overwritten.
+          Reload the page after restore completes.
+        </p>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
+            <Icon name="upload" size={14} />
+            {restoreFile ? restoreFile.name : 'Choose .dump file'}
+            <input
+              type="file"
+              accept=".dump"
+              style={{ display: 'none' }}
+              onChange={e => setRestoreFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          {restoreFile && (
+            <button
+              onClick={handleRestore}
+              disabled={restoring}
+              className="btn btn-primary"
+              style={{ minWidth: 100 }}
+            >
+              <Icon name="database" size={14} />{restoring ? 'Restoring...' : 'Restore'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // SettingsPage
 // ---------------------------------------------------------------------------
 
-type Tab = 'general' | 'nixos' | 'oidc'
+type Tab = 'general' | 'nixos' | 'oidc' | 'security' | 'maintenance'
 
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>('general')
 
   const TABS: { id: Tab; label: string; icon: string }[] = [
-    { id: 'general', label: 'General',  icon: 'tune' },
-    { id: 'nixos',   label: 'NixOS',    icon: 'terminal' },
-    { id: 'oidc',    label: 'SSO / OIDC', icon: 'key' },
+    { id: 'general',     label: 'General',     icon: 'tune' },
+    { id: 'nixos',       label: 'NixOS',       icon: 'terminal' },
+    { id: 'oidc',        label: 'SSO / OIDC',  icon: 'key' },
+    { id: 'security',    label: 'Security',    icon: 'lock' },
+    { id: 'maintenance', label: 'Maintenance', icon: 'database' },
   ]
 
   return (
     <div style={{ maxWidth: 860 }}>
       <div className="page-header">
         <h1 className="page-title">System Settings</h1>
-        <p className="page-subtitle">Hostname, timezone, MOTD, NixOS configuration and SSO</p>
+        <p className="page-subtitle">Hostname, timezone, MOTD, NixOS configuration, SSO, and maintenance</p>
       </div>
 
       <div className="tabs-underline">
@@ -541,9 +693,11 @@ export function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'general' && <GeneralTab />}
-      {tab === 'nixos'   && <NixOSTab />}
-      {tab === 'oidc'    && <OIDCTab />}
+      {tab === 'general'     && <GeneralTab />}
+      {tab === 'nixos'       && <NixOSTab />}
+      {tab === 'oidc'        && <OIDCTab />}
+      {tab === 'security'    && <SecurityTab />}
+      {tab === 'maintenance' && <MaintenanceTab />}
     </div>
   )
 }

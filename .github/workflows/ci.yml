@@ -454,6 +454,9 @@ jobs:
     needs: [validate, integration, convergence, storage-failure, ha-failover-logic, ha-promotion-zfs, ha-vm-cluster]
     if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -523,6 +526,25 @@ jobs:
           echo "amd64_sha=${AMD64_TARBALL}.sha256" >> $GITHUB_OUTPUT
           echo "arm64_sha=${ARM64_TARBALL}.sha256" >> $GITHUB_OUTPUT
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Sign tarballs and generate SBOMs
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          AMD64="${{ steps.meta.outputs.amd64_tarball }}"
+          ARM64="${{ steps.meta.outputs.arm64_tarball }}"
+
+          cosign sign-blob --yes "$AMD64" --bundle "${AMD64}.bundle"
+          cosign sign-blob --yes "$ARM64" --bundle "${ARM64}.bundle"
+
+          syft scan "$AMD64" -o spdx-json="${AMD64}.sbom.json"
+          syft scan "$ARM64" -o spdx-json="${ARM64}.sbom.json"
+
       - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
@@ -533,8 +555,12 @@ jobs:
           files: |
             ${{ steps.meta.outputs.amd64_tarball }}
             ${{ steps.meta.outputs.amd64_sha }}
+            ${{ steps.meta.outputs.amd64_tarball }}.bundle
+            ${{ steps.meta.outputs.amd64_tarball }}.sbom.json
             ${{ steps.meta.outputs.arm64_tarball }}
             ${{ steps.meta.outputs.arm64_sha }}
+            ${{ steps.meta.outputs.arm64_tarball }}.bundle
+            ${{ steps.meta.outputs.arm64_tarball }}.sbom.json
           draft: true
           prerelease: false
           make_latest: false

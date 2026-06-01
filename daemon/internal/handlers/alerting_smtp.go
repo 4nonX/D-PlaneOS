@@ -105,24 +105,35 @@ func (h *AlertingHandler) SaveSMTPConfig(w http.ResponseWriter, r *http.Request)
 	respondOK(w, map[string]interface{}{"success": true})
 }
 
-// TestSMTP sends a test email
+// TestSMTP sends a test email using the saved SMTP configuration.
 // POST /api/alerts/smtp/test
-func TestSMTP(w http.ResponseWriter, r *http.Request) {
-	var cfg SMTPConfig
-	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		respondErrorSimple(w, "Invalid request", http.StatusBadRequest)
+func (h *AlertingHandler) TestSMTP(w http.ResponseWriter, r *http.Request) {
+	var value string
+	if err := h.db.QueryRow("SELECT value FROM settings WHERE key = $1", "smtp_config").Scan(&value); err != nil || value == "" {
+		respondErrorSimple(w, "SMTP not configured", http.StatusBadRequest)
 		return
+	}
+	var cfg SMTPConfig
+	if err := json.Unmarshal([]byte(value), &cfg); err != nil {
+		respondErrorSimple(w, "SMTP config is corrupt", http.StatusInternalServerError)
+		return
+	}
+	if cfg.Password != "" {
+		plain, err := secrets.Open(cfg.Password)
+		if err != nil {
+			respondErrorSimple(w, "Failed to decrypt SMTP password", http.StatusInternalServerError)
+			return
+		}
+		cfg.Password = plain
 	}
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: DPlaneOS Test Alert\r\n\r\nThis is a test email from DPlaneOS at %s.\r\nIf you received this, SMTP alerting is working correctly.\r\n",
 		cfg.From, cfg.To, time.Now().Format(time.RFC3339))
-
 	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
 	var auth smtp.Auth
 	if cfg.Username != "" {
 		auth = smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)
 	}
-	err := smtp.SendMail(addr, auth, cfg.From, strings.Split(cfg.To, ","), []byte(msg))
-	if err != nil {
+	if err := smtp.SendMail(addr, auth, cfg.From, strings.Split(cfg.To, ","), []byte(msg)); err != nil {
 		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
 		return
 	}

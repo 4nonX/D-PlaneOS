@@ -76,6 +76,69 @@ func Seal(plaintext string) (string, error) {
 	return base64.StdEncoding.EncodeToString(sealed), nil
 }
 
+// PrepareRotation generates a new AES-256-GCM key without writing it to disk.
+// It returns:
+//   - openOld: decrypts using the current active key
+//   - sealNew: encrypts using the newly generated key
+//   - commit: atomically writes the new key to keyPath and activates it
+//
+// Call commit only after all DB re-encryption has committed. On any failure,
+// discard the new ciphertexts and do not call commit.
+func PrepareRotation(keyPath string) (
+	openOld func(string) (string, error),
+	sealNew func(string) (string, error),
+	commit func() error,
+	err error,
+) {
+	newKey := make([]byte, 32)
+	if _, err = rand.Read(newKey); err != nil {
+		err = fmt.Errorf("generating new key: %w", err)
+		return
+	}
+	block, cipherErr := aes.NewCipher(newKey)
+	if cipherErr != nil {
+		err = fmt.Errorf("creating new cipher: %w", cipherErr)
+		return
+	}
+	newGCM, gcmErr := cipher.NewGCM(block)
+	if gcmErr != nil {
+		err = fmt.Errorf("creating new GCM: %w", gcmErr)
+		return
+	}
+
+	openOld = Open
+
+	sealNew = func(plaintext string) (string, error) {
+		if plaintext == "" {
+			return "", nil
+		}
+		nonce := make([]byte, newGCM.NonceSize())
+		if _, readErr := io.ReadFull(rand.Reader, nonce); readErr != nil {
+			return "", fmt.Errorf("generating nonce: %w", readErr)
+		}
+		sealed := newGCM.Seal(nonce, nonce, []byte(plaintext), nil)
+		return base64.StdEncoding.EncodeToString(sealed), nil
+	}
+
+	commit = func() error {
+		tmp := keyPath + ".new"
+		if writeErr := os.WriteFile(tmp, newKey, 0600); writeErr != nil {
+			return fmt.Errorf("writing new key: %w", writeErr)
+		}
+		if renameErr := os.Rename(tmp, keyPath); renameErr != nil {
+			os.Remove(tmp)
+			return fmt.Errorf("installing new key: %w", renameErr)
+		}
+		mu.Lock()
+		gcm = newGCM
+		ok = true
+		mu.Unlock()
+		return nil
+	}
+
+	return
+}
+
 // Open decrypts a value produced by Seal.
 // Empty input returns empty string.
 func Open(ciphertext string) (string, error) {

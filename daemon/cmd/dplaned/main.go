@@ -9,7 +9,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -797,6 +799,13 @@ func main() {
 	r.Handle("/api/system/audit/verify-chain", permRoute("audit", "read", auditRotationHandler.VerifyAuditChain)).Methods("GET")
 	r.Handle("/api/system/ce-status", permRoute("system", "read", auditRotationHandler.GetCEStatus)).Methods("GET")
 
+	secretsRotationHandler := handlers.NewSecretsRotationHandler(db, "/var/lib/dplaneos/secrets.key")
+	r.Handle("/api/system/secrets/rotate", permRoute("system", "admin", secretsRotationHandler.RotateKeys)).Methods("POST")
+
+	systemBackupHandler := handlers.NewSystemBackupHandler(*dbDSN)
+	r.Handle("/api/system/db/backup", permRoute("system", "admin", systemBackupHandler.DownloadBackup)).Methods("GET")
+	r.Handle("/api/system/db/restore", permRoute("system", "admin", systemBackupHandler.RestoreBackup)).Methods("POST")
+
 	supportBundleHandler := handlers.NewSupportBundleHandler(db, Version)
 	r.Handle("/api/system/support-bundle", permRoute("system", "admin", supportBundleHandler.GenerateBundle)).Methods("POST")
 
@@ -1064,7 +1073,7 @@ func main() {
 	handlers.SetAlertingHandler(alertingHandler)
 	r.Handle("/api/alerts/smtp", permRoute("system", "read", alertingHandler.GetSMTPConfig)).Methods("GET")
 	r.Handle("/api/alerts/smtp", permRoute("system", "write", alertingHandler.SaveSMTPConfig)).Methods("POST")
-	r.Handle("/api/alerts/smtp/test", permRoute("system", "write", handlers.TestSMTP)).Methods("POST")
+	r.Handle("/api/alerts/smtp/test", permRoute("system", "write", alertingHandler.TestSMTP)).Methods("POST")
 
 	// ZFS Scrub Scheduler
 	r.Handle("/api/zfs/scrub/schedule", permRoute("storage", "read", alertingHandler.GetScrubSchedules)).Methods("GET")
@@ -1698,6 +1707,51 @@ func stacksOnlyPlan(full *gitops.Plan) *gitops.Plan {
 	return filtered
 }
 
+// checkPromotionStateEpoch compares the local HEAD of the git repo that manages
+// stateYAMLPath against the last_commit recorded by the auto-sync goroutine.
+// A mismatch means the standby's state.yaml may be stale relative to what the
+// primary had synced. The check is advisory: it logs a warning and writes to
+// the audit log but does not halt the promotion.
+func checkPromotionStateEpoch(db *sql.DB, stateYAMLPath string) {
+	stateDir := filepath.Dir(stateYAMLPath)
+	rows, err := db.Query(`SELECT local_path, COALESCE(last_commit,'') FROM git_sync_repos`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	var repoPath, lastSyncedCommit string
+	for rows.Next() {
+		var lp, lc string
+		if rows.Scan(&lp, &lc) != nil {
+			continue
+		}
+		if lp == stateDir || strings.HasPrefix(stateDir+"/", lp+"/") {
+			repoPath = lp
+			lastSyncedCommit = lc
+			break
+		}
+	}
+	if repoPath == "" || lastSyncedCommit == "" {
+		return
+	}
+	out, err := exec.Command("git", "-C", repoPath, "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return
+	}
+	localHead := strings.TrimSpace(string(out))
+	if localHead != "" && localHead != lastSyncedCommit {
+		msg := fmt.Sprintf(
+			"state.yaml may be stale: local HEAD %s differs from last synced commit %s - "+
+				"stacks will be applied from local snapshot; run a manual git sync after promotion to restore current state",
+			localHead, lastSyncedCommit,
+		)
+		log.Printf("HA PROMOTION WARNING: %s", msg)
+		audit.LogCommand(audit.LevelWarn, "ha-promotion", "stale_state_warning",
+			[]string{"local_head=" + localHead, "last_sync_commit=" + lastSyncedCommit, "state_path=" + stateYAMLPath},
+			false, 0, fmt.Errorf("%s", msg))
+	}
+}
+
 // runPostPromotionStacksApply fires after STONITH promotion and re-applies
 // GitOps stack items on the newly-promoted primary. It retries up to 3 times
 // with a 15-second delay to give Patroni/PostgreSQL time to become writable
@@ -1719,6 +1773,8 @@ func runPostPromotionStacksApply(db *sql.DB, stateYAMLPath, smbConfPath string) 
 		log.Printf("HA PROMOTION: cannot read state file: %v", err)
 		return
 	}
+
+	checkPromotionStateEpoch(db, stateYAMLPath)
 
 	desired, err := gitops.ParseStateYAML(string(content))
 	if err != nil {
