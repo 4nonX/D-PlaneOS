@@ -365,6 +365,71 @@ Disk operations (pool expansion, resilvering) only execute on the primary. The s
 
 ---
 
+## Failover Mechanics
+
+This section covers what the daemon does internally from the moment a peer goes silent to the moment the promoted node is serving traffic. It is useful when diagnosing failover timing or reasoning about behavior during network partitions.
+
+### Heartbeat and Detection
+
+`heartbeatLoop` runs on both nodes, ticking every 15 seconds. Each tick:
+
+1. `pingAllPeers()` - sends an HTTP GET to each peer's `/api/cluster/ping` and records the last-seen timestamp and the peer's current ZFS TXG
+2. `checkFailover()` - evaluates whether the peer has been silent long enough to attempt promotion
+
+The failover threshold is 45 seconds. A peer must miss three consecutive heartbeats before the threshold is reached.
+
+### Promotion Guards
+
+`checkFailover()` tests five conditions in order. All five must pass before any fencing or promotion occurs:
+
+| Guard | Condition | Notes |
+|-------|-----------|-------|
+| SubordinateMode | Node must not be in subordinate mode | Set when a node boots with a stale ZFS TXG; cleared after TXG catch-up completes |
+| HysteresisWindow | 60 minutes must have elapsed since last promotion | Prevents rapid re-promotion after a flap |
+| Fencing method | At least one fencing method must be configured | No configured method means no STONITH and no promotion; the daemon refuses to promote without a confirmed fence path |
+| Quorum Witness | If a witness is configured, it must agree the peer is unreachable | Prevents false promotions when the inter-node link is down but the peer is still alive |
+| MaintenanceMode | Node must not be in maintenance mode | Set via `POST /api/ha/maintenance` before planned work |
+
+If any guard fails, `checkFailover()` returns without action. The heartbeat loop re-evaluates on the next 15-second tick.
+
+### STONITH Execution
+
+When all guards pass, a STONITH goroutine runs (separate goroutine, so the heartbeat loop keeps ticking):
+
+1. Try IPMI: `ipmitool -H <bmc_ip> power off`
+2. If IPMI fails, try PDU: HTTP call to the PDU outlet
+3. If both fail: **abort**. The daemon logs that fencing failed and returns without promoting. A node that cannot confirm the peer is fenced will never promote.
+
+If fencing succeeds:
+
+- `ExecutePromotion()` runs: clears `SubordinateMode`, brings ZFS pools off readonly, writes the promotion event to the audit log, persists new cluster state to the DB via `persistClusterState()`
+- `promotionCallback()` fires: triggers post-promotion reconciliation (see below)
+
+### Post-Promotion Reconciliation and Git Reachability
+
+After promotion, `runPostPromotionStacksApply` runs asynchronously. It reads `state.yaml` from the local filesystem and reconciles Docker compose stacks against the desired state.
+
+**Git is never contacted during promotion.** The function calls `os.ReadFile(stateYAMLPath)` against a local path. There is no `git pull`, no HTTP call to a remote, and no network dependency in the promotion path. The git sync path and the promotion path are structurally decoupled:
+
+```
+[Git remote] <-- polls every N minutes --> [StartAutoSync goroutine]
+                                                      |
+                                               writes state.yaml
+                                               to local disk
+                                                      |
+                                  (survives network partition)
+                                                      |
+               [promotionCallback] -- os.ReadFile --> state.yaml
+```
+
+`stacksOnlyPlan` further constrains what post-promotion reconciliation will apply: it only acts on Create, Modify, and NOP items for stacks. It never applies Delete, Blocked, Ambiguous, or Manual actions. The worst case during a stale-state failover is the promoted node running a subset of the intended stacks, not tearing down services or modifying storage.
+
+**Behavior when Git is unreachable at promotion time:** The promoted node proceeds on whatever `state.yaml` was last written to disk by the background auto-sync goroutine. It does not wait for Git reachability, does not fail the promotion, and does not defer stacks reconciliation.
+
+**Known limitation:** There is no Git-epoch check at promotion time. If the standby's last sync was behind the primary's at the moment of failure, the promoted node applies an older version of desired state until the next successful auto-sync restores the current version. This is an intentional tradeoff: storage availability (ZFS pools, NVMe-oF exports) is restored immediately; Docker stack alignment may lag by up to one sync interval. For environments where stack config divergence is unacceptable, shorten the auto-sync interval or ensure the Git remote is accessible from both nodes via a path that survives the expected failure modes.
+
+---
+
 ## Fencing Reference
 
 ### SCSI-3 Persistent Reservations (dplane-fenced)
@@ -435,3 +500,4 @@ zfs list <pool>/sbd-lease
 | etcd quorum lost | `etcdctl endpoint health` | At least 2 of 3 etcd members must be reachable |
 | Patroni not finding etcd | `journalctl -u patroni` | Verify etcd endpoints in `/etc/dplaneos/patroni.yaml`; check firewall on etcd ports |
 | Witness not reachable (Path B) | `etcdctl endpoint health http://WITNESS_IP:2379` | Check firewall rules; restart etcd on witness |
+| Docker stacks not matching desired state after failover | `GET /api/gitops/state` | Standby's last git sync may predate the primary's; stacks reconcile from the local state.yaml snapshot. Wait for auto-sync or trigger a manual sync to restore current desired state |
