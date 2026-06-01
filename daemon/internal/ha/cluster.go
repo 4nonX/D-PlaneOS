@@ -110,6 +110,21 @@ type Manager struct {
 
 	replProgressMu     sync.Mutex
 	replProgressReport func(map[string]interface{})
+
+	// promotionCallback is called on the goroutine that executed STONITH,
+	// immediately after ExecutePromotion completes. Set once at startup via
+	// SetPromotionCallback before Start(); never written again after that.
+	promotionCallback func()
+}
+
+// SetPromotionCallback registers fn to be called after a successful STONITH
+// promotion on this node. fn runs on the failover goroutine, so it must not
+// block for more than a few minutes (it should launch its own goroutine for
+// long-running work). Call this once, before Start().
+func (m *Manager) SetPromotionCallback(fn func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.promotionCallback = fn
 }
 
 // NewManager creates a cluster manager for this daemon instance.
@@ -429,6 +444,13 @@ func (m *Manager) checkFailover() {
 
 		log.Printf("HA STONITH: Peer %s confirmed fenced. Promoting local node to active role.", deadPeer.ID)
 		ExecutePromotion(m.localID, deadPeer.ID)
+
+		m.mu.RLock()
+		cb := m.promotionCallback
+		m.mu.RUnlock()
+		if cb != nil {
+			cb()
+		}
 	}()
 }
 

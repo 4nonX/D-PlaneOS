@@ -28,6 +28,18 @@ interface TotpVerifyResponse {
   error?: string
 }
 
+interface OIDCInfo {
+  enabled: boolean
+  button_label?: string
+}
+
+interface OIDCExchangeResponse {
+  success: boolean
+  session_id?: string
+  username?: string
+  error?: string
+}
+
 type LoginStep = 'credentials' | 'totp'
 
 export function LoginPage() {
@@ -57,6 +69,7 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [daemonVersion, setDaemonVersion] = useState<string | null>(null)
+  const [oidcInfo, setOidcInfo] = useState<OIDCInfo | null>(null)
 
   type BootState = 'checking' | 'ready' | 'unreachable'
   const [bootState, setBootState] = useState<BootState>('checking')
@@ -109,6 +122,65 @@ export function LoginPage() {
       })
       .catch(() => {})
   }, [])
+
+  // Fetch OIDC info to conditionally show SSO button
+  useEffect(() => {
+    api.get<OIDCInfo>('/api/auth/oidc/info').then(setOidcInfo).catch(() => {})
+  }, [])
+
+  // Surface IdP error codes that arrive as ?error= on the login page
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const errCode = params.get('error')
+    if (!errCode) return
+    const msgs: Record<string, string> = {
+      oidc_idp_error:       'The identity provider returned an error',
+      oidc_missing_params:  'Invalid SSO callback - missing parameters',
+      oidc_invalid_state:   'SSO session expired - please try again',
+      oidc_token_exchange:  'SSO token exchange failed',
+      oidc_invalid_token:   'Invalid identity token from SSO provider',
+      oidc_user_denied:     'Your account is not authorized to log in',
+      oidc_provider:        'SSO provider is temporarily unavailable',
+      oidc_internal:        'An internal error occurred during SSO login',
+    }
+    setError(msgs[errCode] ?? 'SSO login error - please try again')
+    const url = new URL(window.location.href)
+    url.searchParams.delete('error')
+    window.history.replaceState({}, '', url.toString())
+  }, [])
+
+  // Exchange a one-time OIDC handoff code for a real session
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const handoffCode = params.get('oidc_handoff')
+    if (!handoffCode) return
+
+    const url = new URL(window.location.href)
+    url.searchParams.delete('oidc_handoff')
+    window.history.replaceState({}, '', url.toString())
+
+    setLoading(true)
+    fetch('/api/auth/oidc/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handoff_code: handoffCode }),
+    })
+      .then(r => r.json())
+      .then(async (data: OIDCExchangeResponse) => {
+        if (!data.success || !data.session_id || !data.username) {
+          setError(data.error ?? 'SSO login failed - please try again')
+          setLoading(false)
+          return
+        }
+        storeSession(data.session_id, data.username)
+        await useAuthStore.getState().validateSession()
+        navigate({ to: '/' })
+      })
+      .catch(() => {
+        setError('SSO login failed - please try again')
+        setLoading(false)
+      })
+  }, [navigate])
 
   async function handleCredentialsSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -372,6 +444,26 @@ export function LoginPage() {
                   'Sign In'
                 )}
               </button>
+
+              {oidcInfo?.enabled && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0', color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)' }}>
+                    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                    or
+                    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = '/api/auth/oidc/start' }}
+                    disabled={loading}
+                    className="btn btn-ghost"
+                    style={{ width: '100%' }}
+                  >
+                    <Icon name="login" size={16} />
+                    {oidcInfo.button_label ?? 'Sign in with SSO'}
+                  </button>
+                </>
+              )}
 
               {import.meta.env.DEV && (
                 <button

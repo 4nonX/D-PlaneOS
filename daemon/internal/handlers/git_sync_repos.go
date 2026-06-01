@@ -18,6 +18,7 @@ import (
 	"dplaned/internal/cmdutil"
 	"dplaned/internal/config"
 	"dplaned/internal/gitops"
+	"dplaned/internal/secrets"
 )
 
 // GitReposHandler manages multiple git-sync repositories (Arcane-style multi-repo)
@@ -110,11 +111,21 @@ func (h *GitReposHandler) SaveCredential(w http.ResponseWriter, r *http.Request)
 		// Update existing - only update token/key if non-empty (empty = keep existing)
 		var execErr error
 		if req.Token != "" && req.AuthType == "token" {
+			sealedToken, sErr := secrets.Seal(req.Token)
+			if sErr != nil {
+				respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to encrypt token"})
+				return
+			}
 			_, execErr = h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, token=$4, ssh_key='', notes=$5 WHERE id=$6`,
-				req.Name, req.Host, req.AuthType, req.Token, req.Notes, *req.ID)
+				req.Name, req.Host, req.AuthType, sealedToken, req.Notes, *req.ID)
 		} else if req.AuthType == "ssh" && req.SSHKey != "" {
+			sealedSSH, sErr := secrets.Seal(req.SSHKey)
+			if sErr != nil {
+				respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to encrypt SSH key"})
+				return
+			}
 			_, execErr = h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, token='', ssh_key=$4, notes=$5 WHERE id=$6`,
-				req.Name, req.Host, req.AuthType, req.SSHKey, req.Notes, *req.ID)
+				req.Name, req.Host, req.AuthType, sealedSSH, req.Notes, *req.ID)
 		} else {
 			_, execErr = h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, notes=$4 WHERE id=$5`,
 				req.Name, req.Host, req.AuthType, req.Notes, *req.ID)
@@ -127,13 +138,18 @@ func (h *GitReposHandler) SaveCredential(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Insert - store key text directly in DB
-	tokenStore := req.Token
-	sshKeyStore := req.SSHKey
-	if req.AuthType == "ssh" {
-		tokenStore = ""
-	} else {
-		sshKeyStore = ""
+	// Insert - seal before storing
+	tokenStore := ""
+	sshKeyStore := ""
+	var sealErr error
+	if req.AuthType == "token" && req.Token != "" {
+		tokenStore, sealErr = secrets.Seal(req.Token)
+	} else if req.AuthType == "ssh" && req.SSHKey != "" {
+		sshKeyStore, sealErr = secrets.Seal(req.SSHKey)
+	}
+	if sealErr != nil {
+		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to encrypt credential"})
+		return
 	}
 
 	var id int64
@@ -771,10 +787,20 @@ type gitCredential struct {
 
 func (h *GitReposHandler) loadCredential(id int) (*gitCredential, error) {
 	var c gitCredential
+	var sealedToken, sealedSSH string
 	err := h.db.QueryRow(`SELECT id, name, host, auth_type, token, ssh_key FROM git_credentials WHERE id=$1`, id).
-		Scan(&c.ID, &c.Name, &c.Host, &c.AuthType, &c.Token, &c.SSHKey)
+		Scan(&c.ID, &c.Name, &c.Host, &c.AuthType, &sealedToken, &sealedSSH)
 	if err != nil {
 		return nil, err
+	}
+	var openErr error
+	c.Token, openErr = secrets.Open(sealedToken)
+	if openErr != nil {
+		return nil, fmt.Errorf("decrypting token: %w", openErr)
+	}
+	c.SSHKey, openErr = secrets.Open(sealedSSH)
+	if openErr != nil {
+		return nil, fmt.Errorf("decrypting ssh_key: %w", openErr)
 	}
 	return &c, nil
 }

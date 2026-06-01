@@ -130,6 +130,8 @@ Session tokens are 32-byte random values stored hashed in PostgreSQL. They trave
 
 TOTP two-factor authentication is available per user. When enabled, login issues a `pending_totp` session that can only call `/api/auth/totp/verify`; all other routes reject it until the second factor is verified.
 
+**OIDC SSO** uses the Authorization Code flow with PKCE (S256). After the IdP redirect lands on `/api/auth/oidc/callback`, the daemon stores the minted session under a one-time 2-minute handoff code and redirects the browser to `/login?oidc_handoff=<code>`. The SPA exchanges the code via `POST /api/auth/oidc/exchange` and receives `{ session_id, username, expires_at }` - identical in shape to a normal login response. This indirection keeps the session token out of the URL (browser history / access log exposure). The handoff row is consumed atomically with `DELETE ... RETURNING`, preventing replay. OIDC accounts (`source = 'oidc'`) have no local password; their identity is the stable `(issuer, subject)` pair from the IdP.
+
 ### RBAC
 
 Four roles (viewer, user, operator, admin) with 31 discrete permissions enforced at the handler level via `permRoute()` middleware. System roles are immutable in the database (`is_system = 1`). Role assignments support expiry dates.

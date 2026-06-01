@@ -38,6 +38,21 @@ interface NixOSValidate    { success: boolean; valid: boolean; errors?: string[]
 interface Generation       { number: number; date: string; current: boolean; description?: string }
 interface GenerationsResp  { success: boolean; generations: Generation[] }
 
+interface OIDCConfig {
+  enabled?:        boolean
+  issuer?:         string
+  client_id?:      string
+  scopes?:         string
+  allowed_algs?:   string
+  button_label?:   string
+  auto_provision?: boolean
+  default_role_id?: number | null
+  group_claim?:    string
+}
+
+interface OIDCRole { id: number; name: string }
+interface OIDCRolesResponse { success: boolean; roles: OIDCRole[] }
+
 // ---------------------------------------------------------------------------
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -364,10 +379,143 @@ function NixOSTab() {
 }
 
 // ---------------------------------------------------------------------------
+// OIDCTab
+// ---------------------------------------------------------------------------
+
+function OIDCTab() {
+  const qc = useQueryClient()
+
+  const configQ = useQuery({
+    queryKey: ['oidc', 'config'],
+    queryFn: ({ signal }) => api.get<OIDCConfig & { success: boolean }>('/api/auth/oidc/config', signal),
+  })
+
+  const rolesQ = useQuery({
+    queryKey: ['rbac', 'roles'],
+    queryFn: ({ signal }) => api.get<OIDCRolesResponse>('/api/rbac/roles', signal),
+  })
+
+  const [cfg, setCfg] = useState<OIDCConfig | null>(null)
+  const [secret, setSecret] = useState('')
+
+  const formCfg: OIDCConfig = cfg ?? configQ.data ?? {}
+
+  function set<K extends keyof OIDCConfig>(k: K, v: OIDCConfig[K]) {
+    setCfg(prev => ({ ...(prev ?? configQ.data ?? {}), [k]: v }))
+  }
+
+  const save = useMutation({
+    mutationFn: () => api.post('/api/auth/oidc/config', { ...formCfg, client_secret: secret }),
+    onSuccess: () => {
+      toast.success('OIDC configuration saved')
+      setSecret('')
+      qc.invalidateQueries({ queryKey: ['oidc', 'config'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (configQ.isLoading) return <Skeleton height={360} />
+  if (configQ.isError) return <ErrorState error={configQ.error} onRetry={() => qc.invalidateQueries({ queryKey: ['oidc', 'config'] })} />
+
+  const roles = rolesQ.data?.roles ?? []
+
+  return (
+    <div style={{ maxWidth: 620, display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div className="card" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: 0 }}>SSO Provider</h3>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!formCfg.enabled} onChange={e => set('enabled', e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />
+            <span style={{ fontWeight: 600 }}>Enable SSO</span>
+          </label>
+        </div>
+
+        <div style={{ display: 'grid', gap: 16 }}>
+          <Field label="Issuer URL" hint="Discovery document fetched from issuer + /.well-known/openid-configuration">
+            <input value={formCfg.issuer ?? ''} onChange={e => set('issuer', e.target.value)}
+              placeholder="https://accounts.example.com"
+              className="input" style={{ fontFamily: 'var(--font-mono)' }} />
+          </Field>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Client ID">
+              <input value={formCfg.client_id ?? ''} onChange={e => set('client_id', e.target.value)}
+                placeholder="dplaneos" className="input" />
+            </Field>
+            <Field label="Client Secret" hint="Leave empty to keep existing">
+              <input type="password" value={secret} onChange={e => setSecret(e.target.value)}
+                placeholder="unchanged" className="input" autoComplete="new-password" />
+            </Field>
+          </div>
+
+          <Field label="Button Label" hint="Text shown on the SSO login button">
+            <input value={formCfg.button_label ?? ''} onChange={e => set('button_label', e.target.value)}
+              placeholder="Sign in with SSO" className="input" />
+          </Field>
+
+          <details>
+            <summary style={{ cursor: 'pointer', padding: '10px 0', fontSize: 'var(--text-sm)', fontWeight: 600 }}>Advanced Settings</summary>
+            <div style={{ display: 'grid', gap: 12, paddingTop: 12 }}>
+              <Field label="Scopes" hint="Space-separated OpenID Connect scopes">
+                <input value={formCfg.scopes ?? ''} onChange={e => set('scopes', e.target.value)}
+                  placeholder="openid email profile" className="input" style={{ fontFamily: 'var(--font-mono)' }} />
+              </Field>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Field label="Allowed Algorithms" hint="Comma-separated, e.g. RS256,ES256">
+                  <input value={formCfg.allowed_algs ?? ''} onChange={e => set('allowed_algs', e.target.value)}
+                    placeholder="RS256" className="input" style={{ fontFamily: 'var(--font-mono)' }} />
+                </Field>
+                <Field label="Group Claim" hint="JWT claim containing group memberships">
+                  <input value={formCfg.group_claim ?? ''} onChange={e => set('group_claim', e.target.value)}
+                    placeholder="groups" className="input" style={{ fontFamily: 'var(--font-mono)' }} />
+                </Field>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 20 }}>
+        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, marginBottom: 16 }}>User Provisioning</h3>
+        <div style={{ display: 'grid', gap: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!formCfg.auto_provision} onChange={e => set('auto_provision', e.target.checked)}
+              style={{ width: 16, height: 16, marginTop: 2, accentColor: 'var(--primary)', flexShrink: 0 }} />
+            <div>
+              <span style={{ fontWeight: 600, display: 'block' }}>Auto-provision accounts</span>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+                Create a local account on first login when no existing account matches by email
+              </span>
+            </div>
+          </label>
+
+          <Field label="Default Role" hint="Assigned to newly provisioned accounts on first login">
+            <select
+              value={formCfg.default_role_id ?? ''}
+              onChange={e => set('default_role_id', e.target.value ? Number(e.target.value) : null)}
+              className="input">
+              <option value="">None</option>
+              {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </Field>
+        </div>
+      </div>
+
+      <div>
+        <button onClick={() => save.mutate()} disabled={save.isPending} className="btn btn-primary">
+          <Icon name="save" size={15} />{save.isPending ? 'Saving...' : 'Save Configuration'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // SettingsPage
 // ---------------------------------------------------------------------------
 
-type Tab = 'general' | 'nixos'
+type Tab = 'general' | 'nixos' | 'oidc'
 
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>('general')
@@ -375,13 +523,14 @@ export function SettingsPage() {
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: 'general', label: 'General',  icon: 'tune' },
     { id: 'nixos',   label: 'NixOS',    icon: 'terminal' },
+    { id: 'oidc',    label: 'SSO / OIDC', icon: 'key' },
   ]
 
   return (
     <div style={{ maxWidth: 860 }}>
       <div className="page-header">
         <h1 className="page-title">System Settings</h1>
-        <p className="page-subtitle">Hostname, timezone, MOTD and NixOS configuration</p>
+        <p className="page-subtitle">Hostname, timezone, MOTD, NixOS configuration and SSO</p>
       </div>
 
       <div className="tabs-underline">
@@ -394,6 +543,7 @@ export function SettingsPage() {
 
       {tab === 'general' && <GeneralTab />}
       {tab === 'nixos'   && <NixOSTab />}
+      {tab === 'oidc'    && <OIDCTab />}
     </div>
   )
 }

@@ -33,10 +33,24 @@ All Go dependencies are vendored. No internet access is needed to build.
 | `github.com/gorilla/mux` | HTTP router |
 | `github.com/gorilla/websocket` | WebSocket (real-time monitor) |
 | `github.com/jackc/pgx/v5` | PostgreSQL driver (pure Go) |
+| `github.com/jackc/puddle/v2` | Connection pool (pgx dependency) |
 | `github.com/google/uuid` | Job store UUIDs |
 | `github.com/go-ldap/ldap/v3` | LDAP / Active Directory integration |
+| `github.com/go-asn1-ber/asn1-ber` | ASN.1 BER encoding (LDAP dependency) |
 | `github.com/Azure/go-ntlmssp` | NTLM authentication (LDAP) |
-| `golang.org/x/crypto` | bcrypt password hashing |
+| `github.com/go-jose/go-jose/v4` | OIDC JWS/JWK parsing and ID token verification |
+| `github.com/go-acme/lego` | ACME / Let's Encrypt TLS certificate automation |
+| `github.com/pressly/goose/v3` | SQL migration runner |
+| `github.com/mfridman/interpolate` | Environment variable interpolation (goose dependency) |
+| `github.com/miekg/dns` | DNS resolution for ACME DNS-01 challenges |
+| `github.com/cenkalti/backoff/v5` | Exponential backoff for retries |
+| `github.com/sethvargo/go-retry` | Retry helper |
+| `github.com/creack/pty` | PTY (pseudo-terminal) for terminal emulator |
+| `go.uber.org/multierr` | Multi-error aggregation |
+| `golang.org/x/crypto` | bcrypt password hashing, additional crypto primitives |
+| `golang.org/x/net` | HTTP/2 and extended net utilities |
+| `golang.org/x/sys` | Low-level OS syscall wrappers |
+| `golang.org/x/text` | Unicode normalization |
 
 ---
 

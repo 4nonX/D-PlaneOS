@@ -28,8 +28,9 @@ For deeper dives into operational areas, see the dedicated guides:
 8. [Backup and Recovery](#backup-and-recovery)
 9. [Security Best Practices](#security-best-practices)
 10. [Directory Service (LDAP / Active Directory)](#directory-service-ldap--active-directory)
-11. [Custom Container Icons](#custom-container-icons)
-12. [Troubleshooting](#troubleshooting)
+11. [SSO (OIDC)](#sso-oidc)
+12. [Custom Container Icons](#custom-container-icons)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -415,6 +416,98 @@ GET    /api/ldap/sync-log
 | User not found | Check User Filter: AD uses `sAMAccountName`, OpenLDAP uses `uid` |
 | No groups mapped | Verify Group Base DN and Group Filter |
 | Admin locked out | User ID 1 always uses local auth - log in with local credentials |
+
+---
+
+## SSO (OIDC)
+
+DPlaneOS supports single sign-on via any OpenID Connect (OIDC) Authorization Code + PKCE provider: Keycloak, Authentik, Dex, Auth0, Microsoft Entra ID, Google Workspace, and others.
+
+### Quick Setup
+
+1. Navigate to **Settings → SSO / OIDC**
+2. Enter the **Issuer URL** (the base URL of your provider, e.g. `https://auth.example.com/realms/myrealm`)
+3. Enter your **Client ID** and **Client Secret** from the IdP application registration
+4. Set a **Button Label** (displayed on the login page, e.g. "Sign in with Keycloak")
+5. Toggle **Enable SSO** and click **Save Configuration**
+
+DPlaneOS auto-discovers the provider's endpoints from `{issuer}/.well-known/openid-configuration`. No manual endpoint configuration is required.
+
+### IdP Application Registration
+
+Register DPlaneOS as a confidential client with:
+
+- **Redirect URI:** `https://your-dplaneos-hostname/api/auth/oidc/callback`
+- **Grant type:** Authorization Code
+- **PKCE:** S256 (required; if your IdP allows disabling PKCE, do not)
+- **Scopes:** `openid email profile groups` (adjust if your IdP uses a different claim for group membership)
+
+### Group to Role Mapping
+
+OIDC group names are matched against DPlaneOS role names at each login. Any IdP group whose name exactly matches a DPlaneOS role is assigned to the user. The claim that carries group membership is configurable (default: `groups`).
+
+| IdP group | DPlaneOS role matched | Access level |
+|-----------|----------------------|--------------|
+| `dplaneos-admins` | Administrator | Full system access |
+| `storage-operators` | Operator | Storage, Docker, Shares |
+| `domain-users` | User | Files, Dashboard |
+| `auditors` | Viewer | Read-only |
+
+Groups that do not match any role name are silently ignored. The assignment uses `granted_by = 'oidc-provider'` and is re-evaluated on every login; roles not granted by the IdP are not revoked automatically (they may have been assigned manually).
+
+### User Provisioning
+
+DPlaneOS resolves users in priority order:
+
+1. **Existing OIDC identity link** - the `(issuer, subject)` pair from the IdP is the stable, authoritative key. Matched immediately on subsequent logins regardless of email changes.
+2. **Email-based link** - if no identity link exists, DPlaneOS checks whether a local account shares the same email address and links it. Subsequent logins use the identity link.
+3. **Auto-provision** - if no match and **Auto-provision accounts** is enabled, a new local account is created with `source = 'oidc'` and the configured Default Role assigned.
+
+If **Auto-provision** is disabled and neither of the first two paths match, login is rejected with a "not authorized" error on the login page.
+
+Auto-provisioned usernames are derived from the IdP's `preferred_username` claim, falling back to the local part of the email address, then the subject. Characters outside `[a-zA-Z0-9_-]` are replaced with `_`. Duplicate names get a numeric suffix.
+
+### Account Sources
+
+| `source` | How it authenticates |
+|----------|----------------------|
+| `local` | bcrypt against local `password_hash` |
+| `ldap` | Real-time LDAP bind against the configured directory server |
+| `oidc` | OIDC flow; no local password; password-change UI is disabled for these accounts |
+| User ID 1 (admin) | Always local bcrypt regardless of source |
+
+### Login Flow
+
+1. User clicks the SSO button on the login page.
+2. Browser is redirected to the IdP authorization endpoint with a PKCE S256 challenge.
+3. After the user authenticates, the IdP redirects to `/api/auth/oidc/callback`.
+4. The daemon validates state, exchanges the code for tokens, verifies the ID token, resolves the user, and stores a one-time 2-minute handoff code.
+5. Browser is redirected to `/login?oidc_handoff=<code>`.
+6. The login page detects the parameter, exchanges it via `POST /api/auth/oidc/exchange`, and stores the session - identical in shape to a normal login response.
+
+The handoff code is necessary because the session token cannot safely travel in a redirect URL (browser history and access logs would expose it). The exchange call is a normal XHR that the SPA makes directly, so the token stays out of the URL entirely.
+
+### OIDC API
+
+```
+GET    /api/auth/oidc/info        public - login page queries this for SSO button
+GET    /api/auth/oidc/start       public - initiates IdP redirect
+GET    /api/auth/oidc/callback    public - receives IdP redirect (internal, not for direct use)
+POST   /api/auth/oidc/exchange    public - SPA exchanges handoff code for session
+GET    /api/auth/oidc/config      system:admin - read OIDC configuration (client secret omitted)
+POST   /api/auth/oidc/config      system:admin - write OIDC configuration
+```
+
+### Troubleshooting OIDC
+
+| Issue | Solution |
+|-------|----------|
+| SSO button does not appear | Enable SSO in Settings and confirm the provider discovery URL is reachable from the server |
+| "SSO session expired - please try again" | State row expired (10-minute TTL). Browser clock may be far ahead of server. |
+| "Invalid identity token from SSO provider" | Check **Allowed Algorithms** matches what your IdP signs with (default: `RS256`); check clock skew |
+| "Your account is not authorized to log in" | Auto-provision is off and no local account matches the email; create a local account or enable auto-provision |
+| "SSO provider is temporarily unavailable" | The daemon could not reach the IdP discovery URL; check network connectivity from the server |
+| Redirect URI mismatch | The registered redirect URI must exactly match `https://your-dplaneos-hostname/api/auth/oidc/callback` - note the trailing path |
 
 ---
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"dplaned/internal/cmdutil"
+	"dplaned/internal/secrets"
 )
 
 // BuildPushEnvForRepoID prepares environment variables for authenticated Git operations using a Repo ID.
@@ -27,9 +28,19 @@ func BuildPushEnvForRepoID(db *sql.DB, repoID int64) []string {
 
 // BuildPushEnvForCred prepares environment variables for authenticated Git operations using a Credential ID.
 func BuildPushEnvForCred(db *sql.DB, credID int64) []string {
-	var authType, token, sshKey string
-	err := db.QueryRow(`SELECT auth_type, token, ssh_key FROM git_credentials WHERE id=$1`, credID).Scan(&authType, &token, &sshKey)
+	var authType, sealedToken, sealedSSHKey string
+	err := db.QueryRow(`SELECT auth_type, token, ssh_key FROM git_credentials WHERE id=$1`, credID).Scan(&authType, &sealedToken, &sealedSSHKey)
 	if err != nil {
+		return nil
+	}
+	token, err := secrets.Open(sealedToken)
+	if err != nil {
+		log.Printf("GITOPS: failed to decrypt git token for cred %d: %v", credID, err)
+		return nil
+	}
+	sshKey, err := secrets.Open(sealedSSHKey)
+	if err != nil {
+		log.Printf("GITOPS: failed to decrypt git ssh_key for cred %d: %v", credID, err)
 		return nil
 	}
 	return BuildPushEnv(authType, token, sshKey)

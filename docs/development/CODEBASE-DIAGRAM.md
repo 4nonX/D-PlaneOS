@@ -172,6 +172,8 @@ flowchart TD
 
 ## Authentication Flow
 
+### Local / LDAP Login
+
 ```mermaid
 %%{init: {'theme':'base'}}%%
 sequenceDiagram
@@ -194,5 +196,33 @@ sequenceDiagram
     S->>S: token format + DB lookup + username match
     S->>S: RBAC permission check
     S-->>U: response or 401/403
+```
+
+### OIDC SSO Login (Authorization Code + PKCE)
+
+```mermaid
+%%{init: {'theme':'base'}}%%
+sequenceDiagram
+    participant B as Browser (SPA)
+    participant D as dplaned
+    participant I as IdP
+
+    B->>D: GET /api/auth/oidc/start
+    D->>D: generate state, nonce, PKCE verifier; store in oidc_state
+    D-->>B: 302 → IdP authorization endpoint
+    B->>I: GET /authorize?code_challenge=S256...
+    I-->>B: 302 → /api/auth/oidc/callback?code=...&state=...
+    B->>D: GET /api/auth/oidc/callback
+    D->>D: DELETE oidc_state WHERE state=? (atomic, replay-safe)
+    D->>I: POST /token {code, code_verifier, ...}
+    I-->>D: {id_token, access_token}
+    D->>D: verify ID token (sig, iss, aud, nonce, exp)
+    D->>D: resolve or provision user
+    D->>D: mint session; store in oidc_handoff (2-min TTL)
+    D-->>B: 302 → /login?oidc_handoff=<code>
+    B->>D: POST /api/auth/oidc/exchange {handoff_code}
+    D->>D: DELETE oidc_handoff WHERE code=? RETURNING session_id
+    D-->>B: {session_id, username, expires_at}
+    B->>B: storeSession(); validateSession(); navigate to /
 ```
 

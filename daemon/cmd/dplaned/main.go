@@ -29,6 +29,7 @@ import (
 	"dplaned/internal/nixwriter"
 	"dplaned/internal/persistguard"
 	"dplaned/internal/reconciler"
+	"dplaned/internal/secrets"
 	"dplaned/internal/security"
 	"dplaned/internal/websocket"
 	"dplaned/internal/zfs"
@@ -317,6 +318,11 @@ func main() {
 		auditKey = nil
 	}
 
+	// Initialize the secrets encryption key (AES-256-GCM at-rest encryption).
+	if err := secrets.Init("/var/lib/dplaneos/secrets.key"); err != nil {
+		log.Fatalf("FATAL: secrets key init failed: %v", err)
+	}
+
 	// Initialize buffered audit logging (non-blocking)
 	bufferedLogger := audit.NewBufferedLogger(db, 100, 5*time.Second, auditKey)
 	bufferedLogger.Start()
@@ -339,6 +345,9 @@ func main() {
 		haAddr = "http://" + *listenAddr
 	}
 	clusterMgr := ha.NewManager(db, haID, haAddr, Version)
+	clusterMgr.SetPromotionCallback(func() {
+		go runPostPromotionStacksApply(db, *gitopsStatePath, *smbConfPath)
+	})
 	clusterMgr.Start()
 	defer clusterMgr.Stop()
 
@@ -356,12 +365,14 @@ func main() {
 		alerts.InitTelegram(*telegramBot, *telegramChat)
 	} else {
 		// Try to load from database
-		var botToken, chatID string
+		var sealedToken, chatID string
 		var enabled int
-		err := db.QueryRow("SELECT bot_token, chat_id, enabled FROM telegram_config WHERE id = 1").Scan(&botToken, &chatID, &enabled)
-		if err == nil && enabled == 1 && botToken != "" && chatID != "" {
-			alerts.InitTelegram(botToken, chatID)
-			log.Println("Telegram alerts loaded from database")
+		err := db.QueryRow("SELECT bot_token, chat_id, enabled FROM telegram_config WHERE id = 1").Scan(&sealedToken, &chatID, &enabled)
+		if err == nil && enabled == 1 && sealedToken != "" && chatID != "" {
+			if plainToken, openErr := secrets.Open(sealedToken); openErr == nil && plainToken != "" {
+				alerts.InitTelegram(plainToken, chatID)
+				log.Println("Telegram alerts loaded from database")
+			}
 		}
 	}
 
@@ -556,6 +567,16 @@ func main() {
 	totpHandler := handlers.NewTOTPHandler(db)
 	r.HandleFunc("/api/auth/totp/setup", totpHandler.HandleTOTPSetup).Methods("GET", "POST", "DELETE")
 	r.HandleFunc("/api/auth/totp/verify", totpHandler.HandleTOTPVerify).Methods("POST")
+
+	// OIDC SSO
+	oidcHandler := handlers.NewOIDCHandler(db)
+	r.HandleFunc("/api/auth/oidc/info", oidcHandler.Info).Methods("GET")
+	r.HandleFunc("/api/auth/oidc/start", oidcHandler.Start).Methods("GET")
+	r.HandleFunc("/api/auth/oidc/callback", oidcHandler.Callback).Methods("GET")
+	r.HandleFunc("/api/auth/oidc/exchange", oidcHandler.Exchange).Methods("POST")
+	r.Handle("/api/auth/oidc/config", permRoute("system", "admin", oidcHandler.GetConfig)).Methods("GET")
+	r.Handle("/api/auth/oidc/config", permRoute("system", "admin", oidcHandler.SaveConfig)).Methods("POST")
+	handlers.StartOIDCCleanup(db)
 
 	// API Tokens
 	apiTokenHandler := handlers.NewAPITokenHandler(db)
@@ -1437,6 +1458,11 @@ func sessionMiddleware(db *sql.DB) mux.MiddlewareFunc {
 				p == "/api/auth/logout" ||
 				p == "/api/auth/check" ||
 				p == "/api/csrf" ||
+				// OIDC SSO login flow - no session exists at these points
+				p == "/api/auth/oidc/info" ||
+				p == "/api/auth/oidc/start" ||
+				p == "/api/auth/oidc/callback" ||
+				p == "/api/auth/oidc/exchange" ||
 				// Setup wizard - no session exists yet on fresh installs
 				p == "/api/system/setup-admin" ||
 				p == "/api/system/setup-complete" ||
@@ -1639,5 +1665,131 @@ func bootstrapCEToken(db *sql.DB, path string) {
 		log.Printf("BOOTSTRAP: Failed to insert CE token: %v", err)
 	} else {
 		log.Printf("BOOTSTRAP: Compliance Engine API token injected for admin")
+	}
+}
+
+// stacksOnlyPlan returns a new Plan containing only stack items that are safe
+// to auto-apply after a promotion: Create and Modify actions only. Delete,
+// Blocked, Ambiguous, and Manual items are excluded to prevent automated
+// destructive changes.
+func stacksOnlyPlan(full *gitops.Plan) *gitops.Plan {
+	filtered := &gitops.Plan{}
+	for _, item := range full.Items {
+		if item.Kind != gitops.KindStack {
+			continue
+		}
+		switch item.Action {
+		case gitops.ActionCreate, gitops.ActionModify, gitops.ActionNOP:
+			// safe to auto-apply
+		default:
+			continue
+		}
+		filtered.Items = append(filtered.Items, item)
+		switch item.Action {
+		case gitops.ActionCreate:
+			filtered.CreateCount++
+		case gitops.ActionModify:
+			filtered.ModifyCount++
+		case gitops.ActionNOP:
+			filtered.NopCount++
+		}
+	}
+	filtered.SafeToApply = true
+	return filtered
+}
+
+// runPostPromotionStacksApply fires after STONITH promotion and re-applies
+// GitOps stack items on the newly-promoted primary. It retries up to 3 times
+// with a 15-second delay to give Patroni/PostgreSQL time to become writable
+// and ZFS datasets time to finish importing.
+func runPostPromotionStacksApply(db *sql.DB, stateYAMLPath, smbConfPath string) {
+	const maxAttempts = 3
+	const retryDelay = 15 * time.Second
+	const lockWaitInterval = 2 * time.Second
+	const lockMaxTries = 5
+
+	log.Printf("HA PROMOTION: starting post-promotion GitOps stacks apply")
+
+	content, err := os.ReadFile(stateYAMLPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("HA PROMOTION: no state file at %s - skipping stacks apply", stateYAMLPath)
+			return
+		}
+		log.Printf("HA PROMOTION: cannot read state file: %v", err)
+		return
+	}
+
+	desired, err := gitops.ParseStateYAML(string(content))
+	if err != nil {
+		log.Printf("HA PROMOTION: cannot parse state file: %v", err)
+		return
+	}
+
+	ctx := gitops.ApplyContext{
+		DB:             db,
+		SmbConfPath:    smbConfPath,
+		NFSExportsPath: "/etc/exports",
+	}
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Wait for the reconcile lock; the drift detector or a concurrent apply
+		// may be holding it briefly.
+		locked := false
+		for i := 0; i < lockMaxTries; i++ {
+			if gitops.TryLock() {
+				locked = true
+				break
+			}
+			time.Sleep(lockWaitInterval)
+		}
+		if !locked {
+			log.Printf("HA PROMOTION: reconciliation lock busy after %d tries - drift detector will catch remaining drift", lockMaxTries)
+			return
+		}
+
+		live, err := gitops.ReadLiveState(db)
+		if err != nil {
+			gitops.Unlock()
+			log.Printf("HA PROMOTION: cannot read live state (attempt %d/%d): %v", attempt, maxAttempts, err)
+			if attempt < maxAttempts {
+				time.Sleep(retryDelay)
+			}
+			continue
+		}
+
+		plan := gitops.ComputeDiff(desired, live)
+		stackPlan := stacksOnlyPlan(plan)
+
+		if stackPlan.CreateCount == 0 && stackPlan.ModifyCount == 0 {
+			gitops.Unlock()
+			log.Printf("HA PROMOTION: all stacks already running on promoted node - no apply needed")
+			return
+		}
+
+		result, applyErr := gitops.ApplyPlan(ctx, stackPlan, desired)
+		gitops.Unlock()
+
+		if applyErr != nil {
+			if result != nil && result.HaltReason == "data-not-ready" {
+				if attempt < maxAttempts {
+					log.Printf("HA PROMOTION: ZFS datasets not yet mounted (attempt %d/%d), retrying in %v", attempt, maxAttempts, retryDelay)
+					time.Sleep(retryDelay)
+					continue
+				}
+				log.Printf("HA PROMOTION: datasets still not ready after %d attempts - apply manually via POST /api/gitops/apply", maxAttempts)
+				return
+			}
+			if attempt < maxAttempts {
+				log.Printf("HA PROMOTION: stacks apply failed (attempt %d/%d): %v - retrying in %v", attempt, maxAttempts, applyErr, retryDelay)
+				time.Sleep(retryDelay)
+				continue
+			}
+			log.Printf("HA PROMOTION: stacks apply failed after %d attempts: %v - apply manually via POST /api/gitops/apply", maxAttempts, applyErr)
+			return
+		}
+
+		log.Printf("HA PROMOTION: stacks apply complete - %d items applied", len(result.Applied))
+		return
 	}
 }

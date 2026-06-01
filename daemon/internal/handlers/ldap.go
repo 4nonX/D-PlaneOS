@@ -19,6 +19,7 @@ import (
 	"dplaned/internal/jobs"
 	"dplaned/internal/ldap"
 	"dplaned/internal/nixwriter"
+	"dplaned/internal/secrets"
 )
 
 // LDAPHandler handles all LDAP/Active Directory API requests
@@ -157,15 +158,20 @@ func (h *LDAPHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 	if req.GroupMemberAttr == "" { req.GroupMemberAttr = "member" }
 	if req.DefaultRole == "" { req.DefaultRole = "user" }
 
-	// If password is empty string, keep existing
-	bindPwd := req.BindPassword
-	if bindPwd == "" {
-		var existing string
-		err := h.db.QueryRow("SELECT COALESCE(bind_password,'') FROM ldap_config WHERE id=1").Scan(&existing)
-		if err != nil {
+	// If password is empty keep the existing sealed value; otherwise seal the new one.
+	bindPwd := ""
+	if req.BindPassword != "" {
+		sealed, sealErr := secrets.Seal(req.BindPassword)
+		if sealErr != nil {
+			log.Printf("LDAP: failed to seal bind_password: %v", sealErr)
+			writeJSON(w, 500, ldapResp{Error: "Failed to encrypt password"})
+			return
+		}
+		bindPwd = sealed
+	} else {
+		if err := h.db.QueryRow("SELECT COALESCE(bind_password,'') FROM ldap_config WHERE id=1").Scan(&bindPwd); err != nil {
 			log.Printf("LDAP: failed to read existing password: %v", err)
 		}
-		bindPwd = existing
 	}
 
 	_, err := h.db.Exec(`UPDATE ldap_config SET
@@ -609,13 +615,18 @@ func (h *LDAPHandler) loadLDAPConfig() (*ldap.Config, error) {
 		return nil, err
 	}
 
+	plainPwd, openErr := secrets.Open(bindPwd)
+	if openErr != nil {
+		return nil, fmt.Errorf("decrypting bind_password: %w", openErr)
+	}
+
 	return &ldap.Config{
 		Enabled:            enabled == 1,
 		Server:             server,
 		Port:               port,
 		UseTLS:             useTLS == 1,
 		BindDN:             bindDN,
-		BindPassword:       bindPwd,
+		BindPassword:       plainPwd,
 		BaseDN:             baseDN,
 		UserFilter:         userFilter,
 		UserIDAttribute:    uidAttr,
@@ -766,10 +777,17 @@ func (h *LDAPHandler) CreateDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sealedDomainPwd, sealErr := secrets.Seal(req.BindPassword)
+	if sealErr != nil {
+		log.Printf("LDAP: failed to seal ad_domains bind_password: %v", sealErr)
+		writeJSON(w, 500, ldapResp{Error: "Failed to encrypt password"})
+		return
+	}
+
 	_, err := h.db.Exec(`INSERT INTO ad_domains
 		(name, realm, server, bind_dn, bind_password, idmap_backend, idmap_low, idmap_high)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		req.Name, req.Realm, req.Server, req.BindDN, req.BindPassword,
+		req.Name, req.Realm, req.Server, req.BindDN, sealedDomainPwd,
 		req.IDMAPBackend, req.IDMAPLow, req.IDMAPHigh)
 	if err != nil {
 		writeJSON(w, 500, ldapResp{Error: "Failed to create domain: " + err.Error()})

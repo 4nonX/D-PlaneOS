@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"dplaned/internal/audit"
+	"dplaned/internal/secrets"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -155,13 +156,26 @@ func (h *TOTPHandler) getTOTPSetup(w http.ResponseWriter, userID int, username s
 				respondErrorSimple(w, "Failed to generate secret", http.StatusInternalServerError)
 				return
 			}
+			sealedSecret, sealErr := secrets.Seal(secret)
+			if sealErr != nil {
+				respondErrorSimple(w, "Failed to encrypt TOTP secret", http.StatusInternalServerError)
+				return
+			}
 			if _, err := h.db.Exec(`INSERT INTO totp_secrets (user_id, secret, enabled) VALUES ($1, $2, 0)
 				ON CONFLICT(user_id) DO UPDATE SET secret=EXCLUDED.secret, enabled=EXCLUDED.enabled`,
-				userID, secret); err != nil {
+				userID, sealedSecret); err != nil {
 				log.Printf("TOTP SECRET INSERT ERROR: %v", err)
 				respondErrorSimple(w, "Failed to store TOTP secret", http.StatusInternalServerError)
 				return
 			}
+		} else {
+			// Decrypt the stored secret so we can build the QR URI.
+			plain, openErr := secrets.Open(secret)
+			if openErr != nil {
+				respondErrorSimple(w, "Failed to decrypt TOTP secret", http.StatusInternalServerError)
+				return
+			}
+			secret = plain
 		}
 		// Build otpauth:// URI for QR code
 		otpauthURI := buildOTPAuthURI(username, secret)
@@ -207,15 +221,20 @@ func (h *TOTPHandler) verifyAndEnable(w http.ResponseWriter, r *http.Request, us
 		return
 	}
 
-	var secret string
+	var sealedSecret string
 	var enabled int
 	if err := h.db.QueryRow(`SELECT secret, enabled FROM totp_secrets WHERE user_id = $1`, userID).
-		Scan(&secret, &enabled); err != nil {
+		Scan(&sealedSecret, &enabled); err != nil {
 		respondErrorSimple(w, "No 2FA setup in progress - request setup first", http.StatusBadRequest)
 		return
 	}
 	if enabled == 1 {
 		respondErrorSimple(w, "2FA is already enabled", http.StatusConflict)
+		return
+	}
+	secret, openErr := secrets.Open(sealedSecret)
+	if openErr != nil {
+		respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
 		return
 	}
 
@@ -278,10 +297,10 @@ func (h *TOTPHandler) disableTOTP(w http.ResponseWriter, r *http.Request, userID
 	}
 
 	// Validate TOTP or backup code
-	var secret, backupCodes string
+	var sealedTOTPSecret, backupCodes string
 	var enabled int
 	if err := h.db.QueryRow(`SELECT secret, enabled, backup_codes FROM totp_secrets WHERE user_id = $1`, userID).
-		Scan(&secret, &enabled, &backupCodes); err != nil {
+		Scan(&sealedTOTPSecret, &enabled, &backupCodes); err != nil {
 		log.Printf("TOTP SECRET LOOKUP ERROR: %v", err)
 		respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
 		return
@@ -292,7 +311,13 @@ func (h *TOTPHandler) disableTOTP(w http.ResponseWriter, r *http.Request, userID
 		return
 	}
 
-	if !validateTOTP(secret, req.Code) {
+	totpSecret, openErr := secrets.Open(sealedTOTPSecret)
+	if openErr != nil {
+		respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if !validateTOTP(totpSecret, req.Code) {
 		respondErrorSimple(w, "Invalid authenticator code", http.StatusUnauthorized)
 		return
 	}
@@ -348,15 +373,20 @@ func (h *TOTPHandler) HandleTOTPVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get TOTP secret
-	var secret, backupCodes string
+	var sealedVerifySecret, backupCodes string
 	if err := h.db.QueryRow(`SELECT secret, backup_codes FROM totp_secrets WHERE user_id = $1 AND enabled = 1`, userID).
-		Scan(&secret, &backupCodes); err != nil {
+		Scan(&sealedVerifySecret, &backupCodes); err != nil {
 		log.Printf("TOTP VERIFY LOOKUP ERROR: %v", err)
 		respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
 		return
 	}
+	plainVerifySecret, openErr := secrets.Open(sealedVerifySecret)
+	if openErr != nil {
+		respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
 
-	valid := validateTOTP(secret, req.Code)
+	valid := validateTOTP(plainVerifySecret, req.Code)
 
 	// Check backup codes if TOTP failed
 	if !valid && len(req.Code) == 8 {

@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
+
+	"dplaned/internal/secrets"
 )
 
 type SettingsHandler struct {
@@ -24,71 +27,118 @@ type TelegramConfig struct {
 	Enabled  bool   `json:"enabled"`
 }
 
-// GetTelegramConfig retrieves Telegram configuration
+// GetTelegramConfig retrieves Telegram configuration.
+// The bot token is never returned; only a boolean indicating whether one is stored.
 func (h *SettingsHandler) GetTelegramConfig(w http.ResponseWriter, r *http.Request) {
-	var config TelegramConfig
-	
+	var sealedToken, chatID string
+	var enabledInt int
+
 	err := h.db.QueryRow(`
-		SELECT COALESCE(bot_token, ''), COALESCE(chat_id, ''), enabled 
-		FROM telegram_config 
+		SELECT COALESCE(bot_token, ''), COALESCE(chat_id, ''), enabled
+		FROM telegram_config
 		WHERE id = 1
-	`).Scan(&config.BotToken, &config.ChatID, &config.Enabled)
-	
+	`).Scan(&sealedToken, &chatID, &enabledInt)
+
+	w.Header().Set("Content-Type", "application/json")
 	if err == sql.ErrNoRows {
-		// No config yet, return empty
-		config = TelegramConfig{Enabled: false}
-	} else if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"has_token": false, "chat_id": "", "enabled": false,
+		})
+		return
+	}
+	if err != nil {
 		respondErrorSimple(w, "Failed to get config", http.StatusInternalServerError)
 		return
 	}
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"has_token": sealedToken != "",
+		"chat_id":   chatID,
+		"enabled":   enabledInt == 1,
+	})
 }
 
-// SaveTelegramConfig saves Telegram configuration
+// SaveTelegramConfig saves Telegram configuration.
+// If bot_token is empty the existing stored token is preserved.
 func (h *SettingsHandler) SaveTelegramConfig(w http.ResponseWriter, r *http.Request) {
 	var config TelegramConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	
-	// Insert or update
+
+	tokenToStore := ""
+	if config.BotToken != "" {
+		sealed, err := secrets.Seal(config.BotToken)
+		if err != nil {
+			log.Printf("TELEGRAM: failed to seal bot token: %v", err)
+			respondErrorSimple(w, "Failed to encrypt token", http.StatusInternalServerError)
+			return
+		}
+		tokenToStore = sealed
+	} else {
+		// Keep the existing sealed token.
+		if err := h.db.QueryRow("SELECT COALESCE(bot_token, '') FROM telegram_config WHERE id=1").Scan(&tokenToStore); err != nil {
+			tokenToStore = ""
+		}
+	}
+
 	_, err := h.db.Exec(`
 		INSERT INTO telegram_config (id, bot_token, chat_id, enabled, updated_at)
 		VALUES (1, $1, $2, $3, NOW())
 		ON CONFLICT(id) DO UPDATE SET
-			bot_token = excluded.bot_token,
-			chat_id = excluded.chat_id,
-			enabled = excluded.enabled,
+			bot_token  = excluded.bot_token,
+			chat_id    = excluded.chat_id,
+			enabled    = excluded.enabled,
 			updated_at = NOW()
-	`, config.BotToken, config.ChatID, boolToInt(config.Enabled))
-	
+	`, tokenToStore, config.ChatID, boolToInt(config.Enabled))
+
 	if err != nil {
 		respondErrorSimple(w, "Failed to save config", http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 
-// TestTelegramConfig tests Telegram connection
+// TestTelegramConfig tests Telegram connectivity.
+// If bot_token is omitted in the request the stored (decrypted) token is used.
 func (h *SettingsHandler) TestTelegramConfig(w http.ResponseWriter, r *http.Request) {
-	var config TelegramConfig
-	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+	var req struct {
+		BotToken string `json:"bot_token"`
+		ChatID   string `json:"chat_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	if config.BotToken == "" || config.ChatID == "" {
+	tokenToTest := req.BotToken
+	chatIDToTest := req.ChatID
+
+	if tokenToTest == "" {
+		var sealedToken, storedChatID string
+		if err := h.db.QueryRow("SELECT COALESCE(bot_token,''), COALESCE(chat_id,'') FROM telegram_config WHERE id=1").Scan(&sealedToken, &storedChatID); err != nil {
+			respondErrorSimple(w, "No saved configuration found", http.StatusBadRequest)
+			return
+		}
+		plain, err := secrets.Open(sealedToken)
+		if err != nil || plain == "" {
+			respondErrorSimple(w, "No bot token configured", http.StatusBadRequest)
+			return
+		}
+		tokenToTest = plain
+		if chatIDToTest == "" {
+			chatIDToTest = storedChatID
+		}
+	}
+
+	if tokenToTest == "" || chatIDToTest == "" {
 		respondErrorSimple(w, "Bot token and chat ID are required", http.StatusBadRequest)
 		return
 	}
 
-	// Actually send a test message via the Telegram Bot API
-	if err := sendTelegramTest(config.BotToken, config.ChatID); err != nil {
+	if err := sendTelegramTest(tokenToTest, chatIDToTest); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -104,13 +154,12 @@ func (h *SettingsHandler) TestTelegramConfig(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// sendTelegramTest sends a test message directly with the provided credentials
-// without touching the global alerts config.
+// sendTelegramTest sends a test message directly with the provided credentials.
 func sendTelegramTest(botToken, chatID string) error {
 	url := "https://api.telegram.org/bot" + botToken + "/sendMessage"
 	payload := map[string]interface{}{
 		"chat_id":    chatID,
-		"text":       "✅ *DPlaneOS Telegram Test*\n\nYour alert configuration is working correctly.",
+		"text":       "DPlaneOS Telegram Test\n\nYour alert configuration is working correctly.",
 		"parse_mode": "Markdown",
 	}
 	body, _ := json.Marshal(payload)

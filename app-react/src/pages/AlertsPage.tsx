@@ -35,7 +35,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 interface TelegramConfig {
   success?:   boolean
-  bot_token?: string
+  has_token?: boolean
   chat_id?:   string
   enabled?:   boolean
 }
@@ -101,15 +101,16 @@ function TelegramTab() {
     queryFn:  ({ signal }) => api.get<TelegramConfig>('/api/alerts/telegram', signal),
   })
 
-  const [token,   setToken]   = useState('')
-  const [chatId,  setChatId]  = useState('')
-  const [enabled, setEnabled] = useState(false)
-  const [seeded,  setSeeded]  = useState(false)
+  const [token,    setToken]    = useState('')
+  const [chatId,   setChatId]   = useState('')
+  const [enabled,  setEnabled]  = useState(false)
+  const [seeded,   setSeeded]   = useState(false)
+
+  const hasStoredToken = configQ.data?.has_token ?? false
 
   useEffect(() => {
     if (configQ.data && !seeded) {
-      setToken(configQ.data.bot_token ?? '')
-      setChatId(configQ.data.chat_id  ?? '')
+      setChatId(configQ.data.chat_id ?? '')
       setEnabled(!!configQ.data.enabled)
       setSeeded(true)
     }
@@ -122,13 +123,15 @@ function TelegramTab() {
   })
 
   const test = useMutation({
-    mutationFn: () => api.post('/api/alerts/telegram/test', {}),
+    mutationFn: () => api.post('/api/alerts/telegram/test', { bot_token: token, chat_id: chatId }),
     onSuccess: () => toast.success('Test message sent'),
     onError: (e: Error) => toast.error(e.message),
   })
 
   if (configQ.isLoading) return <Skeleton height={240} />
   if (configQ.isError)   return <ErrorState error={configQ.error} />
+
+  const canTest = (hasStoredToken || !!token) && !!chatId
 
   return (
     <SectionCard icon="send" title="Telegram Notifications">
@@ -139,9 +142,12 @@ function TelegramTab() {
           <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>Enable Telegram alerts</span>
         </label>
 
-        <Field label="Bot Token" hint="From @BotFather - starts with numbers:letters">
+        <Field
+          label="Bot Token"
+          hint={hasStoredToken && !token ? 'Token is stored. Enter a new value to replace it.' : 'From @BotFather - starts with numbers:letters'}
+        >
           <input value={token} onChange={e => setToken(e.target.value)}
-            placeholder="1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ"
+            placeholder={hasStoredToken ? 'Leave blank to keep saved token' : '1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ'}
             className="input" style={{ fontFamily: 'var(--font-mono)' }} type="password" autoComplete="off" />
         </Field>
 
@@ -152,10 +158,10 @@ function TelegramTab() {
 
         <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
           <button onClick={() => save.mutate()} disabled={save.isPending} className="btn btn-primary">
-            <Icon name="save" size={15} />{save.isPending ? 'Saving…' : 'Save'}
+            <Icon name="save" size={15} />{save.isPending ? 'Saving...' : 'Save'}
           </button>
-          <button onClick={() => test.mutate()} disabled={test.isPending || !token || !chatId} className="btn btn-ghost">
-            <Icon name="send" size={14} />{test.isPending ? 'Sending…' : 'Send Test'}
+          <button onClick={() => test.mutate()} disabled={test.isPending || !canTest} className="btn btn-ghost">
+            <Icon name="send" size={14} />{test.isPending ? 'Sending...' : 'Send Test'}
           </button>
         </div>
       </div>

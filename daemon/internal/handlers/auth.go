@@ -16,6 +16,7 @@ import (
 	"dplaned/internal/audit"
 	ldapinternal "dplaned/internal/ldap"
 	"dplaned/internal/middleware"
+	"dplaned/internal/secrets"
 	"dplaned/internal/security"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -673,11 +674,16 @@ func (h *AuthHandler) ldapAuthenticate(username, password string) error {
 		return fmt.Errorf("LDAP not configured")
 	}
 
+	plainPwd, openErr := secrets.Open(bindPassword)
+	if openErr != nil {
+		return fmt.Errorf("decrypting LDAP bind_password: %w", openErr)
+	}
+
 	cfg := &ldapinternal.Config{
 		Server:             server,
 		Port:               port,
 		BindDN:             bindDN,
-		BindPassword:       bindPassword,
+		BindPassword:       plainPwd,
 		BaseDN:             baseDN,
 		UserFilter:         userFilter,
 		UserIDAttribute:    userIDAttr,

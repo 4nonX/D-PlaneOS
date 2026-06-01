@@ -28,6 +28,7 @@ Feature maturity, honestly:
 | Container management (Docker, Compose) | Stable | Including ZFS-clone sandboxes. |
 | Hot-swap detection and auto-import | Stable | udev + ZED, exercised regularly. |
 | LDAP / Active Directory integration | Beta | Works, less battle-tested than local auth. |
+| OIDC / SSO (Authorization Code + PKCE) | Beta | Keycloak, Authentik, Dex, Entra ID, and any OIDC-compliant provider. |
 | A/B OTA updates with auto-revert | Beta | Mechanism is sound, sample size is small. |
 | GitOps reconciliation | Beta | Structural sync (pools, datasets, shares, stacks) and capture-from-live both work. Safety rails (block destroy on used data, block pool destroy unconditionally) are well-tested. Edge cases at the property-coverage frontier still surfacing. |
 | PostgreSQL HA (Patroni + etcd) | Experimental | Tested in lab, never under real load. |
@@ -51,7 +52,7 @@ Reasonable question. The short answer: most of DPlaneOS isn't DPlaneOS.
 
 **The system stack is well-trodden upstream software.** PostgreSQL for state, nginx for the edge, Patroni and etcd for HA consensus, Keepalived for VIPs, Samba for SMB, the kernel for NFS and LIO/iSCSI, Docker for containers, NUT for UPS, rclone for cloud sync, ZED for ZFS event delivery. Each of these has more engineering hours behind it than I will produce in my career.
 
-**The Go dependency tree is deliberately small.** Eight direct dependencies: `gorilla/mux`, `gorilla/websocket`, `pgx`, `go-ldap`, `lego` (ACME), `creack/pty`, `google/uuid`, `golang.org/x/crypto`. All vendored. The daemon is not a wrapper around a large framework; it's standard library plus narrow, well-understood plumbing.
+**The Go dependency tree is deliberately small.** Nine direct dependencies: `gorilla/mux`, `gorilla/websocket`, `pgx`, `go-ldap`, `lego` (ACME), `creack/pty`, `google/uuid`, `golang.org/x/crypto`, `go-jose/v4` (OIDC JWS verification). All vendored. The daemon is not a wrapper around a large framework; it's standard library plus narrow, well-understood plumbing.
 
 So what's actually new code?
 
@@ -73,7 +74,7 @@ DPlaneOS stands on the shoulders of decades of work by people I have never met. 
 
 **The services.** [nginx](https://nginx.org), [HAProxy](https://www.haproxy.org), [Samba](https://www.samba.org), [Patroni](https://github.com/patroni/patroni), [etcd](https://etcd.io), [Keepalived](https://www.keepalived.org), [Docker](https://www.docker.com), the Linux kernel's NFS and LIO/iSCSI subsystems, [rclone](https://rclone.org), [smartmontools](https://www.smartmontools.org). Each one a project I have used for years and never had cause to regret picking.
 
-**The libraries.** [gorilla/mux](https://github.com/gorilla/mux) and [gorilla/websocket](https://github.com/gorilla/websocket), [jackc/pgx](https://github.com/jackc/pgx), [go-ldap](https://github.com/go-ldap/ldap), [go-acme/lego](https://github.com/go-acme/lego), [creack/pty](https://github.com/creack/pty). Plus the Go team's `golang.org/x/crypto` and friends.
+**The libraries.** [gorilla/mux](https://github.com/gorilla/mux) and [gorilla/websocket](https://github.com/gorilla/websocket), [jackc/pgx](https://github.com/jackc/pgx), [go-ldap](https://github.com/go-ldap/ldap), [go-acme/lego](https://github.com/go-acme/lego), [creack/pty](https://github.com/creack/pty), [go-jose/v4](https://github.com/go-jose/go-jose). Plus the Go team's `golang.org/x/crypto` and friends.
 
 **The frontend.** [React](https://react.dev), [TanStack Router and Query](https://tanstack.com), [Zustand](https://github.com/pmndrs/zustand), [xterm.js](https://xtermjs.org), [Vite](https://vitejs.dev). The [Outfit](https://github.com/Outfitio/Outfit-Fonts) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) typefaces, plus [Material Symbols](https://fonts.google.com/icons).
 
@@ -90,7 +91,7 @@ Full license inventory and attribution in [NOTICE.md](NOTICE.md).
 | **Sharing** | SMB (with Time Machine via `vfs_fruit`), NFS, iSCSI, configured from the UI |
 | **Containers** | Docker, Compose stacks, template library, ephemeral ZFS-clone sandboxes, atomic updates with rollback |
 | **Network** | Interface config, bonding, VLANs, routing, DNS |
-| **Identity** | Local users, LDAP / AD with group-to-role mapping, TOTP 2FA, API tokens |
+| **Identity** | Local users, LDAP / AD with group-to-role mapping, OIDC SSO (Authorization Code + PKCE), TOTP 2FA, API tokens |
 | **Security** | RBAC (4 roles, 34 permissions), HMAC audit chain, CSRF protection, firewall, TLS, allowlist-validated exec calls |
 | **System** | Dashboard, logs, UPS (NUT), IPMI / sensors, hardware auto-tuning, cloud sync (rclone), HA node monitoring |
 | **GitOps** | Git-sync repositories, bi-directional reconciliation, drift detection. Manages structure (pools, dataset properties, shares, stacks, users), not data. Destructive operations on used datasets and pools are blocked by default. |
@@ -147,7 +148,7 @@ Browser
 | Frontend | React 19 + TypeScript + Vite, pre-built, no Node.js at runtime |
 | Backend | Go daemon, allowlist-validated exec, no shell invocation anywhere in the codebase |
 | Database | PostgreSQL 15+ (Patroni for HA topologies) |
-| Auth | bcrypt (local accounts), LDAP bind (directory accounts), TOTP 2FA, 32-byte session tokens, CSRF double-submit |
+| Auth | bcrypt (local accounts), LDAP bind (directory accounts), OIDC Authorization Code + PKCE (SSO accounts), TOTP 2FA, 32-byte session tokens, CSRF double-submit |
 | ZFS events | ZED hook delivers pool fault, scrub, and resilver events in real time |
 
 Deeper reading: [Architecture](docs/reference/ARCHITECTURE.md), [Design Philosophy](docs/reference/PHILOSOPHY.md), [NixOS Rationale](docs/reference/NIXOS-RATIONALE.md).

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"dplaned/internal/secrets"
 	"dplaned/internal/systemd"
 )
 
@@ -57,7 +58,8 @@ func (h *AlertingHandler) GetSMTPConfig(w http.ResponseWriter, r *http.Request) 
 	respondOK(w, map[string]interface{}{"success": true, "configured": true, "config": cfg})
 }
 
-// SaveSMTPConfig saves SMTP settings
+// SaveSMTPConfig saves SMTP settings.
+// If password is empty or "***" the existing stored password is preserved.
 // POST /api/alerts/smtp
 func (h *AlertingHandler) SaveSMTPConfig(w http.ResponseWriter, r *http.Request) {
 	var cfg SMTPConfig
@@ -69,6 +71,25 @@ func (h *AlertingHandler) SaveSMTPConfig(w http.ResponseWriter, r *http.Request)
 		respondErrorSimple(w, "Host, port, from, and to are required", http.StatusBadRequest)
 		return
 	}
+
+	// Preserve the existing password when the field is omitted or holds the sentinel.
+	if cfg.Password == "" || cfg.Password == "***" {
+		var existing string
+		if err := h.db.QueryRow("SELECT value FROM settings WHERE key='smtp_config'").Scan(&existing); err == nil && existing != "" {
+			var prev SMTPConfig
+			if json.Unmarshal([]byte(existing), &prev) == nil && prev.Password != "" {
+				cfg.Password = prev.Password // already sealed from a previous save
+			}
+		}
+	} else {
+		sealed, sealErr := secrets.Seal(cfg.Password)
+		if sealErr != nil {
+			respondErrorSimple(w, "Failed to encrypt password", http.StatusInternalServerError)
+			return
+		}
+		cfg.Password = sealed
+	}
+
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		respondErrorSimple(w, "Failed to encode config", http.StatusInternalServerError)
@@ -135,6 +156,14 @@ func (h *AlertingHandler) sendSMTPAlert(subject, body string) {
 	var cfg SMTPConfig
 	if json.Unmarshal([]byte(value), &cfg) != nil {
 		return
+	}
+	if cfg.Password != "" {
+		plain, openErr := secrets.Open(cfg.Password)
+		if openErr != nil {
+			log.Printf("SMTP ALERT: failed to decrypt password: %v", openErr)
+			return
+		}
+		cfg.Password = plain
 	}
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: [DPlaneOS] %s\r\n\r\n%s\r\n",
 		cfg.From, cfg.To, subject, body)

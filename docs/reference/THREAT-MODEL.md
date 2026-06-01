@@ -32,6 +32,7 @@ DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), c
 | PostgreSQL database | HIGH | `/var/lib/dplaneos/pgsql/` |
 | Session tokens | HIGH | DB `sessions` table |
 | LDAP bind password | HIGH | DB `ldap_config` table (redacted in API responses) |
+| OIDC client secret | HIGH | DB `oidc_config` table (never returned by API) |
 | Telegram bot token | MEDIUM | DB `telegram_config` table |
 | TOTP secrets | HIGH | DB `totp_secrets` table |
 | Audit log + HMAC key | MEDIUM | DB `audit_logs` + `/var/lib/dplaneos/audit.key` |
@@ -90,10 +91,11 @@ DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), c
 
 **Mitigation**:
 - `sessionMiddleware` runs globally on all routes via `r.Use()`
-- Public exceptions are explicitly allowlisted in the middleware: `/health`, `/api/auth/*`, `/api/csrf`
+- Public exceptions are explicitly allowlisted in the middleware: `/health`, `/api/auth/*`, `/api/csrf`; OIDC endpoints (`/api/auth/oidc/info`, `/api/auth/oidc/start`, `/api/auth/oidc/callback`, `/api/auth/oidc/exchange`) are also in the allowlist as they must be reachable before a session exists
 - All other routes - including all ZFS, Docker, system, and RBAC routes - require a valid `X-Session-ID` header
 - Session validation: token format check + DB lookup + username-header match; fail-closed (DB error → 401)
 - TOTP: if enabled for a user, login issues a `pending_totp` session that can only call `/api/auth/totp/verify` - all other routes reject it
+- OIDC handoff: the one-time code stored in `oidc_handoff` is consumed atomically via `DELETE ... RETURNING`; a second exchange attempt gets `sql.ErrNoRows` and a 401. The code expires in 2 minutes. This prevents an attacker who observes the `/login?oidc_handoff=` URL from replaying it.
 - `must_change_password` gate: after session validation, `sessionMiddleware` queries the flag from the DB. Sessions with the flag set are restricted to three paths until the password is changed. This closes the path where a user with a forced-change password could bypass the client overlay by sending raw API requests.
 
 **Residual risk**: LOW.
@@ -204,6 +206,20 @@ DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), c
 
 ---
 
+### T10a: OIDC Client Secret Exposure
+
+**Vector**: OIDC client secret compromised via DB access or API. An attacker with the secret and the issuer/client-id could impersonate DPlaneOS at the IdP's token endpoint.
+
+**Mitigation**:
+- Client secret stored in PostgreSQL `oidc_config` table (not in a config file)
+- GET `/api/auth/oidc/config` omits the `client_secret` field entirely - it is never returned to the browser
+- POST `/api/auth/oidc/config` preserves the existing secret when the field is sent empty, preventing accidental clearing
+- Config endpoint is protected by `system:admin` RBAC
+
+**Residual risk**: MEDIUM. Root access to the host exposes the DB directly. Use a confidential client with the narrowest IdP scope needed. Rotate the secret if DB access is suspected. Note: PKCE is required regardless, so a stolen secret alone cannot initiate a flow without also controlling the browser redirect.
+
+---
+
 ### T11: Container Escape
 
 **Vector**: Malicious Docker container with host filesystem bind mount.
@@ -246,7 +262,7 @@ DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), c
 
 | Surface | Exposure | Auth | Notes |
 |---------|----------|------|-------|
-| HTTP API (~400 routes) | All routes require session except `/health` and `/api/auth/*` | Session middleware (global) + `must_change_password` gate | All operational routes carry per-route RBAC via `permRoute()`; self-service introspection routes (`/api/rbac/me/*`) are session-only by design |
+| HTTP API (~400 routes) | All routes require session except `/health`, `/api/auth/*`, and `/api/csrf` | Session middleware (global) + `must_change_password` gate | All operational routes carry per-route RBAC via `permRoute()`; self-service introspection routes (`/api/rbac/me/*`) are session-only by design; OIDC endpoints in `/api/auth/oidc/*` are public by necessity |
 | WebSocket (`/api/ws/monitor`) | Authenticated | Session middleware | Validated before upgrade |
 | `exec.Command` (zfs, zpool, docker, etc.) | Internal only | **Strict allowlist + libzfs direct API for ZFS dataset mutations** | Path-agnostic resolution via PATH; no shell; snapshot/clone/destroy go through cgo; pool import uses allowlist subprocess |
 | networkdwriter file writes | `/etc/systemd/network/50-dplane-*` | Root filesystem permissions | Pure file I/O; `networkctl reload` fixed args |
