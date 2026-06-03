@@ -163,19 +163,14 @@
         nix.settings.auto-optimise-store = true;
         nix.gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 14d"; };
 
-        # python3.11-3.11.15-doc fails to build in nixpkgs 26.05 due to a
-        # Sphinx 9.1 + docutils 0.22.4 incompatibility. Something in the
-        # closure explicitly requests pkgs.python311.doc, so the
-        # documentation.doc.enable = false option (which only unlinks the doc
-        # files, it doesn't prevent the derivation from being built) has no
-        # effect. Replace the failing derivation with an empty stub so the
-        # appliance build succeeds - a NAS has no use for in-closure Python docs.
-        nixpkgs.overlays = [(final: prev: {
-          python311 = prev.python311 // {
-            doc = final.runCommand "python311-doc-stub" {} "mkdir $out";
-          };
-        })];
-
+        # python3.11-3.11.15-doc fails to build in nixpkgs 26.05 (Sphinx 9.1
+        # + docutils 0.22.4 incompatibility). The doc derivation's store path
+        # is baked into the system-path dependency graph by the time overlays
+        # run, so a nixpkgs overlay cannot intercept it. Forcing
+        # extraOutputsToInstall to empty is the only reliable way to prevent
+        # any doc output from being pulled into the system-path closure.
+        # An appliance NAS has no use for in-closure HTML documentation.
+        environment.extraOutputsToInstall = lib.mkForce [];
         documentation.nixos.enable = false;
       };
 
