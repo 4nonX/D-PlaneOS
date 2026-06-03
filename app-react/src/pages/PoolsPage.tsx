@@ -35,6 +35,7 @@ import { toast } from '@/hooks/useToast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useWsStore } from '@/stores/ws'
 import { Modal } from '@/components/ui/Modal'
+import { useRouter } from '@tanstack/react-router'
 import { PoolTopologyView, PoolTopology, VDev } from '@/components/zfs/PoolTopology'
 
 // ---------------------------------------------------------------------------
@@ -1193,6 +1194,7 @@ function WipeDiskModalInner({ onWiped, onClose }: { onWiped: () => void; onClose
 
 function PoolCard({ pool, datasets, filter, onRefresh }: { pool: ZFSPool; datasets: ZFSDataset[]; filter?: string; onRefresh: () => void }) {
   const qc = useQueryClient()
+  const router = useRouter()
   const [treeOpen, setTreeOpen] = useState(true)
   const [createParent, setCreateParent] = useState<string | null>(null)
   const [editDataset,   setEditDataset]    = useState<TreeNode | null>(null)
@@ -1355,12 +1357,12 @@ function PoolCard({ pool, datasets, filter, onRefresh }: { pool: ZFSPool; datase
               >
                 <Icon name="cleaning_services" size={13} />Re-run Scrub
               </button>
-              <a
-                href={`/hardware?pool=${encodeURIComponent(pool.name)}`}
+              <button
+                onClick={() => router.navigate({ to: '/hardware' })}
                 className="btn btn-danger btn-sm"
               >
                 <Icon name="swap_horiz" size={13} />Identify & Replace Disk
-              </a>
+              </button>
             </div>
           </div>
           {scrubStatus.completed_at && (

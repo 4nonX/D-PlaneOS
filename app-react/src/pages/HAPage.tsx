@@ -1461,7 +1461,7 @@ export function HAPage() {
             ))}
           </div>
 
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: 12, padding: '8px 12px', background: 'rgba(0,0,0,0.15)', borderRadius: 'var(--radius-sm)' }}>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: 12, padding: '8px 12px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }}>
             <strong>Hysteresis:</strong> Auto-failover is suppressed for 60 minutes after a recent failover to prevent flapping.
             If the peer is confirmed dead and you need to act immediately, use Clear Fault to override, then fence and promote below.
           </div>

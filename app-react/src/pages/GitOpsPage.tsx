@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
+import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { toast } from '@/hooks/useToast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
@@ -742,18 +743,12 @@ function BlockedApprovalModal({ change, onClose, onApproved }: {
   })
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background:'var(--bg-card)', borderRadius:'var(--radius-xl)', padding:32, maxWidth:520, width:'100%', border:'2px solid var(--error-border)' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
-          <Icon name="warning" size={28} style={{ color:'var(--error)', flexShrink:0 }} />
-          <div>
-            <div style={{ fontWeight:700, fontSize:'var(--text-lg)', color:'var(--error)' }}>Approve Destructive Operation</div>
-            <div style={{ fontSize:'var(--text-xs)', color:'var(--text-secondary)', marginTop:2 }}>This action permanently destroys data. It cannot be undone.</div>
-          </div>
-        </div>
-
-        <div style={{ background:'var(--error-bg)', border:'1px solid var(--error-border)', borderRadius:'var(--radius-md)', padding:'12px 16px', marginBottom:20 }}>
+    <Modal
+      title={<span style={{ color: 'var(--error)', display:'flex', alignItems:'center', gap:8 }}><Icon name="warning" size={20} />Approve Destructive Operation</span>}
+      onClose={onClose}
+    >
+      <div style={{ padding:'0 24px 8px' }}>
+        <div style={{ background:'var(--error-bg)', border:'1px solid var(--error-border)', borderRadius:'var(--radius-md)', padding:'12px 16px', marginBottom:16 }}>
           <div style={{ fontSize:'var(--text-xs)', color:'var(--text-secondary)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.05em', fontWeight:600 }}>Resource to be destroyed</div>
           <div style={{ fontFamily:'var(--font-mono)', fontWeight:700, color:'var(--error)' }}>{change.resource}</div>
           {change.description && (
@@ -761,14 +756,14 @@ function BlockedApprovalModal({ change, onClose, onApproved }: {
           )}
         </div>
 
-        <div className="alert alert-warning" style={{ marginBottom:20, fontSize:'var(--text-xs)' }}>
+        <div className="alert alert-warning" style={{ marginBottom:16, fontSize:'var(--text-xs)' }}>
           <Icon name="info" size={15} />
           <div>
-            The GitOps engine blocked this automatically because the data would be permanently destroyed. Approving sends the deletion through once you click Deploy. If the resource has active data, back it up before approving.
+            The GitOps engine blocked this automatically because the data would be permanently destroyed. Approving allows the deletion to proceed on the next Deploy. Back up any active data before approving.
           </div>
         </div>
 
-        <label className="field" style={{ marginBottom:20 }}>
+        <label className="field" style={{ marginBottom:8 }}>
           <span className="field-label">Reason for approval <span style={{ color:'var(--error)' }}>*</span></span>
           <input
             value={reason}
@@ -779,20 +774,20 @@ function BlockedApprovalModal({ change, onClose, onApproved }: {
           />
           <div style={{ fontSize:'var(--text-2xs)', color:'var(--text-tertiary)', marginTop:4 }}>Logged to the audit trail. Required.</div>
         </label>
-
-        <div style={{ display:'flex', gap:12, justifyContent:'flex-end' }}>
-          <button onClick={onClose} className="btn btn-ghost">Cancel</button>
-          <button
-            onClick={() => approve.mutate()}
-            disabled={approve.isPending || reason.trim().length < 4}
-            className="btn btn-danger"
-          >
-            <Icon name="delete_forever" size={15} />
-            {approve.isPending ? 'Approving…' : 'Approve Destruction'}
-          </button>
-        </div>
       </div>
-    </div>
+
+      <div className="modal-footer">
+        <button onClick={onClose} className="btn btn-ghost">Cancel</button>
+        <button
+          onClick={() => approve.mutate()}
+          disabled={approve.isPending || reason.trim().length < 4}
+          className="btn btn-danger"
+        >
+          <Icon name="delete_forever" size={15} />
+          {approve.isPending ? 'Approving…' : 'Approve Destruction'}
+        </button>
+      </div>
+    </Modal>
   )
 }
 
