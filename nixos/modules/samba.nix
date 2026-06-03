@@ -302,12 +302,9 @@ in {
       };
     };
 
-    # ── Winbind (Active Directory only) ──────────────────────────────────────
-    # services.winbind is a separate NixOS module; services.samba has no
-    # winbindd sub-option. Only enabled when securityMode == "ads".
-    services.winbind = lib.mkIf (cfg.securityMode == "ads") {
-      enable = true;
-    };
+    # Note: winbind is embedded in pkgs.samba and started automatically by
+    # smbd when securityMode = "ads". There is no separate services.winbind
+    # NixOS module in nixpkgs 25.11 - do not reference it.
 
     # ── Kerberos ──────────────────────────────────────────────────────────────
     security.krb5 = lib.mkIf (cfg.securityMode == "ads" && cfg.realm != null) {
