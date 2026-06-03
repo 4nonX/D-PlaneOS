@@ -163,6 +163,13 @@
         services.dplaneos.dbPath = "/var/lib/dplaneos/pgsql";
         nix.settings.auto-optimise-store = true;
         nix.gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 14d"; };
+
+        # Appliance: never build HTML/PDF package documentation into the system
+        # closure. The python3.11-doc build fails in nixpkgs 26.05 due to a
+        # Sphinx 9.1 + docutils 0.22.4 incompatibility, and NAS operators have
+        # no use for in-closure HTML docs regardless.
+        documentation.doc.enable   = false;
+        documentation.nixos.enable = false;
       };
 
     in
