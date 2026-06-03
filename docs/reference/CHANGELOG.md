@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v12.3.0 (2026-06-03) - "Ironclad"
+
+Upgrade from: v12.2.0 - No schema migration required. No breaking API changes. No breaking configuration changes. HA replication behaviour is unchanged; the SSH transport is now native Go rather than a subprocess.
+
+### Fixed
+
+- **HA replication: shell-on-remote command injection vector eliminated (`daemon/internal/ha/replication.go`, `daemon/internal/ha/reconcile.go`, `daemon/internal/ha/ssh_client.go`)**: All SSH operations in the HA replication and zombie-boot reconciliation paths previously used `exec.Command("ssh", ...)` which assembled a remote command string executed by the remote shell. This is the classic sanitize-then-interpolate pattern: even with validated inputs, the execution boundary is the remote shell's parser, not the Go validator. Two structural problems: (1) piped remote commands (`zfs list ... | tail -n 1`) required the remote shell to be active and interpret a pipeline operator, (2) `fmt.Sprintf` was used to build command strings from DB-sourced values. Both are now fully eliminated.
+
+- **HA replication: native SSH client with TOFU host key verification (`daemon/internal/ha/ssh_client.go` new)**: All SSH operations now use `golang.org/x/crypto/ssh` directly. `openSSHClient` loads the private key file, verifies host keys against `/var/lib/dplaneos/ha_known_hosts` with accept-new semantics (first connection stores the fingerprint; subsequent connections verify it; fingerprint mismatch returns an explicit error naming both fingerprints), and connects via the SSH protocol exec channel without spawning any subprocess. The `knownhosts` sub-package is not required; host key verification is implemented using only the vendored `golang.org/x/crypto/ssh` primitives (`ssh.ParseAuthorizedKey`, `ssh.MarshalAuthorizedKey`, `ssh.FingerprintSHA256`). A package-level mutex serialises first-connection key writes to prevent races when two goroutines connect to the same new host simultaneously.
+
+- **HA replication: piped remote commands replaced with Go string processing**: `zfs list -t snapshot ... | tail -n 1` is gone from all remote execution paths. The full snapshot list is retrieved via the SSH exec channel and the last non-empty line is extracted by `lastNonEmptyLine` in Go. No shell pipeline operator appears in any remote command.
+
+- **HA replication: each argument single-quote-wrapped before remote execution**: `shellQuoteArgs` wraps every argument in single quotes before joining into the command string sent to the remote shell via the SSH exec channel. Since all arguments are pre-validated to contain only `[a-zA-Z0-9_\-\./@:]`, no single-quote character can appear inside a quoted token. The remote shell receives e.g. `'zfs' 'list' '-t' 'snapshot' '-r' 'tank'` rather than `zfs list -t snapshot -r tank`, providing a structural guarantee that word splitting and glob expansion cannot affect argument boundaries.
+
+- **HA replication: remote snapshot names validated before subsequent exec calls**: Snapshot names returned from `zfs list` on the remote peer are now validated through `security.ValidateSnapshotName` before being used in any subsequent `exec.Command` or SSH session command. This closes the path where a compromised peer could return a malformed snapshot name that survives the initial validator but causes injection at the point of use.
+
+- **CI: cron-hook integration test updated for per-boot token rotation (`.github/scripts/api-integration-test.sh`)**: The test previously sent the hardcoded literal `dplaneos-internal-reconciliation-secret-v1` and asserted it was accepted. Since v12.2.0 that token is correctly rejected (per-boot `crypto/rand` token). The test now asserts the hardcoded token is rejected (proving the rotation is active) and separately asserts the cron-hook endpoint is reachable via an authenticated admin session (proving the functionality works).
+
+---
+
 ## v12.2.0 (2026-06-03) - "Bastion"
 
 Upgrade from: v12.1.0 - Schema migration required (1 new table: `ha_cluster_secret`, created automatically at daemon startup via `ensureSchema`). No breaking API changes. No breaking configuration changes.
