@@ -234,7 +234,8 @@ in {
     services.samba = {
       enable = true;
       package = pkgs.samba;
-      winbindd.enable = cfg.securityMode == "ads";
+      # openFirewall handled below so we can also open UDP ports
+      openFirewall = false;
 
       # Use our rendered config. services.samba writes this to
       # /etc/samba/smb.conf at activation time.
@@ -254,13 +255,22 @@ in {
           "idmap config ${d.name} : range"   = "${toString d.low}-${toString d.high}";
         }) {} cfg.idmapDomains;
         idmapAttrs = if cfg.idmapDomains == [] then defaultIdmap else domainIdmap;
+        # AD-specific settings: only included when securityMode == "ads".
+        # lib.mkIf is NOT valid inside settings values (services.samba.settings
+        # expects plain str/bool/int); use lib.optionalAttrs at the attrset level.
+        adAttrs = lib.optionalAttrs (cfg.securityMode == "ads") ({
+          "kerberos method"            = "secrets and keytab";
+          "winbind use default domain" = "yes";
+          "winbind offline logon"      = "yes";
+        } // lib.optionalAttrs (cfg.realm != null) {
+          "realm" = lib.toUpper (toString cfg.realm);
+        });
       in {
         global = {
           "workgroup"           = cfg.workgroup;
           "server string"       = cfg.serverString;
           "netbios name"        = cfg.netbiosName;
           "security"            = cfg.securityMode;
-          "realm"               = lib.mkIf (cfg.securityMode == "ads" && cfg.realm != null) (lib.toUpper (toString cfg.realm));
           "passdb backend"      = if cfg.securityMode == "ads" then "secrets" else "tdbsam";
           "map to guest"        = if cfg.allowGuest then "Bad User" else "Never";
           "server min protocol" = "SMB2";
@@ -273,20 +283,13 @@ in {
           "read raw"            = "yes";
           "write raw"           = "yes";
           "use sendfile"        = "yes";
-
-          # ── Identity Mapping (dynamic, driven by idmapDomains option) ────
-        } // idmapAttrs // {
-          # ── AD Specifics ──────────────────────────────────────────────────
-          "kerberos method"          = lib.mkIf (cfg.securityMode == "ads") "secrets and keytab";
-          "winbind use default domain" = lib.mkIf (cfg.securityMode == "ads") "yes";
-          "winbind offline logon"    = lib.mkIf (cfg.securityMode == "ads") "yes";
-
           # ── THE BRIDGE LINE ───────────────────────────────────────────────
           # NixOS writes the [global] section; DPlaneOS writes the shares.
           # This include makes NixOS aware of DPlaneOS's share stanzas
           # without giving the daemon ownership of the whole smb.conf.
           "include"             = sharesConfPath;
-        } // lib.optionalAttrs cfg.timeMachine {
+        } // idmapAttrs // adAttrs
+          // lib.optionalAttrs cfg.timeMachine {
           "fruit:metadata"                        = "stream";
           "fruit:model"                           = "MacSamba";
           "fruit:posix_rename"                    = "yes";
@@ -297,9 +300,13 @@ in {
           "vfs objects"                           = "catia fruit streams_xattr";
         };
       };
+    };
 
-      # openFirewall handled below so we can also open UDP ports
-      openFirewall = false;
+    # ── Winbind (Active Directory only) ──────────────────────────────────────
+    # services.winbind is a separate NixOS module; services.samba has no
+    # winbindd sub-option. Only enabled when securityMode == "ads".
+    services.winbind = lib.mkIf (cfg.securityMode == "ads") {
+      enable = true;
     };
 
     # ── Kerberos ──────────────────────────────────────────────────────────────
