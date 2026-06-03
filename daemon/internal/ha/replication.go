@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os/exec"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"dplaned/internal/security"
 	"dplaned/internal/zfs"
@@ -58,7 +60,7 @@ func ValidateReplicationConfig(cfg *ReplicationConfig) error {
 func (m *Manager) startReplicationLoop(ctx context.Context, cfg *ReplicationConfig) {
 	interval := time.Duration(cfg.IntervalSecs) * time.Second
 	if interval < 10*time.Second {
-		interval = 30 * time.Second // Enforce safe floor
+		interval = 30 * time.Second
 	}
 
 	ticker := time.NewTicker(interval)
@@ -73,18 +75,12 @@ func (m *Manager) startReplicationLoop(ctx context.Context, cfg *ReplicationConf
 			log.Printf("HA: continuous replication loop stopped")
 			return
 		case <-ticker.C:
-			// Only the primary node replicates to the standby
 			if m.Status().LocalNode.Role != RoleActive {
 				continue
 			}
-			
-			// We skip the sync if Patroni API definitively says we are NOT the primary database,
-			// to avoid split-brain writes during promotion race conditions.
 			if !m.IsPatroniPrimary() {
-				// Don't log spam, just wait till next loop
 				continue
 			}
-
 			if err := m.syncZFS(ctx, cfg); err != nil {
 				log.Printf("HA Replication Error: %v", err)
 			}
@@ -92,120 +88,141 @@ func (m *Manager) startReplicationLoop(ctx context.Context, cfg *ReplicationConf
 	}
 }
 
-// syncZFS executes an incremental zfs send/recv securely over SSH.
+// syncZFS executes an incremental zfs send/recv using the native SSH library.
+// No subprocess shell is spawned for SSH; no piped remote commands are used.
+// All data received from the remote is validated before use in any exec call.
 func (m *Manager) syncZFS(ctx context.Context, cfg *ReplicationConfig) error {
 	if err := ValidateReplicationConfig(cfg); err != nil {
 		return err
 	}
-	snapCmd := exec.CommandContext(ctx, "zfs", "list", "-t", "snapshot", "-o", "name", "-H", "-s", "creation", "-r", cfg.LocalPool)
-	out, err := snapCmd.Output()
+
+	// List local snapshots directly via local exec (already safe - no user input in args).
+	localOut, err := exec.CommandContext(ctx,
+		"zfs", "list", "-t", "snapshot", "-o", "name", "-H", "-s", "creation", "-r", cfg.LocalPool,
+	).Output()
 	if err != nil {
-		return fmt.Errorf("failed to list local snapshots: %w", err)
+		return fmt.Errorf("list local snapshots: %w", err)
+	}
+	latestLocalSnap := lastNonEmptyLine(string(localOut))
+	if latestLocalSnap == "" {
+		return nil // Nothing local to replicate.
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) == 0 || lines[0] == "" {
-		// Nothing to replicate
-		return nil
-	}
-	latestLocalSnap := lines[len(lines)-1]
-
-	// Determine latest remote snapshot via SSH
-	sshArgs := []string{
-		"-o", "StrictHostKeyChecking=accept-new",
-		"-o", "ConnectTimeout=10",
-		"-o", "BatchMode=yes",
-		"-i", cfg.SSHKeyPath,
-		"-p", fmt.Sprintf("%d", cfg.RemotePort),
-		fmt.Sprintf("%s@%s", cfg.RemoteUser, cfg.RemoteHost),
-		fmt.Sprintf("zfs list -t snapshot -o name -H -s creation -r %s | tail -n 1", cfg.RemotePool),
-	}
-
-	remoteCmd := exec.CommandContext(ctx, "ssh", sshArgs...)
-	remoteOut, err := remoteCmd.Output()
+	// Open a single native SSH connection for all remote operations in this sync cycle.
+	client, err := openSSHClient(cfg)
 	if err != nil {
-		// If `zfs list` finds no datasets (empty pool), it exits 1.
-		// We should treat this as "no remote snapshots" and proceed with a full send.
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			remoteOut = []byte("") // Clear to ensure string is empty
+		return fmt.Errorf("SSH connect to %s: %w", cfg.RemoteHost, err)
+	}
+	defer client.Close()
+
+	// List remote snapshots without a shell pipe: run the full list and take the
+	// last line in Go. remoteOutput runs the command through the SSH exec channel
+	// with each argument single-quote-wrapped, so no shell metacharacter is possible.
+	remoteListOut, remoteListErr := remoteOutput(client,
+		"zfs", "list", "-t", "snapshot", "-o", "name", "-H", "-s", "creation", "-r", cfg.RemotePool,
+	)
+
+	var latestRemoteSnapFull string
+	if remoteListErr != nil {
+		var sshExitErr *ssh.ExitError
+		if errors.As(remoteListErr, &sshExitErr) && sshExitErr.ExitStatus() == 1 {
+			// Exit 1 from zfs list means no snapshots exist on the remote pool.
+			// Fall through with latestRemoteSnapFull == "" to trigger a full send.
 		} else {
-			return fmt.Errorf("failed to get remote snapshot state: %w", err)
+			return fmt.Errorf("list remote snapshots: %w", remoteListErr)
 		}
+	} else {
+		latestRemoteSnapFull = lastNonEmptyLine(string(remoteListOut))
 	}
 
-	latestRemoteSnapLine := strings.TrimSpace(string(remoteOut))
-	latestRemoteSnap := ""
-	if latestRemoteSnapLine != "" {
-		// e.g. tank/data@xyz -> need to extract the snapshot segment
-		parts := strings.Split(latestRemoteSnapLine, "@")
-		if len(parts) == 2 {
-			latestRemoteSnap = parts[1]
-		}
+	if latestRemoteSnapFull == "" {
+		// Remote has no snapshots - full send.
+		return m.executeSendRecv(ctx, cfg, client, "", latestLocalSnap)
 	}
 
-	// 3. We only sync if there is a newer local snapshot than what is on the remote.
-	// We translate the remote snapshot name to our local pool context to check for existence.
-	// Example: remote `tank/data@snap` -> local `pool/data@snap`
-	localSnapName := strings.Replace(latestRemoteSnapLine, cfg.RemotePool, cfg.LocalPool, 1)
-	
-	if latestRemoteSnap == "" {
-		// Full send
-		return m.executeSendRecv(ctx, cfg, "", latestLocalSnap)
+	// Validate the snapshot name we received from the remote before using it in
+	// any subsequent exec call. This is the critical check that closes the
+	// "validated input + string formatting" injection path.
+	if err := security.ValidateSnapshotName(latestRemoteSnapFull); err != nil {
+		return fmt.Errorf("remote returned invalid snapshot name %q: %w", latestRemoteSnapFull, err)
 	}
 
-	if latestLocalSnap == localSnapName {
-		// Already up to date
-		return nil
+	// Translate remote snapshot to our local pool context for existence check.
+	// e.g. "remotetank/data@snap" -> "localtank/data@snap"
+	localEquivalent := strings.Replace(latestRemoteSnapFull, cfg.RemotePool, cfg.LocalPool, 1)
+	if latestLocalSnap == localEquivalent {
+		return nil // Already in sync.
 	}
 
-	// Double check that the remote snapshot base actually exists locally, 
-	// otherwise the incremental send will fail gracefully anyway.
-	return m.executeSendRecv(ctx, cfg, localSnapName, latestLocalSnap)
+	return m.executeSendRecv(ctx, cfg, client, localEquivalent, latestLocalSnap)
 }
 
-func (m *Manager) executeSendRecv(ctx context.Context, cfg *ReplicationConfig, baseSnap, targetSnap string) error {
+// executeSendRecv pipes a local zfs send stream to the remote via a native SSH
+// session running zfs recv. No subprocess shell is used for the SSH side; the
+// SSH exec channel carries the binary stream directly.
+//
+// baseSnap is the incremental base (empty string for a full send).
+// targetSnap is the snapshot to send.
+// client is an already-authenticated SSH connection to the remote host.
+func (m *Manager) executeSendRecv(ctx context.Context, cfg *ReplicationConfig, client *ssh.Client, baseSnap, targetSnap string) error {
 	if err := ValidateReplicationConfig(cfg); err != nil {
 		return err
 	}
-	var sendArgs []string
+	// Validate snapshot name arguments if provided.
 	if baseSnap != "" {
-		sendArgs = []string{"send", "-P", "-R", "-i", baseSnap, targetSnap}
+		if err := security.ValidateSnapshotName(baseSnap); err != nil {
+			return fmt.Errorf("invalid base snapshot %q: %w", baseSnap, err)
+		}
+	}
+	if err := security.ValidateSnapshotName(targetSnap); err != nil {
+		return fmt.Errorf("invalid target snapshot %q: %w", targetSnap, err)
+	}
+
+	// Local zfs send subprocess.
+	var senderArgs []string
+	if baseSnap != "" {
+		senderArgs = []string{"send", "-P", "-R", "-i", baseSnap, targetSnap}
 	} else {
-		sendArgs = []string{"send", "-P", "-R", targetSnap}
+		senderArgs = []string{"send", "-P", "-R", targetSnap}
 	}
+	sender := exec.CommandContext(ctx, "zfs", senderArgs...)
 
-	sshArgs := []string{
-		"-o", "StrictHostKeyChecking=accept-new",
-		"-o", "BatchMode=yes",
-		"-i", cfg.SSHKeyPath,
-		"-p", fmt.Sprintf("%d", cfg.RemotePort),
-		fmt.Sprintf("%s@%s", cfg.RemoteUser, cfg.RemoteHost),
-		"zfs", "recv", "-s", "-F", cfg.RemotePool,
-	}
-
-	sender := exec.CommandContext(ctx, "zfs", sendArgs...)
-	senderOut, err := sender.StdoutPipe()
+	senderStdout, err := sender.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("sender stdout pipe: %w", err)
 	}
-	sendErrPipe, err := sender.StderrPipe()
+	senderStderr, err := sender.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("sender stderr pipe: %w", err)
 	}
 
-	receiver := exec.CommandContext(ctx, "ssh", sshArgs...)
-	receiver.Stdin = senderOut
-	var recvStderr bytes.Buffer
-	receiver.Stdout = io.Discard
-	receiver.Stderr = &recvStderr
+	// Remote zfs recv via native SSH session (no subprocess shell for SSH).
+	recvSession, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("new SSH session for recv: %w", err)
+	}
+	defer recvSession.Close()
 
-	if err := sender.Start(); err != nil {
-		return fmt.Errorf("start sender: %w", err)
+	recvSession.Stdin = senderStdout
+	var recvStderr bytes.Buffer
+	recvSession.Stderr = &recvStderr
+
+	// Start remote receiver before local sender so recv is ready when data arrives.
+	recvCmd := shellQuoteArgs([]string{"zfs", "recv", "-s", "-F", cfg.RemotePool})
+	if err := recvSession.Start(recvCmd); err != nil {
+		return fmt.Errorf("start remote zfs recv: %w", err)
 	}
 
+	if err := sender.Start(); err != nil {
+		recvSession.Signal(ssh.SIGTERM) //nolint
+		recvSession.Wait()              //nolint
+		return fmt.Errorf("start local zfs send: %w", err)
+	}
+
+	// Parse send progress from sender's stderr and broadcast via WebSocket.
 	var st zfs.SendProgressState
 	go func() {
-		sc := bufio.NewScanner(sendErrPipe)
+		sc := bufio.NewScanner(senderStderr)
 		for sc.Scan() {
 			line := sc.Text()
 			if up, ok := zfs.FeedSendProgressLine(line, &st, 500*time.Millisecond); ok {
@@ -218,23 +235,17 @@ func (m *Manager) executeSendRecv(ctx context.Context, cfg *ReplicationConfig, b
 		}
 	}()
 
-	if err := receiver.Start(); err != nil {
-		sender.Wait() //nolint
-		return fmt.Errorf("start receiver: %w", err)
-	}
-
 	senderErr := sender.Wait()
-	receiverErr := receiver.Wait()
+	recvErr := recvSession.Wait()
 
 	if senderErr != nil {
-		return fmt.Errorf("send failed: %w", senderErr)
+		return fmt.Errorf("zfs send failed: %w", senderErr)
 	}
-	if receiverErr != nil {
-		errOut := strings.TrimSpace(recvStderr.String())
-		if errOut != "" {
-			return fmt.Errorf("receive failed: %w (ssh stderr: %s)", receiverErr, errOut)
+	if recvErr != nil {
+		if errOut := strings.TrimSpace(recvStderr.String()); errOut != "" {
+			return fmt.Errorf("remote zfs recv failed: %w (stderr: %s)", recvErr, errOut)
 		}
-		return fmt.Errorf("receive failed: %w", receiverErr)
+		return fmt.Errorf("remote zfs recv failed: %w", recvErr)
 	}
 	return nil
 }
