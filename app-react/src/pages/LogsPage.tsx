@@ -22,10 +22,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
-import { getSessionId } from '@/lib/api'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingSpinner'
 import { Icon } from '@/components/ui/Icon'
+import { usePersistedState } from '@/hooks/usePersistedState'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -161,9 +161,9 @@ const MAX_LIVE_LINES = 500
 
 export function LogsPage() {
   const [mode, setMode]           = useState<ViewMode>('history')
-  const [levelFilter, setLevel]   = useState<LevelFilter>('all')
+  const [levelFilter, setLevel]   = usePersistedState<LevelFilter>('logs.levelFilter', 'all')
   const [searchText, setSearch]   = useState('')
-  const [historyLimit, setLimit]  = useState(200)
+  const [historyLimit, setLimit]  = usePersistedState<number>('logs.historyLimit', 200)
   const [liveLines, setLiveLines] = useState<ReturnType<typeof parseStreamLine>[]>([])
   const [streaming, setStreaming] = useState(false)
   const [streamCapped, setCapped] = useState(false)
@@ -193,31 +193,37 @@ export function LogsPage() {
     setStreamError(null)
     setStreaming(true)
 
-    const sessionId = getSessionId()
-    const url = `/api/system/logs/stream${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`
-    const es = new EventSource(url, { withCredentials: true })
-    esRef.current = es
+    // Mint a short-lived one-time SSE ticket (EventSource cannot send custom headers).
+    // The ticket is valid for 30 s and consumed on first use.
+    api.post<{ ticket: string }>('/api/sse/ticket').then(res => {
+      const url = `/api/system/logs/stream?ticket=${encodeURIComponent(res.ticket)}`
+      const es = new EventSource(url, { withCredentials: true })
+      esRef.current = es
 
-    es.addEventListener('log', (e: MessageEvent) => {
-      const parsed = parseStreamLine(e.data)
-      setLiveLines((prev) => {
-        const next = [...prev, parsed]
-        return next.length > MAX_LIVE_LINES ? next.slice(-MAX_LIVE_LINES) : next
+      es.addEventListener('log', (e: MessageEvent) => {
+        const parsed = parseStreamLine(e.data)
+        setLiveLines((prev) => {
+          const next = [...prev, parsed]
+          return next.length > MAX_LIVE_LINES ? next.slice(-MAX_LIVE_LINES) : next
+        })
       })
-    })
 
-    es.addEventListener('info', (e: MessageEvent) => {
-      if (e.data.includes('capped')) {
-        setCapped(true)
+      es.addEventListener('info', (e: MessageEvent) => {
+        if (e.data.includes('capped')) {
+          setCapped(true)
+          setStreaming(false)
+          es.close()
+        }
+      })
+
+      es.addEventListener('error', () => {
+        setStreamError('Stream disconnected - daemon may have restarted.')
         setStreaming(false)
         es.close()
-      }
-    })
-
-    es.addEventListener('error', () => {
-      setStreamError('Stream disconnected - daemon may have restarted.')
+      })
+    }).catch(() => {
+      setStreamError('Failed to open log stream - check your session.')
       setStreaming(false)
-      es.close()
     })
   }, [])
 

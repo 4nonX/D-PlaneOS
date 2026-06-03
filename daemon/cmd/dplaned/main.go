@@ -638,6 +638,7 @@ func main() {
 	systemHandler := handlers.NewSystemHandler()
 	r.HandleFunc("/api/system/health", handlers.SystemHealthHandler).Methods("GET")
 	r.Handle("/api/system/logs/stream", permRoute("system", "read", handlers.LogStreamHandler)).Methods("GET")
+	r.Handle("/api/sse/ticket", permRoute("system", "read", handlers.MintSSETicket)).Methods("POST")
 	r.Handle("/api/system/ups", permRoute("system", "read", systemHandler.GetUPSStatus)).Methods("GET")
 	r.Handle("/api/system/ups", permRoute("system", "write", systemHandler.SaveUPSConfig)).Methods("POST")
 	r.Handle("/api/system/network", permRoute("system", "read", systemHandler.HandleNetwork)).Methods("GET")
@@ -805,10 +806,6 @@ func main() {
 	r.Handle("/api/docker/convert-run", permRoute("docker", "write", stackHandler.ConvertDockerRun)).Methods("POST")
 
 	// v5.1: Multi-stack templates
-	templateHandler := handlers.NewTemplateHandler()
-	r.Handle("/api/docker/templates", permRoute("docker", "read", templateHandler.ListTemplates)).Methods("GET")
-	r.Handle("/api/docker/templates/installed", permRoute("docker", "read", templateHandler.ListInstalledTemplates)).Methods("GET")
-	r.Handle("/api/docker/templates/deploy", permRoute("docker", "write", templateHandler.DeployTemplate)).Methods("POST")
 
 	// v3.0.0: Audit log rotation
 	auditRotationHandler := handlers.NewAuditRotationHandler(db, *dbDSN, "/var/lib/dplaneos/audit.key")
@@ -972,6 +969,8 @@ func main() {
 	r.Handle("/api/shares", permRoute("shares", "write", shareCRUDHandler.HandleShares)).Methods("DELETE")
 	r.Handle("/api/smb/settings", permRoute("shares", "read", shareCRUDHandler.GetSMBSettings)).Methods("GET")
 	r.Handle("/api/smb/settings", permRoute("shares", "admin", shareCRUDHandler.UpdateSMBSettings)).Methods("POST")
+	r.Handle("/api/shares/smb/sessions", permRoute("shares", "read", shareCRUDHandler.ListSMBSessions)).Methods("GET")
+	r.Handle("/api/shares/smb/sessions/disconnect", permRoute("shares", "admin", shareCRUDHandler.DisconnectSMBSession)).Methods("POST")
 
 	// User & Group CRUD handlers
 	userGroupHandler := handlers.NewUserGroupHandler(db)
@@ -1008,8 +1007,6 @@ func main() {
 	r.Handle("/api/system/zfs-gate-status", permRoute("system", "read", systemStatusHandler.HandleZFSGateStatus)).Methods("GET")
 	// v3.0.0: IPMI/BMC sensor data (graceful no-op if ipmitool unavailable)
 	r.Handle("/api/system/ipmi", permRoute("system", "read", systemStatusHandler.HandleIPMISensors)).Methods("GET")
-	// /api/status is an alias for /api/system/status (used by dashboard ECC check)
-	r.HandleFunc("/api/status", systemStatusHandler.HandleStatus).Methods("GET")
 	r.HandleFunc("/api/system/setup-complete", systemStatusHandler.HandleSetupComplete).Methods("POST")
 	r.Handle("/api/system/metrics", permRoute("system", "read", handlers.HandleSystemMetrics)).Methods("GET")
 	r.Handle("/api/system/tuning", permRoute("system", "read", handlers.HandleSystemSettings)).Methods("GET")
@@ -1078,11 +1075,6 @@ func main() {
 
 	// Settings handlers
 	settingsHandler := handlers.NewSettingsHandler(db)
-	r.Handle("/api/settings/telegram", permRoute("system", "read", settingsHandler.GetTelegramConfig)).Methods("GET")
-	r.Handle("/api/settings/telegram", permRoute("system", "write", settingsHandler.SaveTelegramConfig)).Methods("POST")
-	r.Handle("/api/settings/telegram/test", permRoute("system", "write", settingsHandler.TestTelegramConfig)).Methods("POST")
-
-	// /api/alerts/telegram - aliases to settings handler (used by alerts.html)
 	r.Handle("/api/alerts/telegram", permRoute("system", "read", settingsHandler.GetTelegramConfig)).Methods("GET")
 	r.Handle("/api/alerts/telegram", permRoute("system", "write", settingsHandler.SaveTelegramConfig)).Methods("POST")
 	r.Handle("/api/alerts/telegram/test", permRoute("system", "write", settingsHandler.TestTelegramConfig)).Methods("POST")
@@ -1178,9 +1170,6 @@ func main() {
 	aclHandler := handlers.NewACLHandler()
 	r.Handle("/api/acl/get", permRoute("storage", "read", aclHandler.GetACL)).Methods("GET")
 	r.Handle("/api/acl/set", permRoute("storage", "write", aclHandler.SetACL)).Methods("POST")
-	// Alias for consistency with other system APIs
-	r.Handle("/api/system/acl", permRoute("storage", "read", aclHandler.GetACL)).Methods("GET")
-	r.Handle("/api/system/acl", permRoute("storage", "write", aclHandler.SetACL)).Methods("POST")
 
 	// NFSv4 ACL Management (v9.0.0) - nfs4_getfacl / nfs4_setfacl
 	r.Handle("/api/nfs4acl", permRoute("storage", "read", http.HandlerFunc(handlers.GetNFS4ACL))).Methods("GET")
@@ -1532,6 +1521,21 @@ func sessionMiddleware(db *sql.DB, internalCronToken string) mux.MiddlewareFunc 
 					return
 				}
 				// If token provided but invalid, we fall through to session check or fail later
+			}
+
+			// SSE one-time ticket check. EventSource cannot send custom headers, so
+			// authenticated callers POST /api/sse/ticket first, receive a 30-second
+			// single-use token, then pass it as ?ticket= in the EventSource URL.
+			// Accepted only on the two SSE streaming paths to minimise attack surface.
+			if ticket := r.URL.Query().Get("ticket"); ticket != "" &&
+				(p == "/api/system/logs/stream" || p == "/api/docker/stacks/logs/stream") {
+				if u := handlers.ConsumeSSETicket(ticket); u != nil {
+					ctx := context.WithValue(r.Context(), middleware.UserContextKey, u)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
 			}
 
 			sessionID := r.Header.Get("X-Session-ID")

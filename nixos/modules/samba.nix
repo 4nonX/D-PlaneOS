@@ -114,7 +114,11 @@ in {
 
   options.services.dplaneos.samba = {
 
-    enable = lib.mkEnableOption "DPlaneOS Samba integration";
+    enable = lib.mkOption {
+      type        = lib.types.bool;
+      default     = true;
+      description = "Enable DPlaneOS Samba (SMB) integration. Samba is a core NAS feature and is enabled by default.";
+    };
 
     workgroup = lib.mkOption {
       type    = lib.types.str;

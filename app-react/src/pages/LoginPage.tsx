@@ -266,9 +266,9 @@ export function LoginPage() {
 
   if (bootState === 'checking') {
     return centeredPage(
-      <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+      <div style={{ textAlign: 'center' }}>
         <Spinner />
-        <div style={{ marginTop: 12, fontSize: 'var(--text-sm)' }}>Connecting…</div>
+        <div style={{ marginTop: 12, fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>Connecting to D-PlaneOS…</div>
       </div>
     )
   }

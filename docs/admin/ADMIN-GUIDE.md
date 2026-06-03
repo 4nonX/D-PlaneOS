@@ -196,7 +196,20 @@ Requires permission: `docker:write`.
 
 ### Deploying Containers
 
-Containers → **Deploy Container** → fill in image, name, ports, volumes, and environment variables → **Deploy**.
+Containers → Docker → **Pull Image** tab to pull an image, or **Compose Stacks** tab to deploy a `docker-compose.yml`. Standalone containers can be deployed from the Containers tab via **Deploy Container**.
+
+### View Modes
+
+The Containers tab offers three layouts: **Grid** (icon card per container, default), **By Stack** (grouped by compose project), and **List** (table with resource usage). The selected layout persists across sessions.
+
+### Editing a Container
+
+Click the tune icon on any container card to open the edit modal. You can change:
+- **Icon** - Material Symbol name, `.svg`/`.png` filename, or a URL
+- **Restart policy** - no / always / unless-stopped / on-failure
+- **Ports**, **Volumes**, and **Environment variables**
+
+Changes are applied by stopping and recreating the container. Compose-managed containers should be edited via their compose file in the Compose Stacks tab.
 
 ### Container Icons
 
@@ -232,9 +245,9 @@ Custom icons are served via `GET /api/assets/custom-icons/<filename>`. The full 
 
 ### Network Configuration
 
-Settings → System → Network → configure interface, IP address, gateway, and DNS → **Apply**.
+Network → configure interface, IP address, gateway, DNS, VLANs, and bonding → **Apply**.
 
-From this page, you can also quickly access the **Firewall** management UI to configure port rules and security settings.
+The **Firewall** page is in the Security group. DNS changes apply in 30 seconds and can be rolled back from the same page if connectivity is lost.
 
 ### Notifications
 
@@ -254,9 +267,9 @@ Monitoring → Settings - configure thresholds for CPU, RAM, disk capacity, and 
 
 ### Viewing Logs
 
-- System logs: Monitoring → Logs → System
-- Audit log: Settings → Roles and Permissions → Audit Log (HMAC-chained, tamper-evident)
-- Container logs: Containers → select container → Logs
+- System logs: System → Logs
+- Audit log: Security → Audit Log (HMAC-chained, tamper-evident)
+- Container logs: Containers → Docker → select container → Logs
 
 ---
 

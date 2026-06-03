@@ -275,6 +275,19 @@ function AddDelegationModal({ onClose, datasets, datasetsLoading, onAdded }: Add
 // Dataset Delegation Detail (expandable raw view)
 // ---------------------------------------------------------------------------
 
+function parseZfsAllow(raw: string): Array<{ type: 'user'|'group'|'everyone'; who: string; perms: string[] }> {
+  const entries: Array<{ type: 'user'|'group'|'everyone'; who: string; perms: string[] }> = []
+  for (const line of raw.split('\n')) {
+    const userMatch = line.match(/^\s+user\s+(\S+)\s+(.+)$/)
+    const groupMatch = line.match(/^\s+group\s+(\S+)\s+(.+)$/)
+    const everyoneMatch = line.match(/^\s+everyone\s+(.+)$/)
+    if (userMatch) entries.push({ type: 'user', who: userMatch[1], perms: userMatch[2].split(',').map(s => s.trim()) })
+    else if (groupMatch) entries.push({ type: 'group', who: groupMatch[1], perms: groupMatch[2].split(',').map(s => s.trim()) })
+    else if (everyoneMatch) entries.push({ type: 'everyone', who: 'everyone', perms: everyoneMatch[1].split(',').map(s => s.trim()) })
+  }
+  return entries
+}
+
 function DatasetDelegationDetail({ dataset }: { dataset: string }) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['zfs', 'delegation', dataset],
@@ -306,15 +319,62 @@ function DatasetDelegationDetail({ dataset }: { dataset: string }) {
     )
   }
 
+  const parsed = parseZfsAllow(data.delegations)
+
   return (
-    <pre style={{
-      margin: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
-      color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-      background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-xs)', padding: '10px 12px',
-      maxHeight: 200, overflowY: 'auto'}}>
-      {data.delegations}
-    </pre>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {parsed.length > 0 ? (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Principal</th>
+                <th>Permissions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {parsed.map((e, i) => (
+                <tr key={i}>
+                  <td>
+                    <span style={{ padding: '2px 7px', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-2xs)', fontWeight: 600, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                      {e.type}
+                    </span>
+                  </td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>{e.who}</td>
+                  <td>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {e.perms.map(p => (
+                        <span key={p} style={{ padding: '2px 7px', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-2xs)', fontWeight: 600, background: 'var(--primary-bg)', color: 'var(--primary)', border: '1px solid hsla(var(--hue-primary),100%,72%,.2)', fontFamily: 'var(--font-mono)' }}>
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+          No structured entries found in delegation output
+        </div>
+      )}
+      <details style={{ marginTop: 4 }}>
+        <summary style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', cursor: 'pointer', userSelect: 'none' }}>
+          Raw zfs allow output
+        </summary>
+        <pre style={{
+          marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
+          color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-xs)', padding: '10px 12px',
+          maxHeight: 200, overflowY: 'auto'}}>
+          {data.delegations}
+        </pre>
+      </details>
+    </div>
   )
 }
 

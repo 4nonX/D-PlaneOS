@@ -483,6 +483,9 @@ export function CertificatesPage() {
             <Icon name="verified_user" size={40} style={{ color: 'var(--text-tertiary)', opacity: 0.4 }} />
             <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>No certificates installed</div>
             <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)' }}>Generate a self-signed certificate to get started</div>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginTop: 16, maxWidth: 400, textAlign: 'center' }}>
+              For a trusted certificate, use the <strong>ACME / Let's Encrypt</strong> tab to obtain one automatically - or import an existing certificate and private key.
+            </p>
           </div>
         )}
       </div>

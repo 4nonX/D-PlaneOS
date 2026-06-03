@@ -21,6 +21,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { fmtDateTime } from '@/lib/fmt'
 import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
@@ -66,8 +67,7 @@ interface RolesResponse  { success: boolean; roles:  Role[]  }
 
 function fmtDate(s?: string) {
   if (!s) return 'Never'
-  try { return new Date(s).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) }
-  catch { return s }
+  return fmtDateTime(s)
 }
 
 function isLocked(u: User): boolean {
@@ -103,6 +103,14 @@ function UserModal({ user, onClose, onDone }: { user?: User; onClose: () => void
 
   const mutation = useMutation({
     mutationFn: () => {
+      if (!isEdit) {
+        if (!/^[a-z_][a-z0-9_-]*$/.test(username.trim())) {
+          throw new Error('Username must start with a letter or underscore, followed by lowercase letters, numbers, underscores, or hyphens')
+        }
+        if (username.trim().length < 2 || username.trim().length > 32) {
+          throw new Error('Username must be 2-32 characters')
+        }
+      }
       const body: Record<string, unknown> = isEdit
         ? { action: 'update', id: user!.id, email, role, ...(password ? { password } : {}) }
         : { action: 'create', username, email, password, role }
@@ -118,6 +126,9 @@ function UserModal({ user, onClose, onDone }: { user?: User; onClose: () => void
         <label className="field">
           <span className="field-label">Username</span>
           <input value={username} onChange={e => setUsername(e.target.value)} className="input" autoFocus />
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+            Lowercase letters, numbers, underscores, hyphens. Must start with a letter.
+          </span>
         </label>
       )}
       <label className="field">

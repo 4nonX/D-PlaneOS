@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api, getSessionId, getCsrfToken } from '@/lib/api'
+import { fmtDateTime } from '@/lib/fmt'
 import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
@@ -19,7 +20,7 @@ interface SysMetrics { cpu_model?:string; cpu_percent?:number; memory_total?:num
 interface Snapshot   { name?:string; snapshot?:string; created?:string; size?:number }
 
 function fmtSize(b?:number):string { if(!b)return'-'; const u=['B','KB','MB','GB','TB']; const i=Math.min(Math.floor(Math.log(b)/Math.log(1024)),4); return`${(b/1024**i).toFixed(1)} ${u[i]}` }
-function fmtDate(s?:string){if(!s)return'-';try{return new Date(s).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}catch{return s}}
+function fmtDate(s?:string){if(!s)return'-';return fmtDateTime(s)}
 
 export function SupportPage() {
   const [downloading, setDownloading] = useState(false)
@@ -145,17 +146,23 @@ export function SupportPage() {
             {snapshotsQ.isError   && <div style={{ fontSize:'var(--text-xs)', color:'var(--text-tertiary)' }}>NixOS snapshots unavailable</div>}
             {!snapshotsQ.isLoading && (
               snaps.length > 0 ? (
-                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                  {snaps.map((s, i) => (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--surface)', borderRadius:'var(--radius-sm)' }}>
-                      <Icon name="camera_alt" size={14} style={{ color:'var(--text-tertiary)', flexShrink:0 }}/>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontFamily:'var(--font-mono)', fontSize:'var(--text-xs)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.name || s.snapshot}</div>
-                        {s.created && <div style={{ fontSize:'var(--text-2xs)', color:'var(--text-tertiary)' }}>{fmtDate(s.created)}{s.size ? ` · ${fmtSize(s.size)}` : ''}</div>}
+                <>
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    {snaps.map((s, i) => (
+                      <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--surface)', borderRadius:'var(--radius-sm)' }}>
+                        <Icon name="camera_alt" size={14} style={{ color:'var(--text-tertiary)', flexShrink:0 }}/>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontFamily:'var(--font-mono)', fontSize:'var(--text-xs)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.name || s.snapshot}</div>
+                          {s.created && <div style={{ fontSize:'var(--text-2xs)', color:'var(--text-tertiary)' }}>{fmtDate(s.created)}{s.size ? ` · ${fmtSize(s.size)}` : ''}</div>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop:10, fontSize:'var(--text-xs)', color:'var(--text-tertiary)', display:'flex', alignItems:'center', gap:6 }}>
+                    <Icon name="info" size={12} style={{ flexShrink:0 }} />
+                    To roll back to a previous NixOS generation, go to Settings → NixOS → Generations.
+                  </div>
+                </>
               ) : (
                 <div style={{ fontSize:'var(--text-sm)', color:'var(--text-tertiary)' }}>No pre-upgrade snapshots found</div>
               )

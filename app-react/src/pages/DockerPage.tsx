@@ -34,6 +34,7 @@ import { JobProgress } from '@/components/ui/JobProgress'
 import { Modal } from '@/components/ui/Modal'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { toast } from '@/hooks/useToast'
+import { usePersistedState } from '@/hooks/usePersistedState'
 import { useWsStore } from '@/stores/ws'
 import type { IconMapResponse } from '@/lib/iconTypes'
 
@@ -816,7 +817,9 @@ function ContainersTab() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const [viewMode, setViewMode] = useState<'grid' | 'stacks' | 'list'>('grid')
+  const [viewMode, setViewMode] = useState<'grid' | 'stacks' | 'list'>(
+    () => (localStorage.getItem('docker.viewMode') as 'grid' | 'stacks' | 'list') ?? 'grid'
+  )
 
   function refresh() { qc.invalidateQueries({ queryKey: ['docker', 'containers'] }) }
 
@@ -861,7 +864,7 @@ function ContainersTab() {
             { id: 'stacks', icon: 'folder',       label: 'By Stack' },
             { id: 'list',   icon: 'table_rows',   label: 'List'     },
           ] as const).map(v => (
-            <button key={v.id} onClick={() => setViewMode(v.id)} className="btn btn-ghost" style={{ background: viewMode === v.id ? 'var(--primary-bg)' : 'var(--surface)', color: viewMode === v.id ? 'var(--primary)' : 'var(--text-secondary)', borderColor: viewMode === v.id ? 'hsla(var(--hue-primary),100%,72%,.3)' : 'var(--border)' }}>
+            <button key={v.id} onClick={() => { setViewMode(v.id); localStorage.setItem('docker.viewMode', v.id) }} className="btn btn-ghost" style={{ background: viewMode === v.id ? 'var(--primary-bg)' : 'var(--surface)', color: viewMode === v.id ? 'var(--primary)' : 'var(--text-secondary)', borderColor: viewMode === v.id ? 'hsla(var(--hue-primary),100%,72%,.3)' : 'var(--border)' }}>
               <Icon name={v.icon} size={14} />
               {v.label}
             </button>
@@ -2604,7 +2607,7 @@ function GitSyncTab() {
 type Tab = 'containers' | 'pull' | 'compose' | 'gpu' | 'gitsync'
 
 export function DockerPage() {
-  const [tab, setTab] = useState<Tab>('containers')
+  const [tab, setTab] = usePersistedState<Tab>('docker.tab', 'containers')
 
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: 'containers', label: 'Containers', icon: 'deployed_code' },

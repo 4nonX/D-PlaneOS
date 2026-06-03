@@ -214,7 +214,6 @@
           impermanence.nixosModules.impermanence
           ./nixos/impermanence.nix
           ./nixos/ota-module.nix
-          ./nixos/modules/samba.nix
           ./nixos/dplane-generated.nix
           applianceConfig
           (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
@@ -238,7 +237,6 @@
           impermanence.nixosModules.impermanence
           ./nixos/impermanence.nix
           ./nixos/ota-module.nix
-          ./nixos/modules/samba.nix
           ./nixos/dplane-generated.nix
           applianceConfig
           (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };

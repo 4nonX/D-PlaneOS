@@ -214,6 +214,16 @@ export function ACLPage() {
         <p className="page-subtitle">POSIX Access Control Lists - getfacl / setfacl</p>
       </div>
 
+      {!search.path && !loadedPath && (
+        <div className="card" style={{ borderRadius: 'var(--radius-xl)', padding: 32, textAlign: 'center', marginBottom: 24 }}>
+          <Icon name="admin_panel_settings" size={48} style={{ color: 'var(--text-tertiary)', opacity: 0.3, display: 'block', margin: '0 auto 16px' }} />
+          <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', marginBottom: 8 }}>Select a path to manage ACLs</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', maxWidth: 400, margin: '0 auto' }}>
+            Navigate here from <strong>File Explorer</strong> or <strong>Datasets</strong> to manage POSIX ACLs for a specific directory or dataset.
+          </div>
+        </div>
+      )}
+
       {/* Path input */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
         <input value={pathInput} onChange={e => setPathInput(e.target.value)}

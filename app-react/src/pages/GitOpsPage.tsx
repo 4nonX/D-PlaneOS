@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { fmtDateTime } from '@/lib/fmt'
 import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
@@ -34,7 +35,7 @@ interface DriftPayload {
   safe_to_apply: boolean
 }
 
-function fmtDate(s?:string){if(!s)return'-';try{return new Date(s).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}catch{return s}}
+function fmtDate(s?:string){if(!s)return'-';return fmtDateTime(s)}
 
 // Parses GitHub/GitLab/Gitea/Bitbucket branch URLs into { repoUrl, branch }.
 // Returns the raw string unchanged and branch=null for plain repo URLs.

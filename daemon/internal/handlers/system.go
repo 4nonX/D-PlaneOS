@@ -444,18 +444,6 @@ func (h *SystemHandler) handleNetworkPost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// VPN is not managed as a kernel module by DPlaneOS. Use the Docker
-	// interface to deploy a containerised VPN solution (e.g. wg-easy,
-	// OpenVPN). These actions intentionally return 501 so the
-	// frontend never silently ignores an unhandled request.
-	if action == "vpn" || action == "add_vpn" || action == "remove_vpn" {
-		respondErrorSimple(w,
-			"VPN configuration is not available as a native network action. "+
-				"Deploy a containerised VPN (e.g. wg-easy, OpenVPN) via the Docker interface.",
-			http.StatusNotImplemented)
-		return
-	}
-
 	respondErrorSimple(w, "Unsupported network action", http.StatusBadRequest)
 }
 

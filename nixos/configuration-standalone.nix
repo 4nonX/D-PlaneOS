@@ -46,16 +46,10 @@
       then ./dplane-generated.nix
       else {})
 
-    # DPlaneOS Samba integration : declarative NixOS ownership of Samba,
-    # with per-share config written by the web UI daemon.
-    ./modules/samba.nix
-
-    # NFSv4.2 server with idmapd and nfs4-acl-tools (Priority 7).
-    ./modules/nfs.nix
-
-    # SCSI-3 persistent reservation fencing (Priority 9).
-    # Only active when services.dplaneos.fenced.enable = true.
-    ./modules/fenced.nix
+    # Samba, NFS, and fenced modules are imported transitively via module.nix
+    # (nixosModules.dplaneos). No explicit imports are needed here.
+    # Samba and NFS are enabled by default. Fenced defaults to disabled
+    # and must be explicitly set to true for HA shared-SAS setups.
   ];
 
   # ─── License: AGPLv3 ────────────────────────────────────────────────────
@@ -268,6 +262,31 @@
     sshKeys = [
       "YOUR_SSH_PUBLIC_KEY"  # !! REPLACE !!
     ];
+
+    # ─── Samba (SMB) - enabled by default ─────────────────────────────────
+    # Core NAS feature: declarative NixOS ownership of the [global] section;
+    # per-share stanzas are written by the web UI to /var/lib/dplaneos/smb-shares.conf.
+    samba = {
+      enable    = true;
+      workgroup = "WORKGROUP";  # change to match your Windows domain if needed
+      # timeMachine = true;    # uncomment if Macs will back up to this NAS
+      # allowGuest  = false;   # keep false; guest access is a security risk
+    };
+
+    # ─── NFS - enabled by default ─────────────────────────────────────────
+    # Core NAS feature: NFSv4.2 with rpc.idmapd and nfs4-acl-tools.
+    # Per-export options are managed by the web UI via /etc/exports.
+    nfs = {
+      enable     = true;
+      nfs4Domain = "localdomain";  # set to your DNS domain (e.g. "nas.example.com")
+      # minVersion  = "4.2";       # default; NFSv4.1/4.2 only, best security
+      # openFirewall = true;       # default; opens TCP/UDP 2049 and 111
+    };
+
+    # ─── Fenced - opt-in, HA shared-SAS only ──────────────────────────────
+    # SCSI-3 persistent reservation fencing for active/passive HA pairs
+    # sharing a SAS JBOD. Enable ONLY on HA nodes; leave disabled otherwise.
+    # fenced.enable = true;
   };
 
   # ─── NTP ────────────────────────────────────────────────────────────────

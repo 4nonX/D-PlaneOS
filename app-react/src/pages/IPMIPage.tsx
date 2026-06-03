@@ -166,8 +166,8 @@ export function IPMIPage() {
           <h1 className="page-title">IPMI Sensors</h1>
           <p className="page-subtitle">Temperature, fan speed and voltage readings from BMC</p>
         </div>
-        <button onClick={() => qc.invalidateQueries({ queryKey: ['system', 'ipmi'] })} className="btn btn-ghost">
-          <Icon name="refresh" size={14} />Refresh
+        <button onClick={() => ipmiQ.refetch()} disabled={ipmiQ.isFetching} className="btn btn-ghost">
+          <Icon name="refresh" size={14} />{ipmiQ.isFetching ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
 

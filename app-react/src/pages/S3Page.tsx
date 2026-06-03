@@ -175,7 +175,17 @@ export function S3Page() {
                 </>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {isActive && status?.console_port && (
+                <a
+                  href={`http://${window.location.hostname}:${status.console_port}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-ghost"
+                >
+                  <Icon name="open_in_new" size={15} />Open MinIO Console
+                </a>
+              )}
               {isActive ? (
                 <>
                   <button className="btn btn-ghost" onClick={() => restartMut.mutate()} disabled={anyPending}>

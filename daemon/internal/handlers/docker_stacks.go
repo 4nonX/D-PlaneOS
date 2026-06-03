@@ -200,8 +200,6 @@ type StackInfo struct {
 	FileSize     int64                    `json:"file_size"`
 	CreatedAt    string                   `json:"created_at"`
 	UpdatedAt    string                   `json:"updated_at"`
-	TemplateID   string                   `json:"template_id,omitempty"`   // set if deployed from a template
-	TemplateName string                   `json:"template_name,omitempty"` // human-readable template name
 	Labels       map[string]string        `json:"labels,omitempty"`        // dplaneos.* labels from first container
 }
 
@@ -250,16 +248,6 @@ func (h *StackHandler) ListStacks(w http.ResponseWriter, r *http.Request) {
 			Name:     name,
 			Path:     dir,
 			FileSize: fileInfo.Size(),
-		}
-
-		// Read template marker if present
-		markerPath := filepath.Join(dir, ".dplane-template")
-		if markerData, err := os.ReadFile(markerPath); err == nil {
-			var m map[string]string
-			if json.Unmarshal(markerData, &m) == nil {
-				stack.TemplateID = m["template_id"]
-				stack.TemplateName = m["template_name"]
-			}
 		}
 
 		// Get timestamps

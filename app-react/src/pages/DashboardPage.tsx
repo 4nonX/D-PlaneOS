@@ -82,6 +82,16 @@ function pctColor(pct: number) {
   return 'var(--primary)'
 }
 
+function fmtUPSStatus(raw: string): string {
+  const map: Record<string, string> = {
+    OL: 'Online', OB: 'On Battery', LB: 'Low Battery',
+    RB: 'Replace Battery', CHRG: 'Charging', DISCHRG: 'Discharging',
+    BYPASS: 'Bypass', CAL: 'Calibrating', OFF: 'Offline',
+    OVER: 'Overloaded', TRIM: 'Trimming', BOOST: 'Boosting',
+  }
+  return raw.split(' ').map(s => map[s] ?? s).join(', ')
+}
+
 // ---------------------------------------------------------------------------
 // MetricCard - glowing accent number with mini progress bar
 // ---------------------------------------------------------------------------
@@ -393,8 +403,17 @@ export function DashboardPage() {
 
   // Inline disk temperature alert from WS (separate from toast)
   const [diskTempAlert, setDiskTempAlert] = useState<{ device: string; temp: number } | null>(null)
+  const diskTempTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Inline mount error alert - cleared when pool health recovers
   const [mountAlert, setMountAlert] = useState<{ pool: string; mountpoint: string; error: string } | null>(null)
+
+  // Auto-clear disk temp alert after 60s of no new event
+  useEffect(() => {
+    if (!diskTempAlert) return
+    if (diskTempTimerRef.current) clearTimeout(diskTempTimerRef.current)
+    diskTempTimerRef.current = setTimeout(() => setDiskTempAlert(null), 60_000)
+    return () => { if (diskTempTimerRef.current) clearTimeout(diskTempTimerRef.current) }
+  }, [diskTempAlert])
 
   useEffect(() => wsOn('stateUpdate', (d) => setLive(d as WsStateUpdate)), [wsOn])
 
@@ -635,7 +654,7 @@ export function DashboardPage() {
         {has('metric_ups') && ups && (
           <MetricCard
             icon="battery_charging_full" label="UPS Status"
-            value={ups.status}
+            value={fmtUPSStatus(ups.status)}
             sub={`${ups.battery_charge}% charge · ${ups.battery_runtime}`}
             percent={parseInt(ups.battery_charge) || 0}
             accent={upsAlert ? 'var(--warning)' : 'var(--success)'}

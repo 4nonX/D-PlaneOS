@@ -31,6 +31,7 @@ import { toast } from '@/hooks/useToast'
 import { Modal } from '@/components/ui/Modal'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { JobConsole } from '@/components/ui/JobConsole'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -947,6 +948,7 @@ function SchedulesTab({ datasets, remotes, confirm }: { datasets: ZFSDataset[]; 
   const [editingSchedule, setEditingSchedule]     = useState<ReplicationSchedule | undefined>(undefined)
   const [runningId, setRunningId]                 = useState<string | null>(null)
   const [runJobId, setRunJobId]                   = useState<string | null>(null)
+  const [viewJobId, setViewJobId]                 = useState<string | null>(null)
 
   const schedulesQ = useQuery({
     queryKey: ['replication', 'schedules'],
@@ -1052,7 +1054,20 @@ function SchedulesTab({ datasets, remotes, confirm }: { datasets: ZFSDataset[]; 
                         : <Icon name="remove" size={16} style={{ color: 'var(--text-tertiary)' }} />
                       }
                     </td>
-                    <td style={{ padding: '12px 12px' }}><StatusBadge status={s.last_status} /></td>
+                    <td style={{ padding: '12px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <StatusBadge status={s.last_status} />
+                        {s.last_status === 'failed' && s.last_job_id && (
+                          <button
+                            onClick={() => setViewJobId(s.last_job_id!)}
+                            className="btn btn-ghost"
+                            style={{ fontSize: 'var(--text-2xs)', padding: '2px 6px', color: 'var(--error)' }}
+                          >
+                            <Icon name="description" size={11} />View logs
+                          </button>
+                        )}
+                      </div>
+                    </td>
                     <td style={{ padding: '12px 12px', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
                       {s.last_replicated_snapshot ? (
                         <Tooltip content={`Last snapshot: ${s.last_replicated_snapshot}`}>
@@ -1110,6 +1125,13 @@ function SchedulesTab({ datasets, remotes, confirm }: { datasets: ZFSDataset[]; 
           editingSchedule={editingSchedule}
           onClose={() => setEditingSchedule(undefined)}
           onSaved={() => qc.invalidateQueries({ queryKey: ['replication', 'schedules'] })}
+        />
+      )}
+      {viewJobId && (
+        <JobConsole
+          jobId={viewJobId}
+          title={`Job Logs: ${viewJobId}`}
+          onClose={() => setViewJobId(null)}
         />
       )}
     </div>

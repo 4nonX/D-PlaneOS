@@ -224,7 +224,7 @@ export function MonitoringPage() {
 
       <div className="page-header">
         <h1 className="page-title">Inotify Watches</h1>
-        <p className="page-subtitle">Kernel inotify watch limit usage and live watchdog status</p>
+        <p className="page-subtitle">Kernel inotify watch usage - applications that monitor file changes consume watches from this pool. Hitting the limit causes file-watching tools to fail silently.</p>
       </div>
 
       {/* Explanatory header */}

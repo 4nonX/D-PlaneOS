@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { fmtDateTime } from '@/lib/fmt'
 import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
@@ -76,8 +77,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function fmtDate(s?: string) {
   if (!s) return 'Never'
-  try { return new Date(s).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) }
-  catch { return s }
+  return fmtDateTime(s)
 }
 
 // ---------------------------------------------------------------------------

@@ -169,9 +169,11 @@ export function RemovableMediaPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Removable Media</h1>
-          <p className="page-subtitle">USB drives, external disks - mount, unmount, eject</p>
+          <p className="page-subtitle">List updates automatically every 30 seconds. Plug in a device then click Refresh to detect it immediately.</p>
         </div>
-        <button onClick={refresh} className="btn btn-ghost"><Icon name="refresh" size={15} />Refresh</button>
+        <button onClick={() => devicesQ.refetch()} disabled={devicesQ.isFetching} className="btn btn-ghost">
+          <Icon name="refresh" size={15} />{devicesQ.isFetching ? 'Refreshing…' : 'Refresh'}
+        </button>
       </div>
 
       {devicesQ.isLoading && (

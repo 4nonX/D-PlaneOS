@@ -399,12 +399,6 @@ export function SharesPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   })
-  const nfsReload = useMutation({
-    mutationFn: () => api.post('/api/shares/nfs/reload', {}),
-    onSuccess: () => toast.success('NFS exports reloaded'),
-    onError: (e: Error) => toast.error(e.message),
-  })
-
   const shares = sharesQ.data?.shares ?? sharesQ.data?.data ?? []
   function refresh() { qc.invalidateQueries({ queryKey: ['shares', 'list'] }) }
 
@@ -412,8 +406,8 @@ export function SharesPage() {
     <div style={{ maxWidth: 1000 }}>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Shares</h1>
-          <p className="page-subtitle">SMB/NFS network shares and active connections</p>
+          <h1 className="page-title">SMB Shares</h1>
+          <p className="page-subtitle">Manage Samba (SMB) file shares. For NFS exports, see NFS Exports in the sidebar.</p>
         </div>
         {tab === 'shares' && (
           <div style={{ display: 'flex', gap: 8 }}>
@@ -425,11 +419,6 @@ export function SharesPage() {
             <Tooltip content="Reload SMB">
               <button onClick={() => smbReload.mutate()} disabled={smbReload.isPending} className="btn btn-ghost">
                 <Icon name="restart_alt" size={16} />{smbReload.isPending ? 'Reloading…' : 'Reload SMB'}
-              </button>
-            </Tooltip>
-            <Tooltip content="Reload NFS exports">
-              <button onClick={() => nfsReload.mutate()} disabled={nfsReload.isPending} className="btn btn-ghost">
-                <Icon name="sync" size={16} />{nfsReload.isPending ? 'Reloading…' : 'Reload NFS'}
               </button>
             </Tooltip>
             <button onClick={() => setShowCreate(true)} className="btn btn-primary">

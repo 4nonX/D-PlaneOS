@@ -25,6 +25,7 @@ import { useState } from 'react'
 import type React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { fmtDateTime } from '@/lib/fmt'
 import { useAuthStore } from '@/stores/auth'
 import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -49,8 +50,7 @@ interface SessionsResponse { success: boolean; sessions: SessionEntry[] }
 
 function fmtDate(s?: string) {
   if (!s) return 'Never'
-  try { return new Date(s).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) }
-  catch { return s }
+  return fmtDateTime(s)
 }
 
 // ---------------------------------------------------------------------------
@@ -584,8 +584,8 @@ function SessionsTab() {
               </div>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'var(--font-mono)' }}>{s.ip_address}</span>
-                <span>Created: {new Date(s.created_at * 1000).toLocaleString('de-DE')}</span>
-                <span>Active: {new Date(s.last_activity * 1000).toLocaleString('de-DE')}</span>
+                <span>Created: {fmtDateTime(s.created_at * 1000)}</span>
+                <span>Active: {fmtDateTime(s.last_activity * 1000)}</span>
               </div>
             </div>
 

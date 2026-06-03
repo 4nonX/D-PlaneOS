@@ -42,6 +42,7 @@
   --bg-card-hover:   hsla(var(--hue-bg), 18%, 14%, 0.65);
 
   --surface:         hsla(var(--hue-bg), 20%, 18%, 0.4);
+  --surface-2:       hsla(var(--hue-bg), 20%, 22%, 0.5);
   --surface-hover:   hsla(var(--hue-bg), 20%, 26%, 0.5);
   --surface-active:  hsla(var(--hue-bg), 20%, 30%, 0.6);
 
@@ -133,6 +134,7 @@
   --bg-card-hover:   hsl(var(--hue-bg), 20%, 97%);
 
   --surface:         hsl(var(--hue-bg), 15%, 92%);
+  --surface-2:       hsl(var(--hue-bg), 15%, 87%);
   --surface-hover:   hsl(var(--hue-bg), 15%, 88%);
   --surface-active:  hsl(var(--hue-bg), 15%, 83%);
 

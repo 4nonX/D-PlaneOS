@@ -17,6 +17,7 @@ import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { toast } from '@/hooks/useToast'
+import { usePersistedState } from '@/hooks/usePersistedState'
 import { Modal } from '@/components/ui/Modal'
 import { Tooltip } from '@/components/ui/Tooltip'
 
@@ -304,7 +305,7 @@ type Tab = 'schedules' | 'snapshots'
 
 export function SnapshotSchedulerPage() {
   const qc = useQueryClient()
-  const [tab, setTab] = useState<Tab>('schedules')
+  const [tab, setTab] = usePersistedState<Tab>('snapshots.tab', 'schedules')
   const [showCreate, setShowCreate] = useState(false)
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [runningIdx, setRunningIdx] = useState<number | null>(null)

@@ -196,26 +196,26 @@ export function TerminalPage() {
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      background: '#0d0f14',
+      background: 'var(--bg)',
       borderRadius: '12px',
       overflow: 'hidden',
-      border: '1px solid rgba(255,255,255,0.06)'}}>
+      border: '1px solid var(--border)'}}>
       {/* Title bar */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: '10px',
         padding: '10px 16px',
-        background: 'rgba(255,255,255,0.03)',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: 'var(--surface)',
+        borderBottom: '1px solid var(--border)',
         flexShrink: 0}}>
-        <Icon name="terminal" size={18} style={{ color: '#a78bfa' }} />
-        <span style={{ fontSize: '13px', fontWeight: 500, color: '#e2e8f0', letterSpacing: '0.01em' }}>
+        <Icon name="terminal" size={18} style={{ color: 'var(--primary)' }} />
+        <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text)', letterSpacing: '0.01em' }}>
           System Terminal
         </span>
         <StatusDot status={status} />
         {errorMsg && (
-          <span style={{ fontSize: '12px', color: '#f87171', marginLeft: 4 }}>{errorMsg}</span>
+          <span style={{ fontSize: '12px', color: 'var(--error)', marginLeft: 4 }}>{errorMsg}</span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
           {(status === 'disconnected' || status === 'error') && (
@@ -224,7 +224,7 @@ export function TerminalPage() {
               style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
                 padding: '4px 10px', borderRadius: '6px', border: 'none',
-                background: 'rgba(167,139,250,0.15)', color: '#a78bfa',
+                background: 'var(--primary-bg)', color: 'var(--primary)',
                 fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit'}}
             >
               <Icon name="refresh" size={14} />
@@ -236,7 +236,7 @@ export function TerminalPage() {
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
               padding: '4px 10px', borderRadius: '6px', border: 'none',
-              background: 'rgba(255,255,255,0.06)', color: '#94a3b8',
+              background: 'var(--surface)', color: 'var(--text-secondary)',
               fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit'}}
           >
             <Icon name="clear_all" size={14} />
@@ -260,10 +260,10 @@ export function TerminalPage() {
 
 function StatusDot({ status }: { status: ConnStatus }) {
   const colors: Record<ConnStatus, string> = {
-    connecting:   '#fbbf24',
-    connected:    '#4ade80',
-    disconnected: '#94a3b8',
-    error:        '#f87171',
+    connecting:   'var(--warning)',
+    connected:    'var(--success)',
+    disconnected: 'var(--text-secondary)',
+    error:        'var(--error)',
   }
   const labels: Record<ConnStatus, string> = {
     connecting:   'Connecting…',
@@ -277,7 +277,7 @@ function StatusDot({ status }: { status: ConnStatus }) {
         width: '7px', height: '7px', borderRadius: '50%',
         background: colors[status],
         boxShadow: status === 'connected' ? `0 0 6px ${colors[status]}` : undefined}} />
-      <span style={{ fontSize: '11px', color: '#64748b' }}>{labels[status]}</span>
+      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{labels[status]}</span>
     </span>
   )
 }

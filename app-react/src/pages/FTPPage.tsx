@@ -225,15 +225,20 @@ export function FTPPage() {
         </div>
       </header>
 
+      {/* ── Not-installed alert ── */}
+      {status && !status.installed && (
+        <div className="alert alert-warning" style={{ marginBottom: 20 }}>
+          <Icon name="warning" size={16} />
+          <div>
+            <strong>vsftpd is not installed.</strong> Add <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', background: 'var(--surface)', padding: '1px 6px', borderRadius: 4 }}>services.vsftpd.enable = true</code> to your NixOS configuration and run <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', background: 'var(--surface)', padding: '1px 6px', borderRadius: 4 }}>nixos-rebuild switch</code>, or enable it via Settings → NixOS.
+          </div>
+        </div>
+      )}
+
       {/* ── Status card ── */}
       <div className="card" style={{ padding: 20, marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <ServiceBadge active={status?.active ?? false} installed={status?.installed ?? false} />
-          {!status?.installed && (
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
-              Install vsftpd to enable FTP. On NixOS: add <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>services.vsftpd.enable = true;</code> to your configuration.
-            </span>
-          )}
         </div>
         {status?.installed && (
           <div style={{ display: 'flex', gap: 8 }}>
@@ -377,7 +382,7 @@ export function FTPPage() {
 
           {/* Save */}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button type="submit" className="btn btn-primary" disabled={saveMut.isPending}>
+            <button type="submit" className="btn btn-primary" disabled={saveMut.isPending || !status?.installed}>
               {saveMut.isPending ? (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Spinner size={14} color="rgba(0,0,0,0.7)" /> Applying…</span>
               ) : (

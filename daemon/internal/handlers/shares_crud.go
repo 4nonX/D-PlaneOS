@@ -742,3 +742,122 @@ func sanitizeSMBConfValue(val string) string {
 	val = strings.ReplaceAll(val, "=", ":")
 	return strings.TrimSpace(val)
 }
+
+// SMBSessionInfo holds per-session data from smbstatus.
+type SMBSessionInfo struct {
+	ID          string   `json:"id"`
+	User        string   `json:"user"`
+	IP          string   `json:"ip"`
+	Shares      []string `json:"shares"`
+	OpenFiles   int      `json:"open_files"`
+	ConnectedAt string   `json:"connected_at,omitempty"`
+}
+
+// ListSMBSessions returns active SMB client sessions via smbstatus.
+// GET /api/shares/smb/sessions
+func (h *ShareCRUDHandler) ListSMBSessions(w http.ResponseWriter, r *http.Request) {
+	// -p: process list (PID, user, machine/IP)
+	procOut, err := cmdutil.RunFast("smbstatus", "-p", "-n")
+	if err != nil {
+		// smbstatus unavailable or Samba not running - return empty list
+		respondOK(w, map[string]interface{}{"success": true, "sessions": []SMBSessionInfo{}})
+		return
+	}
+
+	// Parse process output: skip header lines, each data line has
+	// PID  Username  Group  Machine  ...
+	sessions := map[string]*SMBSessionInfo{}
+	inData := false
+	for _, line := range strings.Split(string(procOut), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "---") {
+			inData = true
+			continue
+		}
+		if !inData || line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		pid := fields[0]
+		user := fields[1]
+		// Machine field may be "192.168.1.10 (ipv4:...)" - take first token
+		ip := strings.TrimSuffix(fields[3], ",")
+		if idx := strings.Index(ip, "("); idx > 0 {
+			ip = strings.TrimSpace(ip[:idx])
+		}
+		sessions[pid] = &SMBSessionInfo{
+			ID:     pid,
+			User:   user,
+			IP:     ip,
+			Shares: []string{},
+		}
+	}
+
+	// -S: share list (service, PID, machine, connected_at, ...)
+	shareOut, err := cmdutil.RunFast("smbstatus", "-S", "-n")
+	if err == nil {
+		inData = false
+		for _, line := range strings.Split(string(shareOut), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "---") {
+				inData = true
+				continue
+			}
+			if !inData || line == "" {
+				continue
+			}
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				continue
+			}
+			shareName := fields[0]
+			pid := fields[1]
+			if s, ok := sessions[pid]; ok {
+				// Avoid duplicate share entries
+				found := false
+				for _, existing := range s.Shares {
+					if existing == shareName {
+						found = true
+						break
+					}
+				}
+				if !found {
+					s.Shares = append(s.Shares, shareName)
+				}
+			}
+		}
+	}
+
+	result := make([]SMBSessionInfo, 0, len(sessions))
+	for _, s := range sessions {
+		result = append(result, *s)
+	}
+	respondOK(w, map[string]interface{}{"success": true, "sessions": result})
+}
+
+// DisconnectSMBSession terminates an SMB session by PID.
+// POST /api/shares/smb/sessions/disconnect
+func (h *ShareCRUDHandler) DisconnectSMBSession(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == "" {
+		respondErrorSimple(w, "id is required", http.StatusBadRequest)
+		return
+	}
+	// Validate: PID must be numeric only
+	for _, c := range req.ID {
+		if c < '0' || c > '9' {
+			respondErrorSimple(w, "invalid session id", http.StatusBadRequest)
+			return
+		}
+	}
+	if _, err := cmdutil.RunFast("smbcontrol", req.ID, "shutdown"); err != nil {
+		respondErrorSimple(w, "failed to disconnect session: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respondOK(w, map[string]interface{}{"success": true})
+}

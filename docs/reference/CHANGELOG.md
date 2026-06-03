@@ -6,6 +6,116 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v12.5.0 (2026-06-03) - "Operator"
+
+Upgrade from: v12.4.0 - No schema migration required. No breaking API changes. No breaking configuration changes. Pure frontend, NixOS, and design system changes.
+
+### Added
+
+- **SSE one-time ticket authentication (`POST /api/sse/ticket`, `daemon/internal/handlers/sse_ticket.go`)**: Replaces session-ID-in-URL pattern for Server-Sent Events. `EventSource` cannot send custom headers; the previous approach embedded the full session token in the URL where it appeared in access logs, browser history, and `Referer` headers. The new flow: the frontend calls `POST /api/sse/ticket` (authenticated via normal headers) to receive a 32-byte random hex token valid for 30 seconds and a single connection. The session middleware checks `?ticket=` only on the two SSE paths (`/api/system/logs/stream`, `/api/docker/stacks/logs/stream`), consumes the token atomically, and sets the user context. Session IDs never appear in any URL. `Referrer-Policy: no-referrer` added to the log stream handler.
+
+- **`usePersistedState` hook (`app-react/src/hooks/usePersistedState.ts`)**: Drop-in replacement for `useState` backed by `localStorage`. Lazy-initialises from the stored value on first render, writes back on every update, handles both string and number types. Applied to 14 preferences across 12 pages: tab selections on Pools, Network, Replication, Users, Quotas, GitOps, iSCSI, Snapshot Scheduler, Settings, Security, Docker (outer tab), and LogsPage level filter and history limit. View mode preference (grid/list/stacks) on DockerPage was already fixed; Docker outer tab now also persists.
+
+- **`@/lib/fmt.ts` - locale-aware date utilities**: `fmtDate(raw)` and `fmtDateTime(raw)` using `undefined` locale to respect the user's browser/OS setting. Replaces hardcoded `'de-DE'` locale in seven pages: FilesPage, UsersPage, GitOpsPage, CloudSyncPage, SupportPage, DirectoryPage, SecurityPage.
+
+- **`--surface-2` CSS token**: Added to both `:root` (dark: `hsla(hue, 20%, 22%, 0.5)`) and `[data-theme="light"]` (light: `hsl(hue, 15%, 87%)`). Was referenced in 20 places across DockerPage and NVMeOFPage but never defined, causing all panel headers, code blocks, and toolbar backgrounds to silently render transparent.
+
+- **WireGuard VPN compose template (`daemon/internal/handlers/docker_templates.go`)**: Added `vpn-wireguard` template to the Docker Compose template catalogue. Covers wg-easy with variables for public hostname, WireGuard port, web UI port, admin password hash, DNS, and config directory. Kernel 6.6 has WireGuard built-in (CONFIG_WIREGUARD=y); no separate module required.
+
+- **NixOS: `tun` kernel module (`nixos/module.nix`)**: Added `"tun"` to `boot.kernelModules`. Required for OpenVPN and Tailscale Docker containers to create `/dev/net/tun`. Previously absent, causing OpenVPN and Tailscale containers to fail at startup with "cannot open /dev/net/tun: No such file or directory".
+
+### Fixed
+
+- **Frontend-backend wiring: 7 broken mutations fixed**:
+  - PoolsPage encryption unlock/lock: sent `name`/`passphrase` but handler reads `dataset`/`key`.
+  - QuotasPage dataset quota: called `POST /api/zfs/datasets` (creates a dataset) instead of `POST /api/zfs/dataset/quota`; quota was never set.
+  - NetworkPage DNS save: sent field `dns` but handler reads `nameservers`; DNS could never be saved.
+  - RemovableMediaPage mount/unmount/eject: sent `path` field but handler reads `device`; all three operations returned 400.
+  - SharesPage SMB sessions: `GET /api/shares/smb/sessions` and `POST /api/shares/smb/sessions/disconnect` were not registered; both returned 404. Added `ListSMBSessions` and `DisconnectSMBSession` handlers in `shares_crud.go` parsing `smbstatus` output.
+  - LogsPage SSE stream: session was passed as `?session=<id>` but the session middleware only reads the `X-Session-ID` header; the log stream always returned 401. Fixed via the new SSE ticket system.
+  - DirectoryPage LDAP mapping delete: sent `id` in the JSON body but handler reads `r.URL.Query().Get("id")`.
+
+- **NixOS: Samba and NFS were silently disabled despite being core NAS features (`nixos/modules/samba.nix`, `nixos/modules/nfs.nix`)**: Both modules used `lib.mkEnableOption` (default false) and neither was ever set to `true` anywhere in the codebase. A NAS OS that ships with SMB and NFS disabled is broken by definition. Fixed: `enable` option changed from `mkEnableOption` to `lib.mkOption { type = lib.types.bool; default = true; }` in both modules. Both modules are now imported directly from `nixos/module.nix` (alongside `ha.nix`) so every DPlaneOS installation gets them without any user configuration. NFS was also missing from the `flake.nix` production configs entirely; now comes transitively via `nixosModules.dplaneos`.
+
+- **Dead route aliases removed (`daemon/cmd/dplaned/main.go`)**: Three routes that were never called by any frontend code deleted:
+  - `/api/settings/telegram` (alias for `/api/alerts/telegram`)
+  - `/api/system/acl` (alias for `/api/acl/get`+`/api/acl/set`)
+  - `/api/status` (alias for `/api/system/status`)
+
+- **VPN handler removed (`daemon/internal/handlers/system.go`)**: The `if action == "vpn" || action == "add_vpn" || action == "remove_vpn"` branch in `ApplyNetworkWithRollback` returned 501 with a message directing operators to Docker. The frontend never sent these action strings. The handler was a lie: it advertised VPN as a known-but-unimplemented network action. Unknown actions now fall through to the existing 400 response.
+
+- **ApiExplorerPage stale endpoint entries (`app-react/src/pages/ApiExplorerPage.tsx`)**: Five endpoint entries pointed to non-existent paths: `/api/shares/settings` (correct: `/api/smb/settings`), `/api/hardware` (correct: `/api/zfs/smart` + `/api/system/disks`), `/api/network/interfaces` (correct: `/api/system/network`), `/api/system/info` (correct: `/api/system/status`), `/api/alerts` (replaced with three real alert endpoints). All corrected to working paths.
+
+- **TerminalPage UI chrome hex colors**: Non-xterm hex values in the title bar (`#a78bfa`, `#e2e8f0`, `#f87171`, `rgba(167,139,250,0.15)`, etc.) and `StatusDot` component replaced with design system tokens (`var(--primary)`, `var(--text)`, `var(--error)`, `var(--warning)`, `var(--success)`, `var(--text-secondary)`, `var(--text-tertiary)`). xterm.js `ITheme` hex values unchanged (library API requires raw hex).
+
+- **PoolsPage "All Healthy" storage summary badge hardcoded**: The badge always showed "All Healthy" with a `check_circle` icon regardless of actual pool health. Now derives from `pools.every(p => p.health === 'ONLINE')` and shows a `warning` icon with "N Pool(s) Degraded" when any pool is not ONLINE.
+
+- **Snapshot rollback had no snapshot picker (`app-react/src/pages/DatasetsPage.tsx`)**: The rollback modal blindly targeted the most recent snapshot with no way to select a specific restore point. Now fetches available snapshots via `GET /api/zfs/snapshots?dataset=`, renders them sorted newest-first, requires selection, and posts `{ snapshot: "dataset@name", force: true }`. A destructive-action warning is shown.
+
+- **QuotasPage dataset input required exact free-text entry**: The dataset name input required operators to type `tank/data` exactly. Replaced with a `<select>` populated from `GET /api/zfs/datasets`.
+
+- **NetworkPage apply warning shown after change fires**: The 30-second revert window warning appeared only after the network change was already applied. Moved inside the `ConfigureIfaceModal` as a pre-action info banner so operators see it before clicking Apply.
+
+- **Delegation page lost state on reload**: The ZFS delegation UI tracked additions in client state only. After reload, only the raw `zfs allow` text was shown. Added `parseZfsAllow()` parser that extracts structured entries (type, principal, permissions) from the raw output into a table. Raw output preserved in a collapsed `<details>` block.
+
+- **FirewallPage had no rule deletion**: Rules could be added but not removed from the UI. Delete button added to each rule row calling the existing `POST /api/firewall/rule { action: "delete", rule_num: N }` endpoint.
+
+- **Replication job failures had no log link**: Failed schedule rows showed status but no way to see why. "View logs" button added that opens a `JobConsole` modal when `last_status === 'failed'` and `last_job_id` is present.
+
+- **Create Dataset dedup inconsistency**: The DatasetsPage create modal had a deduplication selector; PoolsPage version did not. Dedup field added to PoolsPage `CreateDatasetModal`.
+
+- **FilesPage "Edit" opened binary files**: The context menu "Edit" action appeared for all file types. Renamed "Edit Text" and restricted to recognized text file extensions via an `isTextFile()` helper checking against a set of known text extensions.
+
+- **Username creation had no client-side validation**: Invalid usernames (e.g., starting with a digit, containing spaces) failed silently at the server with a generic error. Added `/^[a-z_][a-z0-9_-]*$/` validation and 2-32 character length check before the POST, plus inline hint text on the username field.
+
+- **AuditPage dev artifact and broken icon**: Page title had a leftover "RESTORED: " prefix. `Icon name="Search"` used PascalCase (Material Symbols names are snake_case, so this rendered nothing). Both fixed.
+
+- **ACLPage bare form when accessed without a path param**: Direct sidebar navigation to `/acl` showed only an empty path input with no guidance. Added a centered guidance card explaining to navigate from File Explorer or Datasets.
+
+- **SharesPage had an NFS reload button**: The SMB Shares page contained a "Reload NFS" button that belongs on the NFS page. Removed.
+
+- **"Destroy Pool" button sat next to "Expand Pool"**: Catastrophic irreversible action had identical visual weight to constructive actions. Moved to a clearly separated danger zone at the bottom of each pool card with a red top-border separator.
+
+- **FTPPage showed a full config form when vsftpd was not installed**: The form silently failed to save. Now shows a clear `alert-warning` banner with NixOS installation instructions and disables the save/start buttons when `installed: false`.
+
+- **SetupWizard "Finish Setup" button had no loading state**: The button remained enabled and unlabeled during the POST, enabling duplicate requests. Now disabled with "Finalising…" label during completion.
+
+- **SetupWizard hostname had no format validation**: Hostname with spaces or uppercase letters would silently fail at the daemon. Validation added before proceeding.
+
+- **LoginPage boot spinner had no text**: A full-page spinner with no explanation appeared while the daemon status was being checked. "Connecting to D-PlaneOS..." label added.
+
+- **IPMIPage had no manual refresh button**: No way to force a refresh other than navigating away and back. Refresh button added.
+
+- **Dashboard UPS status showed raw NUT codes**: "OL", "OB", "LB" etc. displayed directly. Mapped to human-readable labels ("Online", "On Battery", "Low Battery", etc.).
+
+- **Dashboard disk temperature alert did not auto-clear**: The alert persisted after the disk cooled down until manually dismissed. Now auto-clears after 60 seconds.
+
+- **S3Page had no MinIO console link**: `console_port` was fetched in the status response but no link was rendered. "Open MinIO Console" button added, shown when MinIO is running.
+
+### Changed
+
+- **Navigation completely restructured**: The 19-item Storage sidebar group is replaced with focused groups. Storage (7 items: core ZFS), Sharing (7 items: all file/block protocols), File Explorer (standalone leaf), Data Protection (4 items: snapshots/replication/backup/cloud-sync), Containers (formerly "Compute"; Docker + GitOps Engine). Removable Media moved from Network to System. Inotify Watches moved to sit after Reporting (both are observability tools). "Shares" renamed "SMB Shares" to clarify scope.
+
+- **"Compute" nav group renamed "Containers"**: The group containing Docker and GitOps Engine was named "Compute" which implied server/VM workloads. Renamed to "Containers" which accurately describes its contents.
+
+- **Docker Compose Templates page and backend deleted**: `ModulesPage.tsx`, `docker_templates.go`, and all `/api/docker/templates/*` routes removed. The Docker page's Compose Stacks tab already provides full compose deployment; the templates page was entirely redundant.
+
+- **NixOS modules now imported centrally (`nixos/module.nix`)**: `nixos/modules/samba.nix`, `nixos/modules/nfs.nix`, and `nixos/modules/fenced.nix` are now imported in `module.nix` alongside the existing `ha.nix` import. Users and flake configurations no longer need to import these separately. The explicit `./nixos/modules/samba.nix` imports removed from `flake.nix` `dplaneos` and `dplaneos-arm` configurations.
+
+- **SetupWizard done screen shows next-steps checklist**: The previous "go to dashboard" message gave no guidance. Replaced with a 4-item next-steps checklist (create dataset, create share, add users, configure static IP) with clickable links to each page.
+
+- **SupportPage pre-upgrade snapshot list links to NixOS generations rollback**: A note added pointing operators to Settings > NixOS > Generations for snapshot rollback.
+
+- **MonitoringPage title made consistent**: Page title changed from "System Monitoring" to "Inotify Watches" to match the sidebar label. Subtitle updated to explain what inotify watches are and why hitting the limit causes silent failures in file-watching applications.
+
+- **SettingsPage license key field has explanatory hint**: Previously showed a bare input with no explanation. Hint added: activates optional add-ons, leave blank for the standard open-source build.
+
+- **SSHKeysPage port change shows clear reconnection warning**: A `toast.warning` is shown after a successful port change, naming the new port and noting that connections on the old port will be refused after the next `nixos-rebuild switch`.
+
+- **UPSPage shutdown_level field has unit hint**: Field now explains the value is a battery percentage (e.g. 20 for 20%).
+
+---
+
 ## v12.4.0 (2026-06-03) - "Meridian"
 
 Upgrade from: v12.3.0 - No schema migration required. No breaking API changes. No breaking configuration changes. Pure frontend and design system changes.

@@ -65,7 +65,7 @@ zfs set com.sun:auto-snapshot=false tank/scratch
 
 ### Scheduled Snapshots via the UI
 
-Storage UI: Snapshots tab on any dataset. Set a cron schedule, retention count, and whether to include child datasets.
+Data Protection → Snapshot Scheduler. Set a per-dataset schedule (hourly/daily/weekly/monthly), retention count, and whether to include child datasets.
 
 These schedules are stored in `/etc/dplaneos/snapshot-schedules.json` and survive reboots (the `/etc/dplaneos/` directory is bind-mounted from `/persist`). SMART task schedules are separate and can be declared in `state.yaml` under `smart_tasks`.
 
@@ -103,7 +103,7 @@ zfs send -i tank/data@backup-20260501 tank/data@backup-20260509 | \
 
 ### Scheduled Remote Replication via UI
 
-Replication is configured through two screens under **Replication** in the nav:
+Replication is configured through two screens under **Data Protection → Replication** in the nav:
 
 **Step 1 - Add a Peer** (Replication: Peers: Add Peer)
 
@@ -171,7 +171,7 @@ Cloud Sync uses rclone to synchronize datasets to object storage providers: S3-c
 
 ### Setup via UI
 
-Settings: Cloud Sync: Add Provider.
+Data Protection → Cloud Sync → Add Provider.
 
 1. Select provider type
 2. Enter credentials (access key, secret key, region, endpoint for S3-compatible)

@@ -54,15 +54,15 @@ export function AuditPage() {
     )
   }
 
-  // 2. CE Not Present (Stealth Mode)
+  // 2. CE Not Present - show clear informational state
   if (!hasCE) {
     return (
       <div className="page-container" style={{ height: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="empty-state" style={{ maxWidth: '480px', border: 'none', background: 'transparent' }}>
-          <Icon name="Search" className="empty-state-icon" style={{ opacity: 0.1, fontSize: '64px' }} />
-          <h2 className="empty-state-title" style={{ opacity: 0.5 }}>No audit data available</h2>
-          <p className="empty-state-body" style={{ opacity: 0.4 }}>
-            System event logging is active in the background for maintenance, but not exposed in the current interface.
+          <Icon name="policy" className="empty-state-icon" style={{ fontSize: '64px', color: 'var(--text-tertiary)' }} />
+          <h2 className="empty-state-title">Audit Log</h2>
+          <p className="empty-state-body">
+            Audit logging records all system changes and security events. No audit entries have been recorded yet.
           </p>
         </div>
       </div>
@@ -73,7 +73,7 @@ export function AuditPage() {
   return (
     <div className="page-container" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="page-header">
-        <h1 className="page-title">RESTORED: System Audit</h1>
+        <h1 className="page-title">System Audit</h1>
         <p className="page-subtitle">Real-time cryptographic audit trail of system-wide operations.</p>
       </header>
 

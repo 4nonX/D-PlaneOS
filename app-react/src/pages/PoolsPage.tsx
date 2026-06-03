@@ -288,6 +288,12 @@ function DatasetNode({ node, depth, onCreateChild, onEdit, onDelete, onAction }:
             </Tooltip>
             <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>ratio</div>
           </div>
+          <div style={{ textAlign: 'right', minWidth: 52 }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)' }}>
+              {node.quota && node.quota !== 'none' && node.quota !== '-' && node.quota !== '0' ? node.quota : '-'}
+            </div>
+            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>quota</div>
+          </div>
           <div style={{ display:'flex', gap:2 }}>
             <DatasetActionMenu node={node} onAction={onAction} />
           </div>
@@ -310,6 +316,7 @@ function CreateDatasetModal({ parentName, onClose, onCreated }: {
   const [childName, setChildName] = useState('')
   const [compression, setCompression] = useState('lz4')
   const [quota, setQuota] = useState('')
+  const [dedup, setDedup] = useState('off')
 
   const mutation = useMutation({
     mutationFn: () => api.post('/api/zfs/datasets', {
@@ -317,6 +324,7 @@ function CreateDatasetModal({ parentName, onClose, onCreated }: {
       mountpoint: `/${parentName}/${childName}`,
       quota,
       compression,
+      dedup,
     }),
     onSuccess: () => { toast.success(`Dataset ${parentName}/${childName} created`); onCreated(); onClose() },
     onError: (e: Error) => toast.error(e.message),
@@ -344,6 +352,12 @@ function CreateDatasetModal({ parentName, onClose, onCreated }: {
             {ZSTD_LEVELS.map(z => <option key={z} value={z}>{z}</option>)}
             <option value="gzip">GZIP</option>
             <option value="off">Off</option>
+          </select>
+        </label>
+        <label className="field">
+          <span className="field-label">Deduplication</span>
+          <select value={dedup} onChange={e => setDedup(e.target.value)} className="input" style={{ appearance: 'none' }}>
+            {['off', 'on', 'verify', 'sha512'].map(d => <option key={d} value={d}>{d}</option>)}
           </select>
         </label>
         <label className="field">
@@ -565,9 +579,16 @@ function StorageSummary({ pools }: { pools: ZFSPool[] }) {
         <div style={{ textAlign: 'right', minWidth: 120 }}>
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>Total Pools</div>
           <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700 }}>{pools.length}</div>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--success)', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-            <Icon name="check_circle" size={12} /> All Healthy
-          </div>
+          {(() => {
+            const allHealthy = pools.every(p => p.health === 'ONLINE')
+            const degradedCount = pools.filter(p => p.health !== 'ONLINE').length
+            return (
+              <div style={{ fontSize: 'var(--text-xs)', color: allHealthy ? 'var(--success)' : 'var(--warning)', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                <Icon name={allHealthy ? 'check_circle' : 'warning'} size={12} />
+                {allHealthy ? 'All Healthy' : `${degradedCount} Pool${degradedCount !== 1 ? 's' : ''} Degraded`}
+              </div>
+            )
+          })()}
         </div>
       </div>
     </div>
@@ -1458,9 +1479,6 @@ function PoolCard({ pool, datasets, filter, onRefresh }: { pool: ZFSPool; datase
           <button onClick={() => setShowExpandModal(true)} className="btn btn-sm btn-ghost">
             <Icon name="add" size={14} /> Expand Pool
           </button>
-          <button onClick={() => setShowDestroyModal(true)} className="btn btn-sm btn-ghost btn-danger-hover">
-            <Icon name="delete" size={14} /> Destroy Pool
-          </button>
         </div>
       </div>
 
@@ -1534,6 +1552,13 @@ function PoolCard({ pool, datasets, filter, onRefresh }: { pool: ZFSPool; datase
       >
         <Icon name="add" size={16} /> Add Dataset
       </button>
+
+      {/* Danger Zone */}
+      <div style={{ borderTop: '1px solid var(--error-border)', marginTop: 16, paddingTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+        <button onClick={() => setShowDestroyModal(true)} className="btn btn-ghost" style={{ color: 'var(--error)', borderColor: 'var(--error-border)', fontSize: 'var(--text-xs)' }}>
+          <Icon name="delete_forever" size={13} />Destroy Pool…
+        </button>
+      </div>
 
       {createParent !== null && (
         <CreateDatasetModal

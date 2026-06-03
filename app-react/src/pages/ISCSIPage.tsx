@@ -18,6 +18,7 @@ import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { toast } from '@/hooks/useToast'
+import { usePersistedState } from '@/hooks/usePersistedState'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 interface Target { iqn: string; zvol?: string; sessions?: number; size?: number }
@@ -28,7 +29,7 @@ function fmtSize(b?: number) { if (!b) return '-'; const u=['B','KB','MB','GB','
 type ITab = 'targets' | 'acls'
 
 export function ISCSIPage() {
-  const [tab, setTab] = useState<ITab>('targets')
+  const [tab, setTab] = usePersistedState<ITab>('iscsi.tab', 'targets')
   const TABS = [{ id:'targets' as ITab, label:'Targets', icon:'storage' }, { id:'acls' as ITab, label:'ACLs / Initiators', icon:'lock' }]
   const { confirm, ConfirmDialog } = useConfirm()
   const qc = useQueryClient()

@@ -4,13 +4,13 @@
 
 { config, lib, pkgs, ... }:
 
-# Samba integration is provided by ./modules/samba.nix which is imported
-# separately in configuration.nix. This module focuses on the daemon itself.
+# Samba, NFS, and fenced modules are imported below and are available to all
+# DPlaneOS installations. Samba and NFS default to enabled; fenced defaults to disabled.
 
 let
   cfg = config.services.dplaneos;
 in {
-  imports = [ ./ha.nix ./console-network-wizard.nix ];
+  imports = [ ./ha.nix ./console-network-wizard.nix ./modules/samba.nix ./modules/nfs.nix ./modules/fenced.nix ];
 
   options.services.dplaneos = {
     enable = lib.mkEnableOption "DPlaneOS NAS daemon";
@@ -182,7 +182,9 @@ in {
 
     # NVMe-oF target (kernel nvmet) - modules load at boot; dplaned writes configfs at runtime.
     # fuse is included here for rclone cold tier FUSE mounts (managed by dplaned at runtime).
-    boot.kernelModules = [ "nvmet" "nvmet-tcp" "fuse" ];
+    # tun is required for OpenVPN and Tailscale Docker containers (/dev/net/tun device node).
+    # WireGuard is built into kernel 6.6+ (CONFIG_WIREGUARD=y) - no separate module needed.
+    boot.kernelModules = [ "nvmet" "nvmet-tcp" "fuse" "tun" ];
 
     # ─── Docker ──────────────────────────────────────────────────────────
     virtualisation.docker = lib.mkMerge [

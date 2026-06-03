@@ -80,36 +80,41 @@ const CATALOG: EndpointGroup[] = [
   {
     label: 'Shares', icon: 'folder_shared',
     endpoints: [
-      { method: 'GET',  path: '/api/shares/list',          description: 'List all SMB shares' },
-      { method: 'GET',  path: '/api/shares/smb/sessions',  description: 'List active SMB sessions' },
-      { method: 'GET',  path: '/api/shares/settings',      description: 'Get SMB global settings' },
+      { method: 'GET',  path: '/api/shares/list',             description: 'List all SMB shares' },
+      { method: 'GET',  path: '/api/shares/smb/sessions',     description: 'List active SMB sessions' },
+      { method: 'GET',  path: '/api/smb/settings',            description: 'Get SMB global settings (time machine, shadow copy, recycle bin)' },
     ],
   },
   {
     label: 'Docker', icon: 'developer_board',
     endpoints: [
-      { method: 'GET',  path: '/api/docker/containers',    description: 'List Docker containers' },
+      { method: 'GET',  path: '/api/docker/containers',       description: 'List Docker containers' },
     ],
   },
   {
     label: 'Hardware', icon: 'memory',
     endpoints: [
-      { method: 'GET',  path: '/api/hardware',             description: 'Get hardware details: CPU, RAM, disks, temperatures' },
+      { method: 'GET',  path: '/api/zfs/smart',               description: 'Get SMART health data for all disks' },
+      { method: 'GET',  path: '/api/system/disks',            description: 'List all physical disks with by-id paths and metadata' },
+      { method: 'GET',  path: '/api/hardware/smart/schedules', description: 'List SMART test schedules' },
     ],
   },
   {
     label: 'Network', icon: 'lan',
     endpoints: [
-      { method: 'GET',  path: '/api/network/interfaces',   description: 'List network interfaces and their current state' },
+      { method: 'GET',  path: '/api/system/network',          description: 'List network interfaces and their current state' },
+      { method: 'GET',  path: '/api/network/vlan',            description: 'List VLAN interfaces' },
     ],
   },
   {
     label: 'System', icon: 'tune',
     endpoints: [
-      { method: 'GET',  path: '/api/system/info',          description: 'Get system info: hostname, version, uptime' },
-      { method: 'GET',  path: '/api/system/metrics',       description: 'Get live system metrics: CPU, memory, ARC' },
-      { method: 'GET',  path: '/api/monitoring/inotify',   description: 'Get inotify watch limit usage' },
-      { method: 'GET',  path: '/api/alerts',               description: 'List system alerts' },
+      { method: 'GET',  path: '/api/system/status',           description: 'Get system status: hostname, version, uptime, setup state' },
+      { method: 'GET',  path: '/api/system/metrics',          description: 'Get live system metrics: CPU, memory, ARC' },
+      { method: 'GET',  path: '/api/monitoring/inotify',      description: 'Get inotify watch limit usage' },
+      { method: 'GET',  path: '/api/alerts/webhooks',         description: 'List configured alert webhooks' },
+      { method: 'GET',  path: '/api/alerts/telegram',         description: 'Get Telegram alert configuration' },
+      { method: 'GET',  path: '/api/alerts/smtp',             description: 'Get SMTP alert configuration' },
     ],
   },
 ]

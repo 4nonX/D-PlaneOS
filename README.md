@@ -89,7 +89,7 @@ Full license inventory and attribution in [NOTICE.md](NOTICE.md).
 | **Storage** | ZFS pools, datasets, snapshots, `zfs send` replication, native encryption, quotas, S.M.A.R.T., POSIX ACLs, file explorer with chunked uploads |
 | **Hot-swap** | udev detects disk add/remove; daemon auto-imports FAULTED/UNAVAIL pools and suggests vdev replacements in the UI |
 | **Sharing** | SMB (with Time Machine via `vfs_fruit`), NFS, iSCSI, configured from the UI |
-| **Containers** | Docker, Compose stacks, template library, ephemeral ZFS-clone sandboxes, atomic updates with rollback |
+| **Containers** | Docker, Compose stacks, ephemeral ZFS-clone sandboxes, atomic updates with rollback, in-browser terminal |
 | **Network** | Interface config, bonding, VLANs, routing, DNS |
 | **Identity** | Local users, LDAP / AD with group-to-role mapping, OIDC SSO (Authorization Code + PKCE), TOTP 2FA, API tokens |
 | **Security** | RBAC (4 roles, 34 permissions), HMAC audit chain, CSRF protection, firewall, TLS, allowlist-validated exec calls |

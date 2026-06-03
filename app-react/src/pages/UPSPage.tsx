@@ -142,10 +142,11 @@ function ConfigPanel({ initial }: { initial: UPSResponse }) {
           <span className="field-label">UPS Name</span>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="ups" className="input" style={{ fontFamily: 'var(--font-mono)' }} />
         </label>
-        <label className="field">
+        <div className="field" style={{ display: 'flex', flexDirection: 'column' }}>
           <span className="field-label">Shutdown %</span>
           <input type="number" value={shutLevel} onChange={e => setShutLevel(e.target.value)} min={5} max={95} className="input" />
-        </label>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginTop: 4 }}>Battery percentage at which the system begins a safe shutdown (e.g. 20 for 20%)</span>
+        </div>
       </div>
       <button onClick={() => save.mutate()} disabled={save.isPending} className="btn btn-primary">
         <Icon name="save" size={15} />{save.isPending ? 'Saving…' : 'Save Config'}

@@ -21,6 +21,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { fmtDateTime } from '@/lib/fmt'
 import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
@@ -50,7 +51,7 @@ function statusDot(s?: string) {
   return <span style={{ width:8, height:8, borderRadius:'50%', background:c, display:'inline-block', flexShrink:0 }} />
 }
 
-function fmtDate(s?:string){if(!s)return'-';try{return new Date(s).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}catch{return s}}
+function fmtDate(s?:string){if(!s)return'-';return fmtDateTime(s)}
 
 const PROVIDER_ICONS: Record<string,string> = { s3:'cloud', b2:'cloud', gdrive:'folder', dropbox:'cloud_download', sftp:'terminal', rclone:'sync' }
 

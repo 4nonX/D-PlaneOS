@@ -138,9 +138,9 @@ function ConfigureIfaceModal({ iface, onClose, onDone }: {
         </label>
       )}
 
-      <div style={{ padding: '10px 14px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)', color: 'var(--warning)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-        <Icon name="warning" size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-        Applying new network settings may briefly disconnect you. You will have 30 seconds to confirm the change before it reverts.
+      <div style={{ padding: '10px 14px', background: 'var(--info-bg)', border: '1px solid var(--info-border)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)', color: 'var(--info)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        <Icon name="info" size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+        Network changes apply immediately. You have <strong>30 seconds</strong> to confirm before the system reverts. Ensure you will still have browser access at the new address.
       </div>
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

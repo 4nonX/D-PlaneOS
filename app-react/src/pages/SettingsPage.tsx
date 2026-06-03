@@ -182,6 +182,9 @@ function GeneralTab() {
       <Field label="Enterprise License Key" hint="Unlocks cryptographic compliance engine and audit automation">
         <input type="password" value={licenseKey} onChange={e => setLicenseKey(e.target.value)}
           placeholder="Unlicensed" className="input" style={{ fontFamily: 'var(--font-mono)' }} />
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginTop: 4 }}>
+          Activates optional add-ons (Compliance Engine, advanced HA features). Leave blank for the standard open-source build.
+        </span>
       </Field>
 
       {pluginSettingsInject({

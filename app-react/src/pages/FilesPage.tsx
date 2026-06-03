@@ -20,6 +20,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import type React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, getSessionId, getUsername, getCsrfToken } from '@/lib/api'
+import { fmtDateTime } from '@/lib/fmt'
 import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton, Spinner } from '@/components/ui/LoadingSpinner'
@@ -63,8 +64,7 @@ function fmtSize(bytes: number): string {
 
 function fmtDate(s: string): string {
   if (!s) return '-'
-  try { return new Date(s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
-  catch { return s }
+  return fmtDateTime(s)
 }
 
 function fileIcon(entry: FileEntry): string {
@@ -80,6 +80,17 @@ function fileIcon(entry: FileEntry): string {
 }
 
 // ---------------------------------------------------------------------------
+// Text file detection for Edit action
+// ---------------------------------------------------------------------------
+
+const TEXT_EXTENSIONS = new Set(['txt','md','json','yaml','yml','toml','ini','conf','sh','bash','zsh','fish','py','js','ts','jsx','tsx','go','rs','c','cpp','h','java','xml','html','css','svg','log','env','gitignore','dockerfile','nix'])
+
+function isTextFile(name: string): boolean {
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  return TEXT_EXTENSIONS.has(ext)
+}
+
+// ---------------------------------------------------------------------------
 // ContextMenu
 // ---------------------------------------------------------------------------
 
@@ -91,7 +102,7 @@ function ContextMenu({ state, onClose, onAction }: {
   onAction: (action: string, entry: FileEntry) => void
 }) {
   const items = [
-    ...(state.entry.is_dir ? [] : [{ label: 'Edit', icon: 'edit_note', action: 'edit' }]),
+    ...(state.entry.is_dir ? [] : isTextFile(state.entry.name) ? [{ label: 'Edit Text', icon: 'edit_note', action: 'edit' }] : []),
     ...(state.entry.is_dir ? [] : [{ label: 'Download', icon: 'download', action: 'download' }]),
     ...(state.entry.is_dir ? [] : [{ label: 'Share Link', icon: 'add_link', action: 'share' }]),
     { label: 'Rename', icon: 'edit', action: 'rename' },

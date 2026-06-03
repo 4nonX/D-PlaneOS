@@ -186,9 +186,12 @@ function DaemonSettingsTab() {
   const [passwordAuth, setPasswordAuth]   = useState<string>('unset')
   const [permitRoot, setPermitRoot]       = useState<string>('')
   const [initialised, setInitialised]     = useState(false)
+  const [originalPort, setOriginalPort]   = useState<string>('')
 
   if (data && !initialised) {
-    setPort(data.port > 0 ? String(data.port) : '')
+    const p = data.port > 0 ? String(data.port) : ''
+    setPort(p)
+    setOriginalPort(p)
     setPasswordAuth(data.password_auth === null ? 'unset' : data.password_auth ? 'true' : 'false')
     setPermitRoot(data.permit_root_login ?? '')
     setInitialised(true)
@@ -206,7 +209,13 @@ function DaemonSettingsTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ssh', 'daemon'] })
-      toast.success('SSH daemon settings saved - apply NixOS config to activate')
+      const newPort = port.trim()
+      if (newPort && newPort !== originalPort) {
+        toast.warning(`SSH port changed to ${newPort}. Update your SSH client to connect on the new port - connections on the old port will be refused after the next nixos-rebuild switch.`)
+      } else {
+        toast.success('SSH daemon settings saved - apply NixOS config to activate')
+      }
+      setOriginalPort(newPort)
     },
     onError: (e: Error) => toast.error(e.message),
   })

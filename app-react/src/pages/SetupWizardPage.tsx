@@ -567,13 +567,20 @@ function StepSystem({
   hostname, setHostname,
   timezone, setTimezone,
   onNext, onBack,
+  completing,
 }: {
   hostname:    string; setHostname: (v: string) => void
   timezone:    string; setTimezone: (v: string) => void
   onNext:      () => void
   onBack:      () => void
+  completing:  boolean
 }) {
   function submit() {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(hostname.trim())) {
+      // import toast is available from '@/hooks/useToast' - use inline alert instead
+      alert('Hostname must be lowercase letters, numbers, and hyphens only')
+      return
+    }
     onNext()
   }
 
@@ -617,11 +624,11 @@ function StepSystem({
         </label>
 
         <div style={{ display: 'flex', gap: 10, marginTop: 8, justifyContent: 'center' }}>
-          <button onClick={onBack} className="btn btn-ghost">
+          <button onClick={onBack} className="btn btn-ghost" disabled={completing}>
             <Icon name="arrow_back" size={16} /> Back
           </button>
-          <button onClick={submit} className="btn btn-primary">
-            Finish Setup <Icon name="arrow_forward" size={16} />
+          <button onClick={submit} disabled={completing} className="btn btn-primary">
+            {completing ? 'Finalising…' : 'Finish Setup'} <Icon name="arrow_forward" size={16} />
           </button>
         </div>
       </div>
@@ -652,10 +659,22 @@ function StepComplete({ hostname, onGoToLogin }: { hostname: string; onGoToLogin
         ) : 'Your NAS is ready.'}
         {' '}Sign in with the admin credentials you just created.
       </p>
-      <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', marginBottom: 36 }}>
-        You can configure shares, users, and more from the dashboard.
-      </p>
-      <button onClick={onGoToLogin} className="btn btn-primary" style={{ fontSize: 'var(--text-md)', padding: '14px 36px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 20, textAlign: 'left', maxWidth: 400, margin: '20px auto 0' }}>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>Recommended next steps:</div>
+        {[
+          { icon: 'dataset',           text: 'Create a dataset on your pool',        route: '/datasets' },
+          { icon: 'folder_shared',     text: 'Create an SMB share',                  route: '/shares' },
+          { icon: 'group',             text: 'Add system users',                     route: '/users' },
+          { icon: 'settings_ethernet', text: 'Configure a static IP (optional)',      route: '/network' },
+        ].map(item => (
+          <a key={item.route} href={item.route} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', textDecoration: 'none', border: '1px solid var(--border)' }}>
+            <Icon name={item.icon} size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+            <span>{item.text}</span>
+            <Icon name="chevron_right" size={14} style={{ color: 'var(--text-tertiary)', marginLeft: 'auto' }} />
+          </a>
+        ))}
+      </div>
+      <button onClick={onGoToLogin} className="btn btn-primary" style={{ fontSize: 'var(--text-md)', padding: '14px 36px', marginTop: 24 }}>
         Go to Login <Icon name="login" size={18} />
       </button>
     </div>
@@ -770,6 +789,7 @@ export function SetupWizardPage() {
                 timezone={timezone}  setTimezone={setTimezone}
                 onNext={finish}
                 onBack={() => setStep(selectedDisks.size > 0 ? 3 : 2)}
+                completing={completing}
               />
               {completing && (
                 <div style={{ marginTop: 16, color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', textAlign: 'center' }}>

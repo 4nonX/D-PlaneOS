@@ -60,7 +60,11 @@ in {
 
   options.services.dplaneos.nfs = {
 
-    enable = lib.mkEnableOption "DPlaneOS NFSv4 server with idmapping and ACL support";
+    enable = lib.mkOption {
+      type        = lib.types.bool;
+      default     = true;
+      description = "Enable DPlaneOS NFSv4 server with idmapping and ACL support. NFS is a core NAS feature and is enabled by default.";
+    };
 
     nfs4Domain = lib.mkOption {
       type    = lib.types.str;

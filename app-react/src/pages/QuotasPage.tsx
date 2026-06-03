@@ -40,6 +40,13 @@ function DatasetQuotaLookup() {
   const [quota, setQuota] = useState('')
 
   const qc = useQueryClient()
+
+  const datasetsQ = useQuery({
+    queryKey: ['zfs', 'datasets', 'names'],
+    queryFn: ({ signal }) => api.get<{ success: boolean; data: Array<{ name: string }> }>('/api/zfs/datasets', signal),
+    staleTime: 60_000,
+  })
+
   const quotaQ = useQuery({
     queryKey: ['quota', 'dataset', queried],
     queryFn:  ({ signal }) => api.get<{ success:boolean; quota?:number; refquota?:number }>(`/api/zfs/dataset/quota?dataset=${encodeURIComponent(queried!)}`, signal),
@@ -61,8 +68,13 @@ function DatasetQuotaLookup() {
     <div className="card" style={{ borderRadius:'var(--radius-xl)', padding:22, marginBottom:24 }}>
       <div style={{ fontWeight:700, marginBottom:14 }}>Dataset Quota</div>
       <div style={{ display:'flex', gap:8, marginBottom:14 }}>
-        <input value={dataset} onChange={e=>setDataset(e.target.value)} placeholder="tank/data" className="input" style={{ flex:1, fontFamily:'var(--font-mono)' }} onKeyDown={e=>e.key==='Enter'&&setQueried(dataset)} />
-        <button onClick={()=>setQueried(dataset)} className="btn btn-primary"><Icon name="search" size={14}/>Load</button>
+        <select value={dataset} onChange={e=>setDataset(e.target.value)} className="input" style={{ flex:1 }}>
+          <option value="">Select a dataset…</option>
+          {(datasetsQ.data?.data ?? []).map(d => (
+            <option key={d.name} value={d.name}>{d.name}</option>
+          ))}
+        </select>
+        <button onClick={()=>setQueried(dataset)} disabled={!dataset} className="btn btn-primary"><Icon name="search" size={14}/>Load</button>
       </div>
       {quotaQ.isLoading && <Skeleton height={60}/>}
       {quotaQ.data && queried && (

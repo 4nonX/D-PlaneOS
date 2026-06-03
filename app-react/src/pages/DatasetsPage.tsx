@@ -596,9 +596,16 @@ function SnapshotModal({ node, onClose, onCreated }: { node: TreeNode; onClose: 
 }
 
 function RollbackModal({ node, onClose, onRollback }: { node: TreeNode; onClose: () => void; onRollback: () => void }) {
-  const [confirm, setConfirm] = useState(false)
+  const [selectedSnap, setSelectedSnap] = useState('')
+
+  const snapsQ = useQuery({
+    queryKey: ['zfs', 'snapshots', node.name],
+    queryFn: ({ signal }) => api.get<{ snapshots: Snapshot[] }>(`/api/zfs/snapshots?dataset=${encodeURIComponent(node.name)}`, signal),
+  })
+  const snapshots = [...(snapsQ.data?.snapshots ?? [])].sort((a, b) => b.creation.localeCompare(a.creation))
+
   const mutation = useMutation({
-    mutationFn: () => api.post('/api/zfs/snapshots/rollback', { dataset: node.name }),
+    mutationFn: () => api.post('/api/zfs/snapshots/rollback', { snapshot: `${node.name}@${selectedSnap}`, force: true }),
     onSuccess: () => { toast.success(`Rollback of ${node.name} initiated`); onRollback(); onClose() },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -606,19 +613,30 @@ function RollbackModal({ node, onClose, onRollback }: { node: TreeNode; onClose:
   return (
     <Modal title={<span style={{ color: 'var(--warning)' }}>Rollback Dataset</span>} onClose={onClose} size="sm">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div className="alert alert-warning">
-          <Icon name="history" size={16} />
-          <strong>Warning:</strong> This will roll {node.name} back to its most recent snapshot.{' '}
-          <strong>All data changes made since that snapshot will be lost.</strong>
+        <div style={{ padding: '10px 14px', background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)', color: 'var(--error)' }}>
+          <strong>Warning:</strong> Rolling back destroys all data written after the selected snapshot. This cannot be undone.
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)' }}>
-          <input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} />
-          <span style={{ fontSize: 'var(--text-sm)' }}>I confirm I want to rollback and lose recent changes</span>
+        <label className="field">
+          <span className="field-label">Select snapshot to roll back to</span>
+          {snapsQ.isLoading ? (
+            <div style={{ padding: '8px 0', color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>Loading snapshots…</div>
+          ) : snapshots.length === 0 ? (
+            <div style={{ padding: '8px 0', color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>No snapshots exist for this dataset.</div>
+          ) : (
+            <select className="input" value={selectedSnap} onChange={e => setSelectedSnap(e.target.value)}>
+              <option value="">Select a snapshot…</option>
+              {snapshots.map(s => (
+                <option key={s.name} value={s.snap_name}>
+                  {s.snap_name} — {s.creation} ({s.refer})
+                </option>
+              ))}
+            </select>
+          )}
         </label>
       </div>
       <div className="modal-footer">
         <button onClick={onClose} className="btn btn-ghost">Cancel</button>
-        <button onClick={() => mutation.mutate()} disabled={!confirm || mutation.isPending} className="btn btn-warning">
+        <button onClick={() => mutation.mutate()} disabled={!selectedSnap || mutation.isPending || snapshots.length === 0} className="btn btn-warning">
           {mutation.isPending ? 'Rolling back…' : 'Rollback'}
         </button>
       </div>
