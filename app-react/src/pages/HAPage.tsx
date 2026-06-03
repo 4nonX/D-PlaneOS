@@ -1420,6 +1420,83 @@ export function HAPage() {
         </div>
       )}
 
+      {/* Physical triage panel - shown when a peer node has been unreachable long enough to
+          indicate a real failure rather than a transient blip. Guides the operator through
+          the physical checks required before triggering a manual fence or promotion. */}
+      {peers.some(p => p.state === 'unreachable') && (
+        <div className="card" style={{
+          marginBottom: 16, borderRadius: 'var(--radius-lg)', padding: '20px 24px',
+          borderLeft: '4px solid var(--error)', background: 'var(--error-bg)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <Icon name="hardware" size={24} style={{ color: 'var(--error)', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, color: 'var(--error)' }}>
+                Node Unreachable - Physical Triage Required
+              </div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
+                {peers.filter(p => p.state === 'unreachable').map(p => p.name ?? p.id).join(', ')} has not responded to health checks.
+                Before promoting or fencing, verify the physical cause. Promoting without confirmation risks split-brain data corruption.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            {[
+              { icon: 'cable',           label: 'SAS / Storage Cable',   check: 'Reseat or replace the SAS/NVMe cable between the disk shelf and HBA. A frayed cable causes intermittent I/O errors that look like node failure.' },
+              { icon: 'memory',          label: 'Disk Controller / HBA', check: 'Check HBA LEDs and logs. A failed controller will take the node down even if the OS is healthy. Look for SCSI errors in journalctl -u dplaned.' },
+              { icon: 'router',          label: 'Management Network',    check: 'Ping the peer on the management VLAN. A dead core switch or misconfigured VLAN will trigger the unreachable state without any storage failure.' },
+              { icon: 'developer_board', label: 'BMC / IPMI Console',    check: 'Open the out-of-band management console. If the node is truly dead the BMC is your only view. Check for kernel panics, OOM kills, or hardware faults in the SOL log.' },
+            ].map(item => (
+              <div key={item.label} style={{
+                background: 'var(--bg-card)', borderRadius: 'var(--radius-md)',
+                padding: '12px 14px', border: '1px solid var(--error-border)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <Icon name={item.icon} size={16} style={{ color: 'var(--error)', flexShrink: 0 }} />
+                  <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{item.label}</span>
+                </div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{item.check}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: 12, padding: '8px 12px', background: 'rgba(0,0,0,0.15)', borderRadius: 'var(--radius-sm)' }}>
+            <strong>Hysteresis:</strong> Auto-failover is suppressed for 60 minutes after a recent failover to prevent flapping.
+            If the peer is confirmed dead and you need to act immediately, use Clear Fault to override, then fence and promote below.
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {peers.filter(p => p.state === 'unreachable').map(p => (
+              <button
+                key={p.id}
+                onClick={async () => {
+                  if (await confirm({
+                    title: `STONITH: Terminate ${p.name ?? p.id}?`,
+                    message: 'I have physically verified the node is down or isolated. Proceed with chassis power-off via out-of-band management (IPMI BMC or PDU). This will import ZFS pools on this node and promote it to active.',
+                    danger: true,
+                    confirmLabel: 'Fence & Promote'
+                  })) {
+                    fencePeer.mutate(p.id)
+                  }
+                }}
+                disabled={pending}
+                className="btn btn-danger"
+              >
+                <Icon name="power_settings_new" size={14} />Fence {p.name ?? p.id} & Promote
+              </button>
+            ))}
+            <button
+              onClick={() => toggleMaintenance.mutate(1800)}
+              disabled={toggleMaintenance.isPending}
+              className="btn btn-warning"
+            >
+              <Icon name="build_circle" size={14} />Enter 30-min Maintenance
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Peer authentication warning - shown when HA has peers but no secret is set */}
       {peers.length > 0 && secretQ.data?.configured === false && (
         <div className="alert alert-warning" style={{ marginBottom: 16, borderRadius: 'var(--radius-lg)' }}>

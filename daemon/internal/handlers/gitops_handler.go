@@ -126,10 +126,13 @@ func (h *GitOpsHandler) Plan(w http.ResponseWriter, r *http.Request) {
 	// Exclude NOP items - only show actionable/informational drift.
 	type planChange struct {
 		Resource    string   `json:"resource"`
+		Kind        string   `json:"kind"`
+		Name        string   `json:"name"`
 		Action      string   `json:"action"`
 		Description string   `json:"description"`
 		Changes     []string `json:"changes,omitempty"`
 		RiskLevel   string   `json:"risk_level,omitempty"`
+		Approved    bool     `json:"approved"`
 	}
 	var uiChanges []planChange
 	for _, item := range plan.Items {
@@ -142,10 +145,13 @@ func (h *GitOpsHandler) Plan(w http.ResponseWriter, r *http.Request) {
 		}
 		uiChanges = append(uiChanges, planChange{
 			Resource:    fmt.Sprintf("%s/%s", item.Kind, item.Name),
+			Kind:        string(item.Kind),
+			Name:        item.Name,
 			Action:      string(item.Action),
 			Description: desc,
 			Changes:     item.Changes,
 			RiskLevel:   item.RiskLevel,
+			Approved:    item.Approved,
 		})
 	}
 	if uiChanges == nil {

@@ -9,7 +9,16 @@ import { useWsStore } from '@/stores/ws'
 import { useJobStore } from '@/stores/jobs'
 
 interface GitopsStatus { success: boolean; state?: string; pending_changes?: number; last_applied?: string; drift?: boolean }
-interface Change       { resource?: string; action?: string; description?: string; changes?: string[]; risk_level?: string }
+interface Change {
+  resource?:    string
+  kind?:        string
+  name?:        string
+  action?:      string
+  description?: string
+  changes?:     string[]
+  risk_level?:  string
+  approved?:    boolean
+}
 
 // Payload from daemon gitops.drift WS event
 interface DriftPayload {
@@ -718,11 +727,83 @@ function RepoEditModal({ repo, onExited, onSaved }: { repo: Repo; onExited: () =
   )
 }
 
+// ── BlockedApprovalModal ──────────────────────────────────────────────────────
+
+function BlockedApprovalModal({ change, onClose, onApproved }: {
+  change:      Change
+  onClose:     () => void
+  onApproved:  () => void
+}) {
+  const [reason, setReason] = useState('')
+  const approve = useMutation({
+    mutationFn: () => api.post('/api/gitops/approve', { kind: change.kind, name: change.name, reason: reason.trim() }),
+    onSuccess: () => { toast.success(`Approved destruction of ${change.resource}`); onApproved(); onClose() },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background:'var(--bg-card)', borderRadius:'var(--radius-xl)', padding:32, maxWidth:520, width:'100%', border:'2px solid var(--error-border)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
+          <Icon name="warning" size={28} style={{ color:'var(--error)', flexShrink:0 }} />
+          <div>
+            <div style={{ fontWeight:700, fontSize:'var(--text-lg)', color:'var(--error)' }}>Approve Destructive Operation</div>
+            <div style={{ fontSize:'var(--text-xs)', color:'var(--text-secondary)', marginTop:2 }}>This action permanently destroys data. It cannot be undone.</div>
+          </div>
+        </div>
+
+        <div style={{ background:'var(--error-bg)', border:'1px solid var(--error-border)', borderRadius:'var(--radius-md)', padding:'12px 16px', marginBottom:20 }}>
+          <div style={{ fontSize:'var(--text-xs)', color:'var(--text-secondary)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.05em', fontWeight:600 }}>Resource to be destroyed</div>
+          <div style={{ fontFamily:'var(--font-mono)', fontWeight:700, color:'var(--error)' }}>{change.resource}</div>
+          {change.description && (
+            <div style={{ fontSize:'var(--text-xs)', color:'var(--text-secondary)', marginTop:6 }}>{change.description}</div>
+          )}
+        </div>
+
+        <div className="alert alert-warning" style={{ marginBottom:20, fontSize:'var(--text-xs)' }}>
+          <Icon name="info" size={15} />
+          <div>
+            The GitOps engine blocked this automatically because the data would be permanently destroyed. Approving sends the deletion through once you click Deploy. If the resource has active data, back it up before approving.
+          </div>
+        </div>
+
+        <label className="field" style={{ marginBottom:20 }}>
+          <span className="field-label">Reason for approval <span style={{ color:'var(--error)' }}>*</span></span>
+          <input
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="e.g. Dataset migrated to tank/backup on 2026-06-03, confirmed empty"
+            className="input"
+            autoFocus
+          />
+          <div style={{ fontSize:'var(--text-2xs)', color:'var(--text-tertiary)', marginTop:4 }}>Logged to the audit trail. Required.</div>
+        </label>
+
+        <div style={{ display:'flex', gap:12, justifyContent:'flex-end' }}>
+          <button onClick={onClose} className="btn btn-ghost">Cancel</button>
+          <button
+            onClick={() => approve.mutate()}
+            disabled={approve.isPending || reason.trim().length < 4}
+            className="btn btn-danger"
+          >
+            <Icon name="delete_forever" size={15} />
+            {approve.isPending ? 'Approving…' : 'Approve Destruction'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function GitOpsPage() {
   const qc = useQueryClient()
   const wsOn = useWsStore((s) => s.on)
   const [tab, setTab] = useState<GTab>('status')
   const [driftAlert, setDriftAlert] = useState<DriftPayload | null>(null)
+  const [approvingChange, setApprovingChange] = useState<Change | null>(null)
   const [editingRepo, setEditingRepo] = useState<Repo | null>(null)
 
   const statusQ   = useQuery({ queryKey:['gitops','status'],   queryFn:({signal})=>api.get<GitopsStatus>('/api/gitops/status',signal), refetchInterval:15_000 })
@@ -829,7 +910,7 @@ export function GitOpsPage() {
       {tab === 'status'      && (
         <>
           {driftAlert && (
-            <div className={`alert ${driftAlert.blocked_count > 0 ? 'alert-error' : 'alert-warning'}`} style={{ marginBottom: 20 }}>
+            <div className={`alert ${driftAlert.blocked_count > 0 ? 'alert-error' : 'alert-warning'}`} style={{ marginBottom: driftAlert.blocked_count > 0 ? 8 : 20 }}>
               <Icon name={driftAlert.blocked_count > 0 ? 'error' : 'warning'} size={16} />
               <span>
                 {driftAlert.error
@@ -838,6 +919,15 @@ export function GitOpsPage() {
                 }
               </span>
               <button onClick={() => setDriftAlert(null)} style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer', color:'inherit' }}><Icon name="close" size={15} /></button>
+            </div>
+          )}
+          {driftAlert && driftAlert.blocked_count > 0 && (
+            <div className="alert alert-error" style={{ marginBottom:20 }}>
+              <Icon name="delete_forever" size={16} />
+              <div style={{ flex:1 }}>
+                <strong>{driftAlert.blocked_count} destructive deletion{driftAlert.blocked_count !== 1 ? 's' : ''} require manual approval.</strong>
+                {' '}The engine blocked these automatically to prevent data loss. Review each BLOCKED item in the Pending Plan below, confirm the data is safe to delete, and click <strong>Approve</strong> on each one before deploying.
+              </div>
             </div>
           )}
 
@@ -885,23 +975,47 @@ export function GitOpsPage() {
             <div>
               <div style={{ fontWeight:700, marginBottom:12, display:'flex', alignItems:'center', gap:8 }}><Icon name="list_alt" size={18} style={{ color:'var(--primary)' }}/>Pending Plan</div>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {(planQ.data?.changes ?? []).map((c, i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 14px', background:'var(--bg-card)', border:`1px solid ${changeColor(c.action)}20`, borderRadius:'var(--radius-md)' }}>
-                    <span style={{ padding:'2px 6px', borderRadius:'var(--radius-sm)', background:`${changeColor(c.action)}18`, color:changeColor(c.action), fontSize:'var(--text-2xs)', fontWeight:700, textTransform:'uppercase', flexShrink:0, marginTop:1 }}>{c.action}</span>
-                    <div style={{ minWidth:0 }}>
-                      <div style={{ fontWeight:600, fontSize:'var(--text-sm)' }}>{c.resource}</div>
-                      {c.action === 'RESHAPE' && c.changes && c.changes.length > 0 && (
-                        <div style={{ marginTop:4, display:'flex', flexDirection:'column', gap:2 }}>
-                          {c.changes.map((ch, ci) => (
-                            <code key={ci} style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--warning)', background:'var(--warning-bg)', padding:'1px 6px', borderRadius:'var(--radius-xs)', display:'block' }}>
-                              zpool add {c.resource} {ch.replace(/^add-\w+: /, '')}
-                            </code>
-                          ))}
-                        </div>
+                {(planQ.data?.changes ?? []).map((c, i) => {
+                  const isBlocked  = c.action === 'BLOCKED'
+                  const isApproved = isBlocked && c.approved
+                  const actionLabel = isApproved ? 'APPROVED' : c.action
+                  const actionColor = isApproved ? 'var(--success)' : changeColor(c.action)
+                  return (
+                    <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 14px', background:'var(--bg-card)', border:`1px solid ${actionColor}20`, borderRadius:'var(--radius-md)' }}>
+                      <span style={{ padding:'2px 6px', borderRadius:'var(--radius-sm)', background:`${actionColor}18`, color:actionColor, fontSize:'var(--text-2xs)', fontWeight:700, textTransform:'uppercase', flexShrink:0, marginTop:1 }}>{actionLabel}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:600, fontSize:'var(--text-sm)' }}>{c.resource}</div>
+                        {c.description && (
+                          <div style={{ fontSize:'var(--text-2xs)', color:'var(--text-tertiary)', marginTop:2 }}>{c.description}</div>
+                        )}
+                        {c.action === 'RESHAPE' && c.changes && c.changes.length > 0 && (
+                          <div style={{ marginTop:4, display:'flex', flexDirection:'column', gap:2 }}>
+                            {c.changes.map((ch, ci) => (
+                              <code key={ci} style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--warning)', background:'var(--warning-bg)', padding:'1px 6px', borderRadius:'var(--radius-xs)', display:'block' }}>
+                                zpool add {c.resource} {ch.replace(/^add-\w+: /, '')}
+                              </code>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {isBlocked && !isApproved && (
+                        <button
+                          onClick={() => setApprovingChange(c)}
+                          className="btn btn-danger"
+                          style={{ flexShrink:0, fontSize:'var(--text-xs)', padding:'4px 10px' }}
+                          title="Approve this destructive operation to allow it to proceed on next deploy"
+                        >
+                          <Icon name="lock_open" size={13} />Approve
+                        </button>
+                      )}
+                      {isApproved && (
+                        <span style={{ fontSize:'var(--text-2xs)', color:'var(--success)', flexShrink:0, display:'flex', alignItems:'center', gap:4 }}>
+                          <Icon name="check_circle" size={13} />Approved
+                        </span>
                       )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
                 {(planQ.data?.changes ?? []).length === 0 && <div className="card" style={{ textAlign:'center', padding:'40px 0', opacity:0.5 }}>Zero drift between Git and Live state</div>}
               </div>
             </div>
@@ -937,10 +1051,21 @@ export function GitOpsPage() {
       )}
 
       {editingRepo && (
-        <RepoEditModal 
-          repo={editingRepo} 
-          onExited={() => setEditingRepo(null)} 
+        <RepoEditModal
+          repo={editingRepo}
+          onExited={() => setEditingRepo(null)}
           onSaved={() => qc.invalidateQueries({ queryKey:['git-sync','repos'] })}
+        />
+      )}
+
+      {approvingChange && (
+        <BlockedApprovalModal
+          change={approvingChange}
+          onClose={() => setApprovingChange(null)}
+          onApproved={() => {
+            setApprovingChange(null)
+            qc.invalidateQueries({ queryKey:['gitops'] })
+          }}
         />
       )}
     </div>

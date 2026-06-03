@@ -1331,6 +1331,46 @@ function PoolCard({ pool, datasets, filter, onRefresh }: { pool: ZFSPool; datase
         )}
       </div>
 
+      {/* ── Scrub error banner (shown when a completed scrub found errors) ──── */}
+      {!isScrubbing && scrubStatus?.completed && (scrubStatus.errors ?? 0) > 0 && (
+        <div style={{
+          background: 'var(--error-bg)', border: '1px solid var(--error-border)',
+          borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16,
+          display: 'flex', alignItems: 'flex-start', gap: 12,
+        }}>
+          <Icon name="report" size={20} style={{ color: 'var(--error)', flexShrink: 0, marginTop: 1 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: 'var(--error)', marginBottom: 4 }}>
+              Scrub found {scrubStatus.errors} error{scrubStatus.errors !== 1 ? 's' : ''} in pool <code style={{ fontFamily: 'var(--font-mono)' }}>{pool.name}</code>
+            </div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              ZFS has detected checksum or read errors. This usually indicates a failing disk, a bad cable, or early-stage controller failure.
+              Run a new scrub to confirm the error count, then go to Hardware to identify which disk is responsible and initiate a hot-swap replacement.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                onClick={() => scrubStart.mutate()}
+                disabled={scrubStart.isPending}
+                className="btn btn-ghost btn-sm"
+              >
+                <Icon name="cleaning_services" size={13} />Re-run Scrub
+              </button>
+              <a
+                href={`/hardware?pool=${encodeURIComponent(pool.name)}`}
+                className="btn btn-danger btn-sm"
+              >
+                <Icon name="swap_horiz" size={13} />Identify & Replace Disk
+              </a>
+            </div>
+          </div>
+          {scrubStatus.completed_at && (
+            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', flexShrink: 0, textAlign: 'right', marginTop: 2 }}>
+              Scrub completed<br />{new Date(scrubStatus.completed_at).toLocaleString()}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Scrub progress (shown when in progress) ───────────────────────── */}
       {isScrubbing && (
         <div style={{
