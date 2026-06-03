@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"dplaned/internal/security"
 )
 
 // SBDConfig holds the ZFS-dataset-lease fencing configuration.
@@ -161,6 +163,12 @@ func (s *SBDLeaseManager) renewLoop(ctx context.Context, cfg SBDConfig) {
 // renewLease writes a unix timestamp as a ZFS user property on the SBD dataset
 // so peer nodes can read it and detect a gap exceeding LeaseTTLSecs.
 func renewLease(cfg SBDConfig) error {
+	if err := security.ValidatePoolName(cfg.Pool); err != nil {
+		return fmt.Errorf("SBD: invalid pool name %q: %w", cfg.Pool, err)
+	}
+	if err := security.ValidateDatasetName(cfg.Pool + "/" + cfg.Dataset); err != nil {
+		return fmt.Errorf("SBD: invalid dataset name %q: %w", cfg.Dataset, err)
+	}
 	ds := cfg.Pool + "/" + cfg.Dataset
 	ts := fmt.Sprintf("%d", time.Now().Unix())
 	cmd := exec.Command("zfs", "set", "dplaneos:sbd_lease="+ts, ds)

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"dplaned/internal/security"
 	"dplaned/internal/zfs"
 )
 
@@ -23,6 +24,33 @@ type ReplicationConfig struct {
 	RemotePort   int    `json:"remote_port"`
 	SSHKeyPath   string `json:"ssh_key_path"`
 	IntervalSecs int    `json:"interval_secs"`
+}
+
+// ValidateReplicationConfig validates all fields of a ReplicationConfig before
+// any value is used in an exec.Command or SSH remote command string. This closes
+// the injection vector that exists when DB-sourced fields bypass the allowlist.
+// Exported so the HTTP handler can validate at save time and return a clear error
+// instead of letting bad values fail silently at replication run time.
+func ValidateReplicationConfig(cfg *ReplicationConfig) error {
+	if err := security.ValidatePoolName(cfg.LocalPool); err != nil {
+		return fmt.Errorf("replication config: invalid local_pool: %w", err)
+	}
+	if err := security.ValidatePoolName(cfg.RemotePool); err != nil {
+		return fmt.Errorf("replication config: invalid remote_pool: %w", err)
+	}
+	if err := security.ValidateHostname(cfg.RemoteHost); err != nil {
+		return fmt.Errorf("replication config: invalid remote_host: %w", err)
+	}
+	if err := security.ValidateUnixUsername(cfg.RemoteUser); err != nil {
+		return fmt.Errorf("replication config: invalid remote_user: %w", err)
+	}
+	if err := security.ValidateAbsolutePath(cfg.SSHKeyPath); err != nil {
+		return fmt.Errorf("replication config: invalid ssh_key_path: %w", err)
+	}
+	if cfg.RemotePort < 1 || cfg.RemotePort > 65535 {
+		return fmt.Errorf("replication config: invalid remote_port: %d", cfg.RemotePort)
+	}
+	return nil
 }
 
 // startReplicationLoop begins continuous ZFS sync to the standby peer
@@ -66,7 +94,9 @@ func (m *Manager) startReplicationLoop(ctx context.Context, cfg *ReplicationConf
 
 // syncZFS executes an incremental zfs send/recv securely over SSH.
 func (m *Manager) syncZFS(ctx context.Context, cfg *ReplicationConfig) error {
-	// First, gather local snapshots
+	if err := ValidateReplicationConfig(cfg); err != nil {
+		return err
+	}
 	snapCmd := exec.CommandContext(ctx, "zfs", "list", "-t", "snapshot", "-o", "name", "-H", "-s", "creation", "-r", cfg.LocalPool)
 	out, err := snapCmd.Output()
 	if err != nil {
@@ -134,6 +164,9 @@ func (m *Manager) syncZFS(ctx context.Context, cfg *ReplicationConfig) error {
 }
 
 func (m *Manager) executeSendRecv(ctx context.Context, cfg *ReplicationConfig, baseSnap, targetSnap string) error {
+	if err := ValidateReplicationConfig(cfg); err != nil {
+		return err
+	}
 	var sendArgs []string
 	if baseSnap != "" {
 		sendArgs = []string{"send", "-P", "-R", "-i", baseSnap, targetSnap}

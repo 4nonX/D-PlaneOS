@@ -134,6 +134,11 @@ interface SBDResponse {
   last_renewal_unix: number
 }
 
+interface ClusterSecretStatus {
+  success:    boolean
+  configured: boolean
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(s?: string): string {
@@ -751,6 +756,111 @@ function SBDConfigForm() {
   )
 }
 
+// ─── ClusterSecretForm ───────────────────────────────────────────────────────
+
+function ClusterSecretForm() {
+  const qc = useQueryClient()
+  const q  = useQuery({
+    queryKey: ['ha', 'cluster-secret'],
+    queryFn:  ({ signal }) => api.get<ClusterSecretStatus>('/api/ha/cluster-secret/configure', signal),
+  })
+
+  const [secret, setSecret] = useState('')
+  const [show,   setShow]   = useState(false)
+
+  function generateSecret() {
+    const buf = new Uint8Array(32)
+    crypto.getRandomValues(buf)
+    setSecret(Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join(''))
+  }
+
+  const save = useMutation({
+    mutationFn: (s: string) => api.post('/api/ha/cluster-secret/configure', { secret: s }),
+    onSuccess: () => {
+      toast.success(secret === '' ? 'Cluster secret cleared' : 'Cluster secret updated - takes effect immediately')
+      setSecret('')
+      qc.invalidateQueries({ queryKey: ['ha', 'cluster-secret'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const configured = q.data?.configured === true
+
+  return (
+    <div className="card" style={{
+      borderRadius: 'var(--radius-lg)', padding: '20px 24px', marginTop: 24,
+      borderLeft: configured ? '4px solid var(--success)' : '4px solid var(--error)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <Icon name="key" size={24} style={{ color: configured ? 'var(--success)' : 'var(--error)' }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700 }}>Peer Authentication Secret</div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+            Pre-shared key that peer daemons must include in every heartbeat. Prevents any host on the management network from injecting itself as a cluster member.
+          </div>
+        </div>
+        <div style={{
+          padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', fontWeight: 600,
+          background: configured ? 'var(--success-bg)' : 'var(--error-bg)',
+          border: `1px solid ${configured ? 'var(--success-border)' : 'var(--error-border)'}`,
+          color: configured ? 'var(--success)' : 'var(--error)',
+        }}>
+          {configured ? 'Active' : 'Not Set'}
+        </div>
+      </div>
+
+      {!configured && (
+        <div className="alert alert-warning" style={{ marginBottom: 16, padding: '10px 14px' }}>
+          <Icon name="warning" size={16} />
+          <div style={{ fontSize: 'var(--text-xs)' }}>
+            No peer secret is configured. Any host on the management network can register itself as a cluster peer and influence HA decisions. Set a secret on all nodes in the cluster.
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+        <label className="field" style={{ flex: 1 }}>
+          <span className="field-label">{configured ? 'New Secret (leave blank to clear)' : 'Secret'}</span>
+          <div style={{ position: 'relative' }}>
+            <input
+              type={show ? 'text' : 'password'}
+              value={secret}
+              onChange={e => setSecret(e.target.value)}
+              placeholder={configured ? 'Enter new secret to rotate…' : 'Enter secret or generate one'}
+              className="input"
+              style={{ fontFamily: 'var(--font-mono)', paddingRight: 36 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShow(s => !s)}
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-tertiary)' }}
+            >
+              <Icon name={show ? 'visibility_off' : 'visibility'} size={16} />
+            </button>
+          </div>
+        </label>
+        <button onClick={generateSecret} className="btn btn-ghost" style={{ flexShrink: 0, marginBottom: 1 }}>
+          <Icon name="shuffle" size={14} />Generate
+        </button>
+        <button
+          onClick={() => save.mutate(secret)}
+          disabled={save.isPending || q.isLoading}
+          className="btn btn-primary"
+          style={{ flexShrink: 0, marginBottom: 1 }}
+        >
+          <Icon name="save" size={15} />{save.isPending ? 'Saving…' : configured ? 'Update Secret' : 'Set Secret'}
+        </button>
+      </div>
+
+      {configured && (
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', margin: '12px 0 0' }}>
+          The secret is write-only. To rotate it, enter a new value and save. Set the same secret on all peer nodes before saving here to avoid disrupting active heartbeats.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── ReplicationConfigForm ────────────────────────────────────────────────────
 
 function ReplicationConfigForm() {
@@ -797,23 +907,32 @@ function ReplicationConfigForm() {
             onChange={e => setCfg({ ...cfg, interval_secs: parseInt(e.target.value) || 30 })} className="input" />
         </label>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 8 }}>
         <label className="field">
-          <span className="field-label">Remote Host IP</span>
-          <input value={cfg.remote_host} onChange={e => setCfg({ ...cfg, remote_host: e.target.value })} placeholder="10.0.0.11" className="input" />
+          <span className="field-label">Remote Host</span>
+          <input value={cfg.remote_host} onChange={e => setCfg({ ...cfg, remote_host: e.target.value })}
+            placeholder="10.0.0.11" className="input" />
         </label>
         <label className="field">
           <span className="field-label">SSH User & Port</span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input value={cfg.remote_user} onChange={e => setCfg({ ...cfg, remote_user: e.target.value })} className="input" style={{ flex: 2 }} />
-            <input type="number" value={cfg.remote_port} onChange={e => setCfg({ ...cfg, remote_port: parseInt(e.target.value) || 22 })} className="input" style={{ flex: 1 }} />
+            <input value={cfg.remote_user} onChange={e => setCfg({ ...cfg, remote_user: e.target.value })}
+              placeholder="root" className="input" style={{ flex: 2 }} />
+            <input type="number" value={cfg.remote_port} onChange={e => setCfg({ ...cfg, remote_port: parseInt(e.target.value) || 22 })}
+              className="input" style={{ flex: 1 }} />
           </div>
         </label>
         <label className="field">
           <span className="field-label">SSH Identity File</span>
-          <input value={cfg.ssh_key_path} onChange={e => setCfg({ ...cfg, ssh_key_path: e.target.value })} className="input" style={{ fontFamily: 'var(--font-mono)' }} />
+          <input value={cfg.ssh_key_path} onChange={e => setCfg({ ...cfg, ssh_key_path: e.target.value })}
+            placeholder="/root/.ssh/id_ed25519" className="input" style={{ fontFamily: 'var(--font-mono)' }} />
         </label>
       </div>
+      <p style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', margin: '0 0 16px', lineHeight: 1.5 }}>
+        Pool names: letters, digits, <code>_</code> <code>-</code> <code>.</code> — max 255 chars, must start with a letter.
+        SSH user: lowercase Linux username (e.g. <code>root</code>).
+        Identity file: absolute path, no spaces or shell special characters.
+      </p>
 
       <button onClick={() => save.mutate(cfg)} disabled={save.isPending || q.isLoading} className="btn btn-primary">
         <Icon name="save" size={15} />{save.isPending ? 'Saving…' : 'Save Replication Config'}
@@ -904,6 +1023,11 @@ export function HAPage() {
     queryKey: ['ha', 'local'],
     queryFn:  ({ signal }) => api.get<HALocalResponse>('/api/ha/local', signal),
     refetchInterval: 30_000,
+  })
+
+  const secretQ = useQuery({
+    queryKey: ['ha', 'cluster-secret'],
+    queryFn:  ({ signal }) => api.get<ClusterSecretStatus>('/api/ha/cluster-secret/configure', signal),
   })
 
   const addPeer = useMutation({
@@ -1009,7 +1133,7 @@ export function HAPage() {
 
   // ── Setup Wizard ────────────────────────────────────────────────────────────
   if (wizardStep !== null) {
-    const TOTAL_STEPS = 6
+    const TOTAL_STEPS = 7
     return (
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <div style={{ marginBottom: 32 }}>
@@ -1024,6 +1148,7 @@ export function HAPage() {
           </div>
           <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Step {wizardStep} of {TOTAL_STEPS}</div>
         </div>
+
 
         {/* Step 1 - Introduction */}
         {wizardStep === 1 && (
@@ -1095,31 +1220,52 @@ export function HAPage() {
             <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
               <button onClick={() => setWizardStep(2)} className="btn btn-ghost">Previous</button>
               <button onClick={() => setWizardStep(4)} disabled={peers.length === 0} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                Next: Peer Security
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 - Cluster Security */}
+        {wizardStep === 4 && (
+          <div className="fade-in">
+            <h2 style={{ marginBottom: 8 }}>Step 4: Peer Authentication</h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Set a shared secret so only authorised nodes can register themselves as cluster peers. Both nodes must use the same secret.
+            </p>
+            <div className="alert alert-warning" style={{ marginBottom: 24 }}>
+              <Icon name="warning" size={18} />
+              <div>Without a secret, any host on the management network that can reach port 9000 can inject itself as a cluster peer and affect failover decisions. This step is strongly recommended for any multi-node deployment.</div>
+            </div>
+            <ClusterSecretForm />
+            <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
+              <button onClick={() => setWizardStep(3)} className="btn btn-ghost">Previous</button>
+              <button onClick={() => setWizardStep(5)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
                 Next: Storage Replication
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 4 - Replication */}
-        {wizardStep === 4 && (
+        {/* Step 5 - Replication */}
+        {wizardStep === 5 && (
           <div className="fade-in">
-            <h2 style={{ marginBottom: 8 }}>Step 4: Storage Replication</h2>
+            <h2 style={{ marginBottom: 8 }}>Step 5: Storage Replication</h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>Configure ZFS snapshot shipping so data is available on all nodes.</p>
             <ReplicationConfigForm />
             <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
-              <button onClick={() => setWizardStep(3)} className="btn btn-ghost">Previous</button>
-              <button onClick={() => setWizardStep(5)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+              <button onClick={() => setWizardStep(4)} className="btn btn-ghost">Previous</button>
+              <button onClick={() => setWizardStep(6)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
                 Next: Quorum Witness
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 5 - Witness */}
-        {wizardStep === 5 && (
+        {/* Step 6 - Witness */}
+        {wizardStep === 6 && (
           <div className="fade-in">
-            <h2 style={{ marginBottom: 8 }}>Step 5: Quorum Witness</h2>
+            <h2 style={{ marginBottom: 8 }}>Step 6: Quorum Witness</h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
               A witness proves this node has network access before firing STONITH - preventing split-brain when the peer is unreachable due to a network partition rather than a real failure.
             </p>
@@ -1129,18 +1275,18 @@ export function HAPage() {
             </div>
             <WitnessConfigForm />
             <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
-              <button onClick={() => setWizardStep(4)} className="btn btn-ghost">Previous</button>
-              <button onClick={() => setWizardStep(6)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+              <button onClick={() => setWizardStep(5)} className="btn btn-ghost">Previous</button>
+              <button onClick={() => setWizardStep(7)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
                 Next: Fencing (STONITH)
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 6 - Fencing */}
-        {wizardStep === 6 && (
+        {/* Step 7 - Fencing */}
+        {wizardStep === 7 && (
           <div className="fade-in">
-            <h2 style={{ marginBottom: 8 }}>Step 6: Automated Fencing (STONITH)</h2>
+            <h2 style={{ marginBottom: 8 }}>Step 7: Automated Fencing (STONITH)</h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
               Configure at least one out-of-band power control method. IPMI uses the BMC over the management network; PDU cuts the physical outlet - both bypass the peer OS entirely.
             </p>
@@ -1151,7 +1297,7 @@ export function HAPage() {
               <div>Setup complete! You can now monitor the cluster from the main dashboard.</div>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setWizardStep(5)} className="btn btn-ghost">Previous</button>
+              <button onClick={() => setWizardStep(6)} className="btn btn-ghost">Previous</button>
               <button onClick={() => setWizardStep(null)} className="btn btn-success" style={{ flex: 1, justifyContent: 'center' }}>
                 Finish & Go to Dashboard
               </button>
@@ -1274,6 +1420,22 @@ export function HAPage() {
         </div>
       )}
 
+      {/* Peer authentication warning - shown when HA has peers but no secret is set */}
+      {peers.length > 0 && secretQ.data?.configured === false && (
+        <div className="alert alert-warning" style={{ marginBottom: 16, borderRadius: 'var(--radius-lg)' }}>
+          <Icon name="key_off" size={20} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Peer Authentication Not Configured</div>
+            <div style={{ fontSize: 'var(--text-xs)', opacity: 0.85 }}>
+              Any host on the management network can register itself as a cluster peer. Set a shared secret in the Peer Authentication section below (or via <code>--ha-cluster-secret</code>) on all nodes.
+            </div>
+          </div>
+          <button onClick={() => setWizardStep(4)} className="btn btn-warning" style={{ flexShrink: 0 }}>
+            <Icon name="key" size={14} />Configure
+          </button>
+        </div>
+      )}
+
       {/* Subordinate Mode - highest priority */}
       {subordinate && (
         <div className="alert alert-warning" style={{ marginBottom: 16, borderRadius: 'var(--radius-lg)' }}>
@@ -1370,6 +1532,7 @@ export function HAPage() {
         until={cluster.maintenance_until  || 0}
         onToggle={(secs) => toggleMaintenance.mutate(secs)}
       />
+      <ClusterSecretForm />
       <WitnessConfigForm />
       <FencingConfigForm />
       <PDUConfigForm />

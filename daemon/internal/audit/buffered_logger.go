@@ -24,9 +24,12 @@ type BufferedLogger struct {
 	db            *sql.DB
 	buffer        []AuditEvent
 	bufferMutex   sync.Mutex
-	// flushTicker   *time.Ticker // Removed
+	// chainMu serialises the prevHash read→compute→insert sequence across both
+	// Flush (batch path) and writeDirect (security-event path). Without this,
+	// two concurrent callers can read the same prevHash and produce a broken chain link.
+	chainMu       sync.Mutex
 	stopChan      chan struct{}
-	flushDone     sync.WaitGroup // Added
+	flushDone     sync.WaitGroup
 	maxBuffer     int
 	flushInterval time.Duration
 	hmacKey       []byte // 32-byte key for audit chain integrity; nil = chain disabled
@@ -137,13 +140,17 @@ func (bl *BufferedLogger) Log(event AuditEvent) error {
 // writeDirect writes events synchronously to PostgreSQL, bypassing the buffer.
 // Used for security events that must not be lost on crash.
 func (bl *BufferedLogger) writeDirect(events []AuditEvent) error {
+	// chainMu serialises prevHash reads with Flush so they cannot both read
+	// the same tail hash and produce duplicate chain links.
+	bl.chainMu.Lock()
+	defer bl.chainMu.Unlock()
+
 	tx, err := bl.db.Begin()
 	if err != nil {
 		return fmt.Errorf("audit direct write: begin: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Fetch prev_hash to continue the chain for security events.
 	var prevHash string
 	if bl.hmacKey != nil {
 		_ = tx.QueryRow(
@@ -161,45 +168,36 @@ func (bl *BufferedLogger) writeDirect(events []AuditEvent) error {
 
 	for _, e := range events {
 		rowHash := computeRowHash(bl.hmacKey, prevHash, e)
-		_, err := stmt.Exec(e.Timestamp, e.Actor, e.Action, e.Resource, e.Details, e.IPAddress, e.Success, prevHash, rowHash)
-		if err != nil {
-			log.Printf("audit direct write: exec: %v", err)
-			continue
+		if _, err := stmt.Exec(e.Timestamp, e.Actor, e.Action, e.Resource, e.Details, e.IPAddress, e.Success, prevHash, rowHash); err != nil {
+			return fmt.Errorf("audit direct write: exec: %w", err)
 		}
 		prevHash = rowHash
 	}
 	return tx.Commit()
 }
 
-// Flush writes all buffered events to PostgreSQL in a single transaction
-//
-// CRITICAL: Uses BEGIN TRANSACTION for batch insert
-// This is 100x faster than individual INSERTs
+// Flush writes all buffered events to PostgreSQL in a single transaction.
 func (bl *BufferedLogger) Flush() error {
 	bl.bufferMutex.Lock()
-	
-	// Quick exit if buffer is empty
 	if len(bl.buffer) == 0 {
 		bl.bufferMutex.Unlock()
 		return nil
 	}
-
-	// Copy buffer and clear it
 	events := make([]AuditEvent, len(bl.buffer))
 	copy(events, bl.buffer)
 	bl.buffer = bl.buffer[:0]
-	
 	bl.bufferMutex.Unlock()
 
-	// Write to database in single transaction
+	// chainMu serialises the prevHash read→compute→insert sequence with writeDirect.
+	bl.chainMu.Lock()
+	defer bl.chainMu.Unlock()
+
 	tx, err := bl.db.Begin()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("audit flush: begin: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Fetch the row_hash of the most recent row to start the chain.
-	// Run inside the transaction so we see a consistent snapshot.
 	var prevHash string
 	if bl.hmacKey != nil {
 		_ = tx.QueryRow(
@@ -207,7 +205,6 @@ func (bl *BufferedLogger) Flush() error {
 		).Scan(&prevHash)
 	}
 
-	// Prepare statement (reused for all inserts)
 	stmt, err := tx.Prepare(`
 		INSERT INTO audit_logs (
 			timestamp, actor, action, resource, details, ip_address, success,
@@ -215,35 +212,27 @@ func (bl *BufferedLogger) Flush() error {
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
+		return fmt.Errorf("audit flush: prepare: %w", err)
 	}
 	defer stmt.Close()
 
-	// Insert all events in batch, threading the HMAC chain.
 	for _, event := range events {
 		rowHash := computeRowHash(bl.hmacKey, prevHash, event)
-		_, err := stmt.Exec(
-			event.Timestamp,
-			event.Actor,
-			event.Action,
-			event.Resource,
-			event.Details,
-			event.IPAddress,
-			event.Success,
-			prevHash,
-			rowHash,
-		)
-		if err != nil {
-			// Log error but continue with other events
-			log.Printf("Failed to insert audit event: %v", err)
-			continue
+		if _, err := stmt.Exec(
+			event.Timestamp, event.Actor, event.Action, event.Resource,
+			event.Details, event.IPAddress, event.Success, prevHash, rowHash,
+		); err != nil {
+			// Abort the whole batch. The defer rolls back the transaction, so
+			// prevHash is never committed and the chain stays intact. The events
+			// drained from the buffer are lost, which is acceptable for the
+			// non-security events held here.
+			return fmt.Errorf("audit flush: insert: %w", err)
 		}
-		prevHash = rowHash // advance chain
+		prevHash = rowHash
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("audit flush: commit: %w", err)
 	}
 
 	log.Printf("Flushed %d audit events to database", len(events))

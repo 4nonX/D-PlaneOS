@@ -81,10 +81,11 @@ type ClusterStatus struct {
 
 // Manager owns the cluster state for this node.
 type Manager struct {
-	db        *sql.DB
-	localID   string
-	localAddr string
-	version   string
+	db            *sql.DB
+	localID       string
+	localAddr     string
+	version       string
+	clusterSecret string // pre-shared secret; empty = no authentication (single-node or legacy)
 
 	mu    sync.RWMutex
 	nodes map[string]*ClusterNode // keyed by node ID
@@ -115,6 +116,17 @@ type Manager struct {
 	// immediately after ExecutePromotion completes. Set once at startup via
 	// SetPromotionCallback before Start(); never written again after that.
 	promotionCallback func()
+}
+
+// SetClusterSecret configures the pre-shared secret that peer daemons must
+// include in their HeartbeatPayload. When non-empty, heartbeats with a missing
+// or incorrect secret are rejected and do not update cluster state. Both nodes
+// in a cluster must be configured with the same secret. An empty string disables
+// authentication (acceptable for single-node setups; not recommended for HA).
+func (m *Manager) SetClusterSecret(secret string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.clusterSecret = secret
 }
 
 // SetPromotionCallback registers fn to be called after a successful STONITH
@@ -152,6 +164,7 @@ func (m *Manager) Start() {
 	m.loadPersistedNodes()
 	m.loadPersistedReplication()
 	m.loadClusterState()
+	m.loadClusterSecretFromDB()
 	m.StartupReconciliation()
 
 	m.wg.Add(1)
@@ -398,9 +411,18 @@ func (m *Manager) checkFailover() {
 	}
 
 	// Rate-limit: only one fencing sequence at a time.
+	// Re-verify the peer is still unreachable under the write lock: a delayed
+	// heartbeat may have arrived between the RUnlock above and here, restoring
+	// the peer to StateHealthy. Fencing a live node would cause a split-brain.
 	m.mu.Lock()
 	if m.fencingInProgress {
 		m.mu.Unlock()
+		return
+	}
+	liveNode, exists := m.nodes[deadPeer.ID]
+	if !exists || liveNode.State != StateUnreachable {
+		m.mu.Unlock()
+		log.Printf("HA STONITH: Peer %s recovered before fence could fire - cancelling failover.", deadPeer.ID)
 		return
 	}
 	m.fencingInProgress = true
@@ -611,12 +633,63 @@ func (m *Manager) ensureSchema() error {
 		return err
 	}
 
+	if _, err := m.db.Exec(`
+		CREATE TABLE IF NOT EXISTS ha_cluster_secret (
+			id     INTEGER PRIMARY KEY CHECK (id = 1),
+			secret TEXT    NOT NULL DEFAULT ''
+		)
+	`); err != nil {
+		return err
+	}
+
 	// Schema migrations: safe no-ops if columns already exist.
 	m.db.Exec(`ALTER TABLE ha_fencing_config ADD COLUMN IF NOT EXISTS jitter_max_ms INTEGER NOT NULL DEFAULT 3000`)
 	m.db.Exec(`ALTER TABLE ha_witness_config ADD COLUMN IF NOT EXISTS witnesses_json TEXT NOT NULL DEFAULT '[]'`)
 	m.db.Exec(`ALTER TABLE ha_witness_config ADD COLUMN IF NOT EXISTS required_healthy INTEGER NOT NULL DEFAULT 1`)
 
 	return nil
+}
+
+// SaveClusterSecretToDB persists the cluster secret to the database and updates
+// the running manager's in-memory value so the change takes effect immediately.
+func (m *Manager) SaveClusterSecretToDB(secret string) error {
+	_, err := m.db.Exec(`
+		INSERT INTO ha_cluster_secret (id, secret) VALUES (1, $1)
+		ON CONFLICT (id) DO UPDATE SET secret = EXCLUDED.secret
+	`, secret)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.clusterSecret = secret
+	m.mu.Unlock()
+	return nil
+}
+
+// IsClusterSecretConfigured reports whether a non-empty cluster secret is active.
+// It reads the in-memory value set at startup (from DB or CLI flag) rather than
+// hitting the DB on every call.
+func (m *Manager) IsClusterSecretConfigured() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.clusterSecret != ""
+}
+
+// loadClusterSecretFromDB reads the persisted secret and applies it when no
+// CLI flag has already set one. Called once in Start().
+func (m *Manager) loadClusterSecretFromDB() {
+	var secret string
+	err := m.db.QueryRow(`SELECT secret FROM ha_cluster_secret WHERE id = 1`).Scan(&secret)
+	if err != nil || secret == "" {
+		return
+	}
+	m.mu.Lock()
+	// CLI flag takes precedence over DB; only apply DB value if not already set.
+	if m.clusterSecret == "" {
+		m.clusterSecret = secret
+		log.Printf("HA: cluster peer secret loaded from database")
+	}
+	m.mu.Unlock()
 }
 
 func (m *Manager) persistNode(n *ClusterNode) error {
@@ -670,15 +743,24 @@ type HeartbeatPayload struct {
 	Address string `json:"address"`
 	Role    string `json:"role"`
 	Version string `json:"version"`
+	Secret  string `json:"secret,omitempty"`
 }
 
 // HandleHeartbeat processes an inbound heartbeat from a peer daemon.
-func (m *Manager) HandleHeartbeat(hb HeartbeatPayload) {
+// Returns false if the heartbeat was rejected (wrong or missing secret).
+func (m *Manager) HandleHeartbeat(hb HeartbeatPayload) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// When a cluster secret is configured, reject heartbeats that don't carry it.
+	// This prevents any host on the network from injecting itself as a peer.
+	if m.clusterSecret != "" && hb.Secret != m.clusterSecret {
+		log.Printf("HA: rejected heartbeat from node %q at %s - incorrect or missing cluster secret", hb.NodeID, hb.Address)
+		return false
+	}
+
 	node, ok := m.nodes[hb.NodeID]
 	if !ok {
-		// Auto-register on first heartbeat received
 		node = &ClusterNode{
 			ID:           hb.NodeID,
 			Name:         hb.NodeID,
@@ -695,6 +777,7 @@ func (m *Manager) HandleHeartbeat(hb HeartbeatPayload) {
 	node.LastSeenUnix = time.Now().Unix()
 	node.MissedBeats = 0
 	go m.persistNode(node)
+	return true
 }
 
 // SetPeerRole updates the role of a peer (e.g. promote to active).

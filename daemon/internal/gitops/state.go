@@ -994,13 +994,20 @@ func stripComment(s string) string {
 	return s
 }
 
+// maxYAMLDepth caps the nesting depth accepted by the parser to prevent
+// stack overflow from a malformed or adversarial state.yaml.
+const maxYAMLDepth = 50
+
 // parseDocument parses the top-level mapping.
 func (p *yamlParser) parseDocument() (map[string]yamlNode, error) {
-	return p.parseMapping(0)
+	return p.parseMapping(0, 0)
 }
 
 // parseMapping parses a block mapping at the given minimum indent.
-func (p *yamlParser) parseMapping(minIndent int) (map[string]yamlNode, error) {
+func (p *yamlParser) parseMapping(minIndent, depth int) (map[string]yamlNode, error) {
+	if depth > maxYAMLDepth {
+		return nil, fmt.Errorf("state.yaml exceeds maximum nesting depth (%d)", maxYAMLDepth)
+	}
 	result := make(map[string]yamlNode)
 	for p.pos < len(p.lines) {
 		line := p.lines[p.pos]
@@ -1027,10 +1034,10 @@ func (p *yamlParser) parseMapping(minIndent int) (map[string]yamlNode, error) {
 				nextLine := p.lines[p.pos]
 				if strings.HasPrefix(nextLine.content, "- ") || nextLine.content == "-" {
 					// Sequence
-					val, err = p.parseSequence(nextLine.indent)
+					val, err = p.parseSequence(nextLine.indent, depth+1)
 				} else {
 					// Nested mapping
-					val, err = p.parseMapping(nextLine.indent)
+					val, err = p.parseMapping(nextLine.indent, depth+1)
 				}
 				if err != nil {
 					return nil, err
@@ -1058,7 +1065,10 @@ func (p *yamlParser) parseMapping(minIndent int) (map[string]yamlNode, error) {
 }
 
 // parseSequence parses a block sequence (lines starting with "- ").
-func (p *yamlParser) parseSequence(minIndent int) ([]yamlNode, error) {
+func (p *yamlParser) parseSequence(minIndent, depth int) ([]yamlNode, error) {
+	if depth > maxYAMLDepth {
+		return nil, fmt.Errorf("state.yaml exceeds maximum nesting depth (%d)", maxYAMLDepth)
+	}
 	var result []yamlNode
 	for p.pos < len(p.lines) {
 		line := p.lines[p.pos]
@@ -1078,7 +1088,7 @@ func (p *yamlParser) parseSequence(minIndent int) ([]yamlNode, error) {
 		if itemContent == "" {
 			// Next lines are the item's content (mapping)
 			if p.pos < len(p.lines) && p.lines[p.pos].indent > line.indent {
-				subMap, err := p.parseMapping(p.lines[p.pos].indent)
+				subMap, err := p.parseMapping(p.lines[p.pos].indent, depth+1)
 				if err != nil {
 					return nil, err
 				}
@@ -1098,7 +1108,7 @@ func (p *yamlParser) parseSequence(minIndent int) ([]yamlNode, error) {
 
 			// Continue reading additional keys at deeper indent
 			if p.pos < len(p.lines) && p.lines[p.pos].indent > line.indent {
-				rest, err := p.parseMapping(p.lines[p.pos].indent)
+				rest, err := p.parseMapping(p.lines[p.pos].indent, depth+1)
 				if err != nil {
 					return nil, err
 				}

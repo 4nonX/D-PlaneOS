@@ -174,8 +174,9 @@ func Run(db *sql.DB) {
 				log.Printf("[reconciler] ERROR restoring static IP on %s: %v", iface.Interface, err)
 			} else {
 				if iface.Gateway != "" {
-					// best-effort route restore
-					_ = netlinkx.RouteReplace("0.0.0.0/0", iface.Gateway, iface.Interface)
+					if err := netlinkx.RouteReplace("0.0.0.0/0", iface.Gateway, iface.Interface); err != nil {
+						log.Printf("[reconciler] ERROR restoring default route via %s on %s: %v", iface.Gateway, iface.Interface, err)
+					}
 				}
 				log.Printf("[reconciler] interface %s: static IP %s restored", iface.Interface, iface.CIDR)
 				restored++
@@ -323,8 +324,12 @@ func restoreBond(b BondState) error {
 		return fmt.Errorf("create bond: %w", err)
 	}
 	for _, slave := range b.Slaves {
-		_ = netlinkx.LinkSetDown(slave)
-		_ = netlinkx.LinkSetMaster(slave, b.Name)
+		if err := netlinkx.LinkSetDown(slave); err != nil {
+			log.Printf("[reconciler] WARNING: bond %s: failed to set slave %s down before enslave: %v", b.Name, slave, err)
+		}
+		if err := netlinkx.LinkSetMaster(slave, b.Name); err != nil {
+			log.Printf("[reconciler] ERROR: bond %s: failed to enslave %s: %v (bond will be up but missing this member)", b.Name, slave, err)
+		}
 	}
 	return netlinkx.LinkSetUp(b.Name)
 }

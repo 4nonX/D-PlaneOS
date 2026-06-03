@@ -35,6 +35,16 @@ import (
 	"encoding/pem"
 )
 
+// cronToken is set once at startup by main.go and used by all cron-hook timer
+// generators. It is never written to disk - only embedded in systemd unit files
+// that are regenerated on each daemon start from the freshly-generated value.
+var cronToken string
+
+// SetCronToken sets the runtime internal-hook token. Call once at startup before
+// any timer installation. The token must be the same value passed to
+// sessionMiddleware so that cron-hook requests are accepted.
+func SetCronToken(tok string) { cronToken = tok }
+
 // ============================================================
 // SNAPSHOT SCHEDULER
 // ============================================================
@@ -184,7 +194,8 @@ func (h *SnapshotScheduleHandler) regenerateCron(schedules []SnapshotSchedule) {
 		// we escape any single quotes in the json payload (though there shouldn't be any now).
 		safePayload := strings.ReplaceAll(payload, "'", "'\\''")
 		mainCmd := fmt.Sprintf(
-			`curl -sf -X POST http://127.0.0.1:9000/api/zfs/snapshots/cron-hook -H 'Content-Type: application/json' -H 'X-Internal-Token: dplaneos-internal-reconciliation-secret-v1' -d '%s'`,
+			`curl -sf -X POST http://127.0.0.1:9000/api/zfs/snapshots/cron-hook -H 'Content-Type: application/json' -H 'X-Internal-Token: %s' -d '%s'`,
+			cronToken,
 			safePayload,
 		)
 

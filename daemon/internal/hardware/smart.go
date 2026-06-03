@@ -9,6 +9,13 @@ import (
 	"dplaned/internal/systemd"
 )
 
+// cronToken is set once at startup by main.go via SetCronToken.
+var cronToken string
+
+// SetCronToken sets the runtime internal-hook token used in generated systemd
+// unit files. Call once at startup before any timer installation.
+func SetCronToken(tok string) { cronToken = tok }
+
 // RegenerateSMARTTimers creates systemd timers for all enabled SMART schedules.
 // This is used by both the REST API and the GitOps reconciliation engine.
 func RegenerateSMARTTimers(db *sql.DB) error {
@@ -29,12 +36,10 @@ func RegenerateSMARTTimers(db *sql.DB) error {
 			continue
 		}
 
-		// Use the cron-hook internal endpoint. 
-		// Note: The curl command calls back into dplaned, ensuring consistency.
-		// We use a fixed internal token whitelisted in main.go sessionMiddleware.
 		payload := fmt.Sprintf(`{"device":"%s","type":"%s"}`, device, testType)
 		mainCmd := fmt.Sprintf(
-			`curl -sf -X POST http://127.0.0.1:9000/api/hardware/smart/cron-hook -H 'Content-Type: application/json' -H 'X-Internal-Token: dplaneos-internal-reconciliation-secret-v1' -d '%s'`,
+			`curl -sf -X POST http://127.0.0.1:9000/api/hardware/smart/cron-hook -H 'Content-Type: application/json' -H 'X-Internal-Token: %s' -d '%s'`,
+			cronToken,
 			payload,
 		)
 

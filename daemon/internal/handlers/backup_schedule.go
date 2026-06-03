@@ -145,7 +145,8 @@ func installRsyncTimers(schedules []RsyncSchedule) {
 		payload, _ := json.Marshal(map[string]string{"id": s.ID})
 		safePayload := strings.ReplaceAll(string(payload), "'", "'\\''")
 		cmd := fmt.Sprintf(
-			"curl -sf -X POST http://127.0.0.1:9000/api/backup/rsync/cron-hook -H 'Content-Type: application/json' -H 'X-Internal-Token: dplaneos-internal-reconciliation-secret-v1' -d '%s'",
+			"curl -sf -X POST http://127.0.0.1:9000/api/backup/rsync/cron-hook -H 'Content-Type: application/json' -H 'X-Internal-Token: %s' -d '%s'",
+			cronToken,
 			safePayload,
 		)
 		safeName := strings.NewReplacer("/", "-", " ", "_").Replace(s.ID)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"flag"
@@ -24,6 +25,7 @@ import (
 	"dplaned/internal/gitops"
 	"dplaned/internal/ha"
 	"dplaned/internal/handlers"
+	"dplaned/internal/hardware"
 	"dplaned/internal/jobs"
 	"dplaned/internal/middleware"
 	"dplaned/internal/monitoring"
@@ -53,6 +55,7 @@ func main() {
 	smbConfPath := flag.String("smb-conf", "/etc/samba/smb.conf", "Path to write SMB config (for NixOS: /var/lib/dplaneos/smb-shares.conf)")
 	haLocalID := flag.String("ha-local-id", "", "Unique ID for this cluster node (default: /etc/machine-id prefix)")
 	haLocalAddr := flag.String("ha-local-addr", "", "HTTP address peers use to reach this daemon, e.g. http://10.0.0.1:5050")
+	haClusterSecret := flag.String("ha-cluster-secret", "", "Pre-shared secret for HA peer authentication; must match on all cluster nodes")
 	gitopsStatePath := flag.String("gitops-state", "/var/lib/dplaneos/gitops/state.yaml", "Path to GitOps state.yaml (managed by git repo)")
 	applyOnly := flag.Bool("apply", false, "Apply GitOps state and exit (Phase 3.1)")
 	diffOnly := flag.Bool("diff", false, "Output reconciliation plan as JSON and exit")
@@ -347,6 +350,11 @@ func main() {
 		haAddr = "http://" + *listenAddr
 	}
 	clusterMgr := ha.NewManager(db, haID, haAddr, Version)
+	if *haClusterSecret != "" {
+		clusterMgr.SetClusterSecret(*haClusterSecret)
+	} else {
+		log.Printf("WARNING: --ha-cluster-secret not set; HA peer heartbeats are unauthenticated. Set this flag on all cluster nodes to enable peer authentication.")
+	}
 	clusterMgr.SetPromotionCallback(func() {
 		go runPostPromotionStacksApply(db, *gitopsStatePath, *smbConfPath)
 	})
@@ -543,12 +551,23 @@ func main() {
 	// Start background audit log rotation
 	StartAuditRotation(db)
 
+	// Generate a per-boot random token for internal cron-hook endpoints.
+	// The token is never written to disk; systemd unit files are regenerated
+	// each time schedules are saved, picking up the current runtime value.
+	cronTokenBytes := make([]byte, 32)
+	if _, err := cryptorand.Read(cronTokenBytes); err != nil {
+		log.Fatalf("Failed to generate internal cron token: %v", err)
+	}
+	cronToken := fmt.Sprintf("%x", cronTokenBytes)
+	handlers.SetCronToken(cronToken)
+	hardware.SetCronToken(cronToken)
+
 	// Create router
 	r := mux.NewRouter()
 
 	// Middleware
 	r.Use(loggingMiddleware)
-	r.Use(sessionMiddleware(db))
+	r.Use(sessionMiddleware(db, cronToken))
 	r.Use(rateLimitMiddleware)
 
 	// Health check
@@ -1276,6 +1295,8 @@ func main() {
 	r.Handle("/api/ha/sbd/configure", permRoute("system", "admin", haHandler.ConfigureSBD)).Methods("POST")
 	r.Handle("/api/ha/sbd/configure", permRoute("system", "admin", haHandler.GetSBDConfig)).Methods("GET")
 	r.Handle("/api/ha/clear_fault", permRoute("system", "admin", haHandler.ClearFault)).Methods("POST")
+	r.Handle("/api/ha/cluster-secret/configure", permRoute("system", "admin", haHandler.GetClusterSecretConfig)).Methods("GET")
+	r.Handle("/api/ha/cluster-secret/configure", permRoute("system", "admin", haHandler.SetClusterSecretConfig)).Methods("POST")
 	// /api/ha/heartbeat and /api/ha/sync/status are deliberately PUBLIC - peer daemons call them without a session
 	r.HandleFunc("/api/ha/heartbeat", haHandler.PeerHeartbeat).Methods("POST")
 	r.HandleFunc("/api/ha/sync/status", haHandler.GetSyncStatus).Methods("GET")
@@ -1457,7 +1478,7 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 }
 
 // Session validation middleware
-func sessionMiddleware(db *sql.DB) mux.MiddlewareFunc {
+func sessionMiddleware(db *sql.DB, internalCronToken string) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip validation for public endpoints
@@ -1483,10 +1504,10 @@ func sessionMiddleware(db *sql.DB) mux.MiddlewareFunc {
 				p == "/api/ha/heartbeat" ||
 				p == "/api/ha/sync/status" ||
 				// Internal hooks - called by systemd timers on localhost.
-				// Mandatory check: Must be localhost AND provide the internal-only secret token.
+				// Mandatory check: must be localhost AND carry the per-boot random token.
 				((p == "/api/zfs/snapshots/cron-hook" || p == "/api/hardware/smart/cron-hook" || p == "/api/backup/rsync/cron-hook") &&
 					(strings.HasPrefix(r.RemoteAddr, "127.0.0.1") || strings.HasPrefix(r.RemoteAddr, "[::1]")) &&
-					r.Header.Get("X-Internal-Token") == "dplaneos-internal-reconciliation-secret-v1") ||
+					r.Header.Get("X-Internal-Token") == internalCronToken) ||
 				// Internal disk events - called by udev scripts on localhost
 				p == "/api/internal/disk-event" ||
 				// Prometheus metrics - scraped by external monitoring without session

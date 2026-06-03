@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"dplaned/internal/security"
 )
 
 // SyncStatus is returned by GET /api/ha/sync/status and consumed by peers
@@ -41,8 +43,12 @@ func GetLocalSyncStatus(isActive bool) SyncStatus {
 }
 
 // localPoolTXG returns the latest committed ZFS transaction group for a pool.
-// Returns 0 on error (pool not imported or non-existent).
+// Returns 0 on error (pool not imported, non-existent, or invalid name).
 func localPoolTXG(pool string) int64 {
+	if err := security.ValidatePoolName(pool); err != nil {
+		log.Printf("HA RECONCILE: localPoolTXG: %v", err)
+		return 0
+	}
 	out, err := exec.Command("zfs", "get", "-H", "-p", "-o", "value", "txg", pool).Output()
 	if err != nil {
 		return 0
@@ -111,6 +117,11 @@ func (m *Manager) StartupReconciliation() {
 		log.Printf("HA RECONCILE: Zombie boot detected - peer at %s is active (TXG %d vs local %d, Δ%d). Entering Subordinate Mode to prevent stale data serving.",
 			addr, peerTXG, localTXG, delta)
 
+		if err := ValidateReplicationConfig(replCfg); err != nil {
+			log.Printf("HA RECONCILE: aborting subordinate mode - invalid replication config: %v", err)
+			return
+		}
+
 		m.mu.Lock()
 		m.subordinateMode = true
 		m.mu.Unlock()
@@ -145,6 +156,9 @@ func (m *Manager) StartupReconciliation() {
 // stream its latest snapshot, and receive it into the local pool. This is the mirror
 // of syncZFS - the peer sends, we receive.
 func (m *Manager) catchUpFromPeer(ctx context.Context, cfg *ReplicationConfig) error {
+	if err := ValidateReplicationConfig(cfg); err != nil {
+		return err
+	}
 	log.Printf("HA RECONCILE: Receiving catch-up stream from %s@%s (%s → %s)",
 		cfg.RemoteUser, cfg.RemoteHost, cfg.RemotePool, cfg.LocalPool)
 

@@ -11,9 +11,10 @@ import (
 	"time"
 
 	"dplaned/internal/cmdutil"
+	"dplaned/internal/gitops"
 	"dplaned/internal/ha"
 	"dplaned/internal/jobs"
-	"dplaned/internal/gitops"
+	"dplaned/internal/security"
 	"github.com/gorilla/mux"
 )
 
@@ -93,7 +94,10 @@ func (h *HAHandler) PeerHeartbeat(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, "node_id is required", http.StatusBadRequest)
 		return
 	}
-	h.mgr.HandleHeartbeat(hb)
+	if !h.mgr.HandleHeartbeat(hb) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	// Reply with our own identity so peers can detect our role
 	info := h.mgr.LocalInfo()
@@ -103,6 +107,39 @@ func (h *HAHandler) PeerHeartbeat(w http.ResponseWriter, r *http.Request) {
 		"address":  info["address"],
 		"version":  info["version"],
 	})
+}
+
+// GetClusterSecretConfig reports whether a cluster peer secret is active.
+// The secret itself is never returned.
+// GET /api/ha/cluster-secret/configure
+func (h *HAHandler) GetClusterSecretConfig(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success":    true,
+		"configured": h.mgr.IsClusterSecretConfigured(),
+	})
+}
+
+// SetClusterSecretConfig saves a new cluster peer secret to the database and
+// applies it to the running manager without requiring a restart.
+// POST /api/ha/cluster-secret/configure
+// Body: { "secret": "..." }
+func (h *HAHandler) SetClusterSecretConfig(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Secret string `json:"secret"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+	if err := h.mgr.SaveClusterSecretToDB(req.Secret); err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to save cluster secret", err)
+		return
+	}
+	if req.Secret == "" {
+		respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "message": "Cluster secret cleared - peer authentication disabled"})
+	} else {
+		respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "message": "Cluster secret updated - takes effect immediately"})
+	}
 }
 
 // SetPeerRole updates a peer's role (e.g. promote standby → active for manual failover).
@@ -206,21 +243,19 @@ func (h *HAHandler) ConfigureHAReplication(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	
-	// Default interval to 30 if zero or negative
 	if req.IntervalSecs < 10 {
 		req.IntervalSecs = 30
 	}
-
-	if req.LocalPool == "" || req.RemotePool == "" || req.RemoteHost == "" || req.SSHKeyPath == "" {
-		respondErrorSimple(w, "local_pool, remote_pool, remote_host, and ssh_key_path are required", http.StatusBadRequest)
-		return
-	}
-
 	if req.RemoteUser == "" {
 		req.RemoteUser = "root"
 	}
 	if req.RemotePort == 0 {
 		req.RemotePort = 22
+	}
+
+	if err := ha.ValidateReplicationConfig(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid replication configuration", err)
+		return
 	}
 
 	if err := h.mgr.SetReplicationConfig(&req); err != nil {
@@ -578,6 +613,16 @@ func (h *HAHandler) ConfigureSBD(w http.ResponseWriter, r *http.Request) {
 	if req.Pool != "" && req.Dataset == "" {
 		respondErrorSimple(w, "dataset is required when pool is set", http.StatusBadRequest)
 		return
+	}
+	if req.Pool != "" {
+		if err := security.ValidatePoolName(req.Pool); err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid pool name", err)
+			return
+		}
+		if err := security.ValidateDatasetName(req.Pool + "/" + req.Dataset); err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid dataset name", err)
+			return
+		}
 	}
 	if err := h.mgr.SaveSBDConfig(req); err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to save SBD config", err)

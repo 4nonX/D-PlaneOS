@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v12.2.0 (2026-06-03) - "Bastion"
+
+Upgrade from: v12.1.0 - Schema migration required (1 new table: `ha_cluster_secret`, created automatically at daemon startup via `ensureSchema`). No breaking API changes. No breaking configuration changes.
+
+### Added
+
+- **HA peer authentication (`GET|POST /api/ha/cluster-secret/configure`, `daemon/internal/ha/cluster.go`, `daemon/internal/handlers/ha_handler.go`)**: Pre-shared cluster secret that peer daemons must include in every heartbeat payload. When configured, `HandleHeartbeat` rejects any node that does not carry the correct secret, preventing any host on the management network from injecting itself as a cluster peer and influencing HA decisions. The secret is persisted in a new `ha_cluster_secret` table, loaded at startup (CLI flag `--ha-cluster-secret` takes precedence over the DB value), and applied to the running manager in-place on save with no restart required. The secret is write-only: `GET /api/ha/cluster-secret/configure` returns only `{ configured: bool }`. A startup warning is logged when no secret is set and the daemon is operating in unauthenticated peer mode.
+
+- **HA cluster secret GUI (`app-react/src/pages/HAPage.tsx`)**: New `ClusterSecretForm` component in the HA Configuration section with current status indicator (Active/Not Set), masked input with show/hide toggle, one-click browser-side generation via `crypto.getRandomValues` (32 bytes encoded as 64-char hex), and save. Warning banner on the main dashboard when peers are registered but no secret is configured. New wizard Step 4 "Peer Authentication" inserted between peer registration (Step 3) and storage replication (now Step 5), with contextual explanation of the risk of skipping it. Wizard `TOTAL_STEPS` updated from 6 to 7.
+
+- **`ValidateHostname`, `ValidateUnixUsername`, `ValidateAbsolutePath` (`daemon/internal/security/whitelist.go`)**: Three new input validators covering HA replication config fields. `ValidateHostname` accepts RFC 1123 hostname labels and IPv4/IPv6 addresses, rejecting shell metacharacters. `ValidateUnixUsername` enforces POSIX portable username format (lowercase, no shell metacharacters). `ValidateAbsolutePath` validates SSH key file paths for safe use as exec arguments.
+
+- **HA replication config validation at save time (`daemon/internal/handlers/ha_handler.go`)**: `ConfigureHAReplication` now calls `ValidateReplicationConfig` before persisting to the database. Invalid pool names, hostnames, usernames, port numbers, or key paths are rejected at the API level with HTTP 400 rather than silently saved and discovered as a runtime error when replication runs.
+
+- **SBD config validation at save time (`daemon/internal/handlers/ha_handler.go`)**: `ConfigureSBD` now validates pool and dataset names against `ValidatePoolName` and `ValidateDatasetName` before saving, preventing a bad name from being stored and silently failing every lease renewal cycle.
+
+- **Replication config format hints (`app-react/src/pages/HAPage.tsx`)**: Helper text below the SSH replication fields documents the pool name character set, lowercase-only username requirement, and absolute-path constraint for the identity file.
+
+### Fixed
+
+- **HA: spurious STONITH fence against a live peer (`daemon/internal/ha/cluster.go`)**: `checkFailover` read a `deadPeer` snapshot under a read lock, dropped the lock, ran five guards, then re-acquired a write lock. A delayed heartbeat arriving between the unlock and re-lock could restore the peer to `StateHealthy` while the stale snapshot continued driving the fencing sequence, causing a spurious fence against an alive primary. Fixed: after acquiring the write lock, re-reads `m.nodes[deadPeer.ID]` and aborts if the peer is no longer `StateUnreachable`.
+
+- **Audit HMAC chain race condition (`daemon/internal/audit/buffered_logger.go`)**: `Flush` (batch path) and `writeDirect` (security-event path) both read `prevHash` in independent transactions with no serialization. Under concurrent load they could read the same tail hash and produce a broken chain link, causing the verify-chain endpoint to flag all subsequent rows as invalid. Fixed: new `chainMu sync.Mutex` serializes the prevHash read-compute-insert-commit sequence across both callers.
+
+- **Audit HMAC chain permanently broken on batch insert error (`daemon/internal/audit/buffered_logger.go`)**: On insert failure inside `Flush`, the code did `continue` and advanced `prevHash = rowHash`. All subsequent rows in the batch received a `prev_hash` pointing to a hash that was never committed, permanently breaking the chain for that batch with no error surfaced. Fixed: on insert error, return immediately so the deferred `tx.Rollback()` fires and `prevHash` is never advanced past a committed row.
+
+- **YAML parser stack overflow on deeply nested `state.yaml` (`daemon/internal/gitops/state.go`)**: `parseMapping` and `parseSequence` are mutually recursive with no depth limit. A deeply nested or adversarial `state.yaml` would stack-overflow the daemon process. Fixed: `const maxYAMLDepth = 50`; both functions accept a `depth int` parameter and return a parse error when the limit is exceeded.
+
+- **SBD `renewLease` pool/dataset injection (`daemon/internal/ha/sbd.go`)**: `cfg.Pool` and `cfg.Dataset` were concatenated and passed directly to `exec.Command("zfs", "set", ...)` without validation. A compromised database row could inject arbitrary arguments. Fixed: both fields now pass through `security.ValidatePoolName` and `security.ValidateDatasetName` before the exec call.
+
+- **HA replication and reconcile exec calls bypassing the security allowlist (`daemon/internal/ha/replication.go`, `daemon/internal/ha/reconcile.go`)**: All `exec.Command` calls in the HA package passed DB-sourced pool names, hostnames, usernames, and SSH key paths directly without allowlist validation, inconsistent with the rest of the daemon. Fixed: `ValidateReplicationConfig` is called at the start of `syncZFS`, `executeSendRecv`, `catchUpFromPeer`, and `StartupReconciliation`. `localPoolTXG` validates pool names before use.
+
+- **Hardcoded internal cron hook token exposed in systemd unit files (`daemon/cmd/dplaned/main.go`, `daemon/internal/handlers/system_extended.go`, `daemon/internal/handlers/backup_schedule.go`, `daemon/internal/hardware/smart.go`)**: The literal string `dplaneos-internal-reconciliation-secret-v1` was hardcoded in three timer-generator functions and written verbatim into systemd unit files on disk, allowing any local user who could read those files to call cron-hook endpoints without a session. Fixed: a 32-byte `crypto/rand` token is generated at each daemon startup, distributed to all three packages via `SetCronToken`, embedded into unit files only at timer-generation time, and validated in `sessionMiddleware` against the runtime value. The token rotates on every restart; existing unit files are invalidated when schedules are next saved.
+
+- **Bond slave restoration errors silently discarded (`daemon/internal/reconciler/reconciler.go`)**: `LinkSetDown` and `LinkSetMaster` errors in `restoreBond` were discarded with `_`. A bond could come up missing a member with no log evidence, passing traffic through fewer links than configured. Fixed: errors are now logged with bond name and slave interface.
+
+- **Default route restoration fire-and-forget (`daemon/internal/reconciler/reconciler.go`)**: `RouteReplace` for the default gateway was discarded with `_`. A node with a misconfigured gateway would have its static IP restored but no default route, appearing online to local traffic while being unreachable from outside its subnet. Fixed: error is now logged.
+
+---
+
 ## v12.1.0 (2026-06-01) - "Integrity"
 
 Upgrade from: v12.0.0 - No schema migration required. No breaking API changes.
