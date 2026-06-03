@@ -39,6 +39,13 @@
     jq
   ];
 
+  # Same doc-output suppression as installer.nix - prevents the broken
+  # python3.11 HTML doc build (Sphinx 9.1 + docutils 0.22.4 in nixpkgs 26.05)
+  # from entering this ISO's system-path closure.
+  documentation.doc.enable   = false;
+  documentation.nixos.enable = false;
+  environment.extraOutputsToInstall = lib.mkForce [];
+
   boot.kernelPackages    = pkgs.linuxPackages_6_6;
   boot.kernelParams      = [ "console=tty0" "console=ttyS0,115200n8" ];
   networking.useDHCP     = lib.mkForce true;
