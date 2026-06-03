@@ -104,9 +104,9 @@ function ContextMenu({ state, onClose, onAction }: {
   ]
   return (
     <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 149 }} onClick={onClose} />
+      <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-dropdown)' }} onClick={onClose} />
       <div style={{
-        position: 'fixed', left: state.x, top: state.y, zIndex: 150,
+        position: 'fixed', left: state.x, top: state.y, zIndex: 'var(--z-modal)',
         background: 'var(--bg-elevated)', border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
         padding: '4px 0', minWidth: 200}}>

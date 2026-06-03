@@ -128,7 +128,7 @@ export function JobConsole({ jobId, title = 'Task Console', onClose }: JobConsol
           <span>{title}</span>
           <span style={{ 
             fontSize: 10, padding: '2px 6px', borderRadius: 4, 
-            background: jobStatus === 'running' ? 'rgba(59,130,246,0.1)' : 'rgba(16,185,129,0.1)',
+            background: jobStatus === 'running' ? 'var(--info-bg)' : 'var(--success-bg)',
             border: `1px solid ${jobStatus === 'running' ? 'var(--info-border)' : 'var(--success-border)'}`,
             color: jobStatus === 'running' ? 'var(--info)' : 'var(--success)',
             textTransform: 'uppercase', fontWeight: 700 
@@ -145,7 +145,7 @@ export function JobConsole({ jobId, title = 'Task Console', onClose }: JobConsol
           ref={containerRef} 
           style={{ 
             height: '55vh', 
-            background: '#0a0b10', 
+            background: 'var(--bg)',
             borderRadius: 'var(--radius-md)', 
             padding: 8,
             border: '1px solid rgba(255,255,255,0.05)',

@@ -351,7 +351,7 @@ function BranchSwitcher({ repo, onSelect }: { repo: Repo; onSelect: (b: string) 
 
       {open && (
         <div style={{
-          position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:200,
+          position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:'var(--z-dropdown)',
           background:'var(--bg-card)', border:'1px solid var(--border)',
           borderRadius:'var(--radius-md)', minWidth:190, maxHeight:240, overflowY:'auto',
           boxShadow:'0 8px 24px rgba(0,0,0,0.18)',
@@ -600,7 +600,7 @@ function RepoSyncWizard({ type, onClose, onComplete }: { type: 'state'|'nixos'; 
   })
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', backdropFilter:'blur(8px)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', backdropFilter:'blur(8px)', zIndex:'var(--z-modal)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div className="card-xl" style={{ width:'100%', maxWidth:500, padding:32, background:'var(--bg-card)', border:'1px solid var(--border-highlight)', position:'relative' }}>
         <button onClick={onClose} style={{ position:'absolute', top:20, right:20, background:'none', border:'none', color:'var(--text-tertiary)', cursor:'pointer' }}><Icon name="close" size={20}/></button>
         

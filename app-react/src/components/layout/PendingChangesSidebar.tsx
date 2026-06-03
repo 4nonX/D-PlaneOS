@@ -50,7 +50,7 @@ export function PendingChangesSidebar() {
       <div 
         onClick={() => setSidebarOpen(false)}
         style={{ 
-          position: 'fixed', inset: 0, zIndex: 1001, 
+          position: 'fixed', inset: 0, zIndex: 'var(--z-overlay)',
           background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
           animation: 'fadeIn 0.2s ease-out'
         }} 
@@ -61,7 +61,7 @@ export function PendingChangesSidebar() {
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 450, background: 'var(--surface)',
         borderLeft: '1px solid var(--border)',
-        zIndex: 1002, display: 'flex', flexDirection: 'column',
+        zIndex: 'var(--z-overlay)', display: 'flex', flexDirection: 'column',
         boxShadow: '-10px 0 40px rgba(0,0,0,0.5)',
         animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
       }}>

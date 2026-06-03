@@ -81,7 +81,7 @@ export function KeyboardHelpModal({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 9000,
+        position: 'fixed', inset: 0, zIndex: 'var(--z-overlay)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
         animation: 'fadeIn 0.15s ease',

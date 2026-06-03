@@ -1159,7 +1159,7 @@ function PoolPickerButton({ pools, disabled, onPick }: {
       </button>
       {open && (
         <div style={{
-          position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 200,
+          position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 'var(--z-dropdown)',
           minWidth: 220, background: 'var(--bg-elevated)',
           backdropFilter: 'var(--blur-glass)', border: '1px solid var(--border-highlight)',
           borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',

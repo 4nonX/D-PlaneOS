@@ -132,7 +132,7 @@ function diskTypeMeta(type: string): { label: string; color: string; bg: string;
   const t = (type ?? '').toUpperCase()
   if (t === 'NVME') return { label: 'NVMe', color: 'var(--info)',           bg: 'var(--info-bg)',                              border: 'var(--info-border)' }
   if (t === 'SSD')  return { label: 'SSD',  color: 'var(--primary)',        bg: 'var(--primary-bg)',                           border: 'hsla(var(--hue-primary),100%,72%,.25)' }
-  if (t === 'SAS')  return { label: 'SAS',  color: '#a78bfa',               bg: 'rgba(167,139,250,0.1)',                       border: 'rgba(167,139,250,0.25)' }
+  if (t === 'SAS')  return { label: 'SAS',  color: 'hsl(260,78%,76%)',       bg: 'hsla(260,78%,76%,0.1)',                       border: 'hsla(260,78%,76%,0.25)' }
   if (t === 'USB')  return { label: 'USB',  color: 'var(--text-secondary)', bg: 'var(--surface)',                              border: 'var(--border)' }
   if (t === 'HDD')  return { label: 'HDD',  color: 'var(--text-secondary)', bg: 'var(--surface)',                              border: 'var(--border)' }
   return             { label: type || 'Disk', color: 'var(--text-tertiary)', bg: 'var(--surface)',                              border: 'var(--border)' }

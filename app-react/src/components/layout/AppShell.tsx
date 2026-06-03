@@ -47,7 +47,7 @@ function strengthScore(pw: string): { score: number; color: string; missing: str
   if (!hasDigit)      missing.push('number')
   if (!hasSpecial)    missing.push('special char')
   const score = Math.max(0, 4 - missing.length)
-  const colors = ['var(--border)', 'var(--error)', 'var(--warning)', '#3b82f6', 'var(--success)']
+  const colors = ['var(--border)', 'var(--error)', 'var(--warning)', 'var(--info)', 'var(--success)']
   return { score, color: colors[score] ?? 'var(--border)', missing }
 }
 
@@ -132,7 +132,7 @@ function ForcePasswordChange() {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999, background: '#080808',
+      position: 'fixed', inset: 0, zIndex: 'var(--z-supreme)', background: 'var(--bg)',
       display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
       <div className="card" style={{ borderRadius: 'var(--radius-xl)', padding: 40, width: 440, maxWidth: '90vw'}}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>

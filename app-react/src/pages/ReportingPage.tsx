@@ -13,6 +13,12 @@ import { useState, useEffect, useRef, useId } from 'react'
 import { api } from '@/lib/api'
 import { useWsStore } from '@/stores/ws'
 import { ErrorState } from '@/components/ui/ErrorState'
+
+// Chart accent colors - hsl values matching the design token palette so
+// these work in SVG fill/stroke contexts where CSS variables are not supported.
+const C_ARC    = 'hsl(260,78%,76%)' // purple - distinct from primary blue-violet
+const C_LOAD   = 'hsl(208,95%,62%)' // matches --info
+const C_IOWAIT = 'hsl(38,92%,55%)'  // matches --warning
 import { LoadingState, Skeleton } from '@/components/ui/LoadingSpinner'
 import { Icon } from '@/components/ui/Icon'
 
@@ -461,16 +467,16 @@ export function ReportingPage() {
             sub={`${fmtBytes(currentQ.data?.memory.used ?? 0)} / ${fmtBytes(currentQ.data?.memory.total ?? 0)}`}
             history={memHistory} warn={memPct > 85} />
 
-          <MetricPanel label="ZFS ARC" icon="dns" current={arcPct} unit="%" color="#8b5cf6"
+          <MetricPanel label="ZFS ARC" icon="dns" current={arcPct} unit="%" color={C_ARC}
             sub={`${fmtBytes(currentQ.data?.arc.used ?? 0)} / ${fmtBytes(currentQ.data?.arc.limit ?? 0)}`}
             history={arcHistory} />
 
           <MetricPanel label="Load Average" icon="speed" current={parseFloat(history[history.length-1]?.load1 ?? '0')} unit=""
-            color="#06b6d4"
+            color={C_LOAD}
             sub={`5m: ${history[history.length-1]?.load5 ?? '-'}  15m: ${history[history.length-1]?.load15 ?? '-'}`}
             history={load1History} />
 
-          <MetricPanel label="I/O Wait" icon="storage" current={iowait} unit="%" color="#f59e0b"
+          <MetricPanel label="I/O Wait" icon="storage" current={iowait} unit="%" color={C_IOWAIT}
             sub="CPU time waiting for disk I/O"
             history={history.map((p: HistoryPoint) => p.iowait ?? 0)} warn={iowait > 20} />
 
@@ -504,11 +510,11 @@ export function ReportingPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
             <HistoryChart label="Memory %" color="var(--primary)"
               dataPoints={history} period={period} extractFn={memPercent} />
-            <HistoryChart label="ZFS ARC %" color="#8b5cf6"
+            <HistoryChart label="ZFS ARC %" color={C_ARC}
               dataPoints={history} period={period} extractFn={arcPercent} />
-            <HistoryChart label="Load Average (1m)" color="#06b6d4"
+            <HistoryChart label="Load Average (1m)" color={C_LOAD}
               dataPoints={history} period={period} extractFn={load1Val} />
-            <HistoryChart label="I/O Wait %" color="#f59e0b"
+            <HistoryChart label="I/O Wait %" color={C_IOWAIT}
               dataPoints={history} period={period} extractFn={p => p.iowait ?? 0} />
           </div>
         )}

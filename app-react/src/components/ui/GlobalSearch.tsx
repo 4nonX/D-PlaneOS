@@ -219,7 +219,7 @@ export function GlobalSearch({ onClose }: GlobalSearchProps) {
   return createPortal(
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 9000,
+        position: 'fixed', inset: 0, zIndex: 'var(--z-overlay)',
         background: 'rgba(0,0,0,0.6)',
         backdropFilter: 'blur(4px)',
         display: 'flex', alignItems: 'flex-start', justifyContent: 'center',

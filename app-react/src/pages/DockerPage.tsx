@@ -1407,7 +1407,7 @@ function ContainerExecModal({ target, onClose }: { target: ExecTarget; onClose: 
   function switchShell(sh: 'bash' | 'sh') { setShell(sh); connect(sh) }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ width: '90vw', maxWidth: 960, height: '80vh', display: 'flex', flexDirection: 'column', background: 'var(--surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface-2)' }}>
@@ -1428,7 +1428,7 @@ function ContainerExecModal({ target, onClose }: { target: ExecTarget; onClose: 
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: status === 'connected' ? 'var(--success)' : status === 'connecting' ? 'var(--warning)' : 'var(--error)', boxShadow: status === 'connected' ? '0 0 5px var(--success)' : 'none' }} />
           <button onClick={onClose} style={{ padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
-        <div ref={containerRef} style={{ flex: 1, padding: 8, background: '#0d0f14', minHeight: 0 }} />
+        <div ref={containerRef} style={{ flex: 1, padding: 8, background: 'var(--bg)', minHeight: 0 }} />
       </div>
     </div>
   )
@@ -1891,7 +1891,7 @@ function FileBrowserModal({ repoId, onSelect, onClose }: {
   const pathParts = currentPath ? currentPath.split('/').filter(Boolean) : []
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-modal)' }}>
       <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', width: 480, maxHeight: '70vh', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Icon name="folder_open" size={18} style={{ color: 'var(--primary)' }} />
@@ -1989,7 +1989,7 @@ function ExportModal({ repoId, repoName, yaml, onClose }: {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-modal)' }}>
       <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', width: 620, maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Icon name="code" size={18} style={{ color: 'var(--primary)' }} />
@@ -2570,7 +2570,7 @@ function GitSyncTab() {
 
       {/* Credential test modal */}
       {testCred && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-modal)' }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: 24, width: 440, boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}>
             <h3 style={{ margin: '0 0 16px', fontSize: 'var(--text-base)' }}>Test: {testCred.name}</h3>
             <div style={{ marginBottom: 12 }}>

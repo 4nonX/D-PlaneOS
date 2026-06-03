@@ -63,7 +63,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         borderRight: '1px solid var(--border-subtle)',
         display: 'flex', flexDirection: 'column',
         transition: 'width var(--transition-bounce)',
-        overflow: 'hidden', zIndex: 50,
+        overflow: 'hidden', zIndex: 'var(--z-topbar)',
         backdropFilter: 'var(--blur-glass)'}}
     >
       {/* ── Logo + collapse toggle ── */}

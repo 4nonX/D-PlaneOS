@@ -143,7 +143,7 @@ function EditRuleModal({ rule, onClose, onSave, pending, autoReconcile, setAutoR
   }
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(4px)' }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-modal)', backdropFilter: 'blur(4px)' }}>
       <div className="card" style={{ width: 450, padding: 24, borderRadius: 'var(--radius-xl)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)' }}>
         <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
           <Icon name="edit" size={20} style={{ color: 'var(--primary)' }} />

@@ -706,9 +706,9 @@ function DiagnosticsTab() {
         </div>
       </div>
 
-      <div ref={scrollRef} style={{ background: '#0a0a0b', border: '1px solid #222', borderRadius: 'var(--radius-md)', padding: '16px 20px', minHeight: '300px', maxHeight: '500px', overflowY: 'auto', fontFamily: 'var(--font-mono)', fontSize: '13px', lineHeight: '1.6', color: '#e4e4e7', position: 'relative' }}>
+      <div ref={scrollRef} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px 20px', minHeight: '300px', maxHeight: '500px', overflowY: 'auto', fontFamily: 'var(--font-mono)', fontSize: '13px', lineHeight: '1.6', color: 'var(--text)', position: 'relative' }}>
         {output.length === 0 && !isRunning && (
-          <div style={{ color: '#52525b', textAlign: 'center', marginTop: 120 }}>
+          <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', marginTop: 120 }}>
             <Icon name="terminal" size={32} style={{ opacity: 0.1, marginBottom: 12 }} />
             <div>Diagnostics output will appear here</div>
           </div>

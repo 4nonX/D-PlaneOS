@@ -54,7 +54,7 @@ export function TopBar({ sidebarCollapsed, onSearchOpen, onHelpOpen }: TopBarPro
         borderBottom: '1px solid var(--border-subtle)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 32px',
-        zIndex: 40,
+        zIndex: 'var(--z-topbar)',
         backdropFilter: 'var(--blur-glass)',
         boxShadow: '0 4px 30px rgba(0, 0, 0, 0.4)',
         transition: 'left var(--transition-bounce)'}}
@@ -144,15 +144,15 @@ export function TopBar({ sidebarCollapsed, onSearchOpen, onHelpOpen }: TopBarPro
 
         {api.isMockActive() && (
           <div style={{
-            background: 'linear-gradient(90deg, #ff4b2b, #ff416c)',
+            background: 'linear-gradient(90deg, var(--error) 0%, var(--warning) 100%)',
             padding: '4px 12px',
             borderRadius: 6,
             fontSize: 10,
             fontWeight: 800,
-            color: '#fff',
+            color: 'var(--text)',
             letterSpacing: '0.5px',
             textTransform: 'uppercase',
-            boxShadow: '0 4px 12px rgba(255, 75, 43, 0.3)',
+            boxShadow: 'var(--error-glow)',
             animation: 'pulse 2s infinite'
           }}>
             Preview Mode - Mock Data
@@ -247,7 +247,7 @@ function NotificationsBell() {
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-lg)',
             boxShadow: 'var(--shadow-xl)',
-            zIndex: 1000,
+            zIndex: 'var(--z-modal)',
             overflow: 'hidden',
             backdropFilter: 'var(--blur-glass)'
           }}>
@@ -316,7 +316,7 @@ function NotificationsBell() {
           </div>
           <div 
             onClick={() => setShowFlyout(false)}
-            style={{ position: 'fixed', inset: 0, zIndex: 999 }} 
+            style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-dropdown)' }}
           />
         </>
       )}
@@ -453,7 +453,7 @@ function PoolMonitor() {
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-md)',
           boxShadow: 'var(--shadow-lg)',
-          zIndex: 100,
+          zIndex: 'var(--z-modal)',
           minWidth: 160,
           overflow: 'hidden',
           backdropFilter: 'var(--blur-glass)'
@@ -492,7 +492,7 @@ function PoolMonitor() {
       {showDropdown && (
         <div 
           onClick={() => setShowDropdown(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 99 }} 
+          style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-dropdown)' }}
         />
       )}
     </div>

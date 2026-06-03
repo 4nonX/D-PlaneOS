@@ -544,7 +544,7 @@ export function DashboardPage() {
               backdropFilter: 'var(--blur-glass)',
               border: '1px solid var(--border-highlight)',
               borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xl)',
-              zIndex: 200, padding: 16, animation: 'fadeIn 0.15s ease',
+              zIndex: 'var(--z-modal)', padding: 16, animation: 'fadeIn 0.15s ease',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
