@@ -113,6 +113,12 @@ let
         listenAddress = "0.0.0.0";
         listenPort = 9000;
 
+        # Samba and NFS default to enabled in production but are not needed for
+        # the HA failover test. Disabling them keeps the VM closure small and
+        # avoids samba/nfs service start races that are irrelevant to this test.
+        samba.enable = false;
+        nfs.enable   = false;
+
         ha = {
           enable = true;
           inherit role;

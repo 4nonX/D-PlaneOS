@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -e  # fail fast during setup; turned off before the test suite begins
 
 # --- SETUP ---
 echo "--- Setting up ZFS loopbacks ---"
@@ -190,6 +190,12 @@ EOF
   then ok "$label"; else fail "$label (shape mismatch or empty)"; fi
 }
 
+# Setup complete. From here on accumulate failures rather than exiting on first
+# error, so the full failure list is visible in CI logs regardless of where
+# tests fail.
+set +e
+
+echo "::group::API Integration Suite"
 echo "--- Starting API Integration Suite ---"
 
 # 1. PRE-AUTH
@@ -368,6 +374,8 @@ api GET /api/power/disks >/dev/null
 assert_json "Power disks" "success" "true"
 
 # 9.5 RBAC GROUPS & SYSTEM LOGS
+echo "::endgroup::"
+echo "::group::RBAC Groups"
 echo "--- Testing RBAC Groups ---"
 # Group creation
 GRP_RESP=$(api POST /api/rbac/groups "{\"action\":\"create\",\"name\":\"ci-group\",\"description\":\"CI Test Group\",\"confirm_password\":\"$CI_PASS\"}")
@@ -385,12 +393,16 @@ assert_json "Add member to group" "success" "true"
 api GET "/api/rbac/groups?id=$GRP_ID" >/dev/null
 assert_json "Verify member count" "group.member_count" "1"
 
+echo "::endgroup::"
+echo "::group::System Logs"
 echo "--- Testing System Logs ---"
 api GET /api/system/logs >/dev/null
 assert_json "Get system logs" "success" "true"
 assert_array "Logs array present" "data"
 
 # 10. DOCKER & CONTAINERS
+echo "::endgroup::"
+echo "::group::Docker Subsystem"
 echo "--- Testing Docker Subsystem ---"
 api GET /api/docker/images >/dev/null
 assert_json "List images" "success" "true"
@@ -400,12 +412,11 @@ api GET /api/docker/icon-map >/dev/null
 assert_json "Docker icon map" "success" "true"
 api GET /api/docker/stacks >/dev/null
 assert_json "List stacks" "success" "true"
-api GET /api/docker/templates >/dev/null
-assert_json "List templates" "success" "true"
-api GET /api/docker/templates/installed >/dev/null
-assert_json "Installed templates" "success" "true"
+# Note: /api/docker/templates/* routes removed in v12.5.0 (redundant with Compose Stacks UI)
 
 # 11. GIT SYNC
+echo "::endgroup::"
+echo "::group::Git Sync"
 echo "--- Testing Git Sync Subsystem ---"
 api GET /api/git-sync/config >/dev/null
 assert_json "Git-sync config" "success" "true"
@@ -417,6 +428,8 @@ api GET /api/git-sync/credentials >/dev/null
 assert_json "List git credentials" "success" "true"
 
 # 13. NIXOS & SYSTEM DEPTH
+echo "::endgroup::"
+echo "::group::NixOS & System Modules"
 echo "--- Testing NixOS & System Modules ---"
 api GET /api/nixos/detect >/dev/null
 assert_json "NixOS detection" "success" "true"
@@ -448,6 +461,8 @@ api GET /api/gitops/plan >/dev/null
 assert_json "GitOps plan" "success" "true"
 
 # 11. SECURITY & WHITELISTING
+echo "::endgroup::"
+echo "::group::Security & Whitelisting"
 echo "--- Testing Security & Whitelisting ---"
 # Since v12.2.0 the internal cron-hook token is generated per-boot (crypto/rand).
 # The old hardcoded value must now be rejected - confirm the rotation is active.
@@ -467,6 +482,8 @@ INJECT=$(api POST /api/zfs/command "{\"command\":\"ls\",\"args\":[\"/etc/passwd\
 echo "$INJECT" | grep -qiE "Forbidden|not allowed|success\":false" && ok "Security: Injection blocked" || fail "Security: Injection NOT blocked"
 
 # 11.5 NEGATIVE SECURITY TESTS
+echo "::endgroup::"
+echo "::group::Path Traversal & Malformed Input"
 echo "--- Testing Path Traversal ---"
 # Test file read traversal
 TRAVERSAL=$(api GET "/api/files/read?path=../../../../etc/passwd" 2>/dev/null)
@@ -476,7 +493,6 @@ echo "$TRAVERSAL" | grep -qiE "Forbidden|Invalid path|error" && ok "Path travers
 TRAVERS_WRITE=$(api POST /api/files/write "?path=../../../../tmp/traversal.txt" "content" 2>/dev/null)
 echo "$TRAVERS_WRITE" | grep -qiE "Forbidden|Invalid path|error" && ok "Path traversal (write) blocked" || fail "Path traversal (write) NOT blocked"
 
-echo "--- Testing Malformed Input ---"
 # Malformed JSON to auth
 MALFORMED=$(curl -s -k -X POST -H "Content-Type: application/json" -d "{invalid" http://localhost:9000/api/auth/login)
 echo "$MALFORMED" | grep -qiE "error|Invalid|Bad Request" && ok "Malformed JSON blocked" || fail "Malformed JSON NOT blocked"
@@ -494,7 +510,10 @@ assert_json "Logout succeeds" "success" "true"
 api GET /api/auth/check >/dev/null
 assert_json "Auth check after logout fails" "authenticated" "false"
 
+echo "::endgroup::"
+
 # --- SUMMARY ---
+echo "::group::Results"
 echo ""
 echo "=========================================="
 printf "  Results: %d passed   %d failed\n" "$PASS" "$FAIL"
@@ -503,5 +522,7 @@ echo "=========================================="
 if [ "$FAIL" -gt 0 ]; then
   echo "Failures:"
   echo -e "$FAILURES"
+  echo "::endgroup::"
   exit 1
 fi
+echo "::endgroup::"
