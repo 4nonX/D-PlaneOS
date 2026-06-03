@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v12.4.0 (2026-06-03) - "Meridian"
+
+Upgrade from: v12.3.0 - No schema migration required. No breaking API changes. No breaking configuration changes. Pure frontend and design system changes.
+
+### Added
+
+- **`.stitch/DESIGN.md` — design system source of truth (`app-react/.stitch/DESIGN.md`)**: Machine-readable specification synthesized from `index.css` and the component library. Documents every color token with semantic role, the full typography scale, the 4px spacing grid, border radius ladder, shadow system, z-index layers with their constraints, component patterns (card, button, alert, modal, badge, empty state, data table), glass morphism rules, chart color constants, the backdrop z-index pattern, and an explicit anti-pattern list. Reference this file before generating or editing any screen.
+
+- **UI workflows for three operational scenarios (`app-react/src/pages/GitOpsPage.tsx`, `HAPage.tsx`, `PoolsPage.tsx`)**: Three operator-facing workflows for situations the system cannot handle automatically. (1) BLOCKED destructive approval: BLOCKED plan items now show a per-item Approve button; clicking opens a modal requiring a written reason (logged to the HMAC audit chain) before the deletion is permitted to proceed on Deploy. (2) HA physical triage panel: automatically surfaces when any peer enters the unreachable state, listing four physical checks (SAS cable, HBA, management network, BMC console) with specific diagnostic guidance and inline Fence & Promote / Enter Maintenance actions. (3) Scrub error banner: appears on each pool card when a completed scrub reports errors, showing the error count and linking to Hardware for disk identification and replacement.
+
+- **GitOps plan API extended (`daemon/internal/handlers/gitops_handler.go`)**: `GET /api/gitops/plan` now includes `kind`, `name`, and `approved` on each change item so the frontend can call `POST /api/gitops/approve` directly without parsing the combined `resource` field.
+
+### Fixed
+
+- **Design system consistency audit — raw hex colors eliminated (15 files)**: All hardcoded hex colors (`#3b82f6`, `#080808`, `#ff4b2b`, `#a78bfa`, `#52525b`, etc.) and non-exempt specific-color `rgba()` values replaced with CSS variable equivalents across AppShell, TopBar, JobConsole, HardwarePage, NetworkPage, and ReportingPage. xterm.js `ITheme` hex values are intentionally unchanged (library API requires raw hex).
+
+- **Design system consistency audit — raw z-index numbers eliminated (15 files)**: All raw `zIndex: N` inline values replaced with the CSS variable token set. Two new tokens added to `index.css`: `--z-topbar: 40` (fixed topbar and sidebar nav layer) and `--z-supreme: 9999` (force-password-change wall that must appear above everything including toasts). Affected: AppShell, PendingChangesSidebar, TopBar, Sidebar, GlobalSearch, KeyboardHelpModal, JobConsole, DashboardPage, DatasetsPage, DockerPage, FilesPage, FirewallPage, GitOpsPage.
+
+- **ReportingPage chart colors tokenised**: `#8b5cf6`, `#06b6d4`, `#f59e0b` (used as SVG fill props across six call sites) extracted to named constants `C_ARC`, `C_LOAD`, `C_IOWAIT` using hsl values that match the design token palette, so chart colors are semantically tied to the design system even where CSS variables are not supported.
+
+- **BlockedApprovalModal uses `<Modal>` component**: Replaced a hand-rolled `position:fixed` overlay (no focus trap, no Escape key, raw `zIndex: 1000`) with the shared `<Modal>` component (portal to `#modal-root`, focus trap, Tab cycling, Escape key, ARIA `role="dialog"`).
+
+- **PoolsPage `<a href>` for internal navigation replaced**: `<a href="/hardware?pool=...">` replaced with `router.navigate({ to: '/hardware' })` via `useRouter` per design system navigation rules.
+
+- **HAPage triage panel `rgba(0,0,0,0.15)` replaced**: Raw rgba replaced with `var(--surface)` per design token rules.
+
+- **DashboardPage off-grid spacing corrected**: MetricCard padding `20px 22px` → `20px 24px`; MetricCard icon-row margin `14px` → `12px`; SectionCard header padding `18px 24px` → `16px 24px`; PoolRow item padding `10px 12px` → `12px`. All values now land on the 4px grid documented in `.stitch/DESIGN.md`.
+
+- **DashboardPage empty states upgraded**: Three bare text placeholders ("No ZFS pools configured", "No running containers", "No disk data available") upgraded to icon+text structure following the design system empty state pattern.
+
+---
+
 ## v12.3.0 (2026-06-03) - "Ironclad"
 
 Upgrade from: v12.2.0 - No schema migration required. No breaking API changes. No breaking configuration changes. HA replication behaviour is unchanged; the SSH transport is now native Go rather than a subprocess.
