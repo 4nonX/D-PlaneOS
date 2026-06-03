@@ -59,6 +59,7 @@ in {
   boot.kernelPackages          = pkgs.linuxPackages_6_6;
   boot.supportedFilesystems    = [ "zfs" "vfat" "ext4" ];
   boot.zfs.package             = pkgs.zfs;
+  boot.zfs.forceImportRoot     = false; # new default in 26.11; set explicitly to silence warning
 
   # Serial console support for headless/IPMI installs
   boot.kernelParams = [ "console=tty0" "console=ttyS0,115200n8" ];

@@ -127,19 +127,22 @@ in {
 
     # ── idmapd configuration ──────────────────────────────────────────────
     # rpc.idmapd translates uid/gid <-> user@domain for NFSv4 transports.
-    # The Domain here must match the client's /etc/idmapd.conf Domain.
-    environment.etc."idmapd.conf".text = ''
-      [General]
-      Verbosity = 0
-      Domain = ${cfg.nfs4Domain}
-
-      [Mapping]
-      Nobody-User  = nobody
-      Nobody-Group = nogroup
-
-      [Translation]
-      Method = nsswitch
-    '';
+    # nixpkgs 26.05 manages /etc/idmapd.conf itself via services.nfs.idmapd.
+    # Writing environment.etc."idmapd.conf" directly conflicts; use the
+    # module's own settings API instead.
+    services.nfs.idmapd.settings = {
+      General = {
+        Verbosity  = "0";
+        Domain     = cfg.nfs4Domain;
+      };
+      Mapping = {
+        "Nobody-User"  = "nobody";
+        "Nobody-Group" = "nogroup";
+      };
+      Translation = {
+        Method = "nsswitch";
+      };
+    };
 
     # ── ACL tools ─────────────────────────────────────────────────────────
     # nfs4-acl-tools (nfs4_getfacl / nfs4_setfacl) was removed from nixpkgs
