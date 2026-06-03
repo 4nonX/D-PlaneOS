@@ -229,7 +229,7 @@ Download `dplaneos-vX.Y.Z-installer-amd64.iso` (or `...-arm64.iso`) from the [re
   boot.loader.efi.canTouchEfiVariables = true;
 
   users.users.root.openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAA..." ];
-  system.stateVersion = "25.11";
+  system.stateVersion = "26.05";
 }
 ```
 

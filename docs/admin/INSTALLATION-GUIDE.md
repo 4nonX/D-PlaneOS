@@ -34,7 +34,7 @@ DPlaneOS detects ECC presence via `dmidecode` at startup and shows an advisory n
 
 ### Supported Platform
 
-- **NixOS** (NixOS 25.11, Linux 6.6 LTS, OpenZFS 2.3 LTS) - the only supported platform
+- **NixOS** (NixOS 26.05, Linux 6.6 LTS, OpenZFS 2.3 LTS) - the only supported platform
 
 DPlaneOS is a NixOS appliance. For context on why this is intentional, see [NixOS Rationale](../reference/NIXOS-RATIONALE.md). For information on running DPlaneOS on other Linux distributions, see [Porting Guide](../reference/PORTING-GUIDE.md).
 
