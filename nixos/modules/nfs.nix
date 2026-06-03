@@ -20,7 +20,7 @@
 #     - services.nfs.server with NFSv4.2 and optional version floor
 #     - rpc.idmapd configuration (/etc/idmapd.conf)
 #     - sysctl fs.nfs.nfs4_disable_idmapping = 0
-#     - nfs4-acl-tools in system packages and dplaned PATH
+#     - nfs4-acl-tools in system packages and dplaned PATH (when available in nixpkgs)
 #     - Firewall ports (TCP/UDP 2049, TCP/UDP 111)
 #
 #   DPlaneOS daemon layer owns:
@@ -46,14 +46,18 @@
 let
   cfg = config.services.dplaneos.nfs;
 
-  # Minimum-version enforcement block for /etc/nfs.conf [nfsd] section.
+  # NFSv4 version floor for /etc/nfs.conf [nfsd] section.
+  # services.nfs.settings uses attrsOf (attrsOf str) - no raw strings.
   # NFSv4.0 and NFSv3 are disabled when minVersion is 4.1 or 4.2.
-  # NFSv4.0 is additionally disabled when minVersion is 4.2.
-  minVersionConfig = lib.concatLines (
-    [ "vers4=y" "vers4.1=y" "vers4.2=y" ]
-    ++ lib.optional (cfg.minVersion == "4.1" || cfg.minVersion == "4.2") "vers3=n"
-    ++ lib.optional (cfg.minVersion == "4.2") "vers4.0=n"
-  );
+  nfsdVersionSettings =
+    { "vers4" = "y"; "vers4.1" = "y"; "vers4.2" = "y"; }
+    // lib.optionalAttrs (cfg.minVersion == "4.1" || cfg.minVersion == "4.2") { "vers3" = "n"; }
+    // lib.optionalAttrs (cfg.minVersion == "4.2") { "vers4.0" = "n"; };
+
+  # nfs4-acl-tools provides nfs4_getfacl / nfs4_setfacl.
+  # The package was removed from nixpkgs after 25.05; guard against absence
+  # so the module evaluates correctly on any nixpkgs version.
+  aclToolsPkgs = lib.optionals (pkgs ? nfs4-acl-tools) [ pkgs.nfs4-acl-tools ];
 in {
 
   # ── Option declarations ───────────────────────────────────────────────────
@@ -109,12 +113,11 @@ in {
 
     # ── NFS kernel server ─────────────────────────────────────────────────
 
-    services.nfs.server = {
-      enable = true;
-      # Append NFSv4 version flags to /etc/nfs.conf [nfsd] section.
-      # NixOS merges this with any existing nfsd config.
-      extraNfsdConfig = minVersionConfig;
-    };
+    services.nfs.server.enable = true;
+
+    # NFSv4 version floor via services.nfs.settings (replaces the deprecated
+    # extraNfsdConfig string interface removed in nixpkgs 26.05).
+    services.nfs.settings.nfsd = nfsdVersionSettings;
 
     # ── ID mapping: kernel must perform name<->uid translation ───────────
     # Setting nfs4_disable_idmapping=0 tells the kernel to pass uid/gid
@@ -139,11 +142,12 @@ in {
     '';
 
     # ── ACL tools ─────────────────────────────────────────────────────────
-    # nfs4-acl-tools provides nfs4_getfacl and nfs4_setfacl.
-    # Added to both systemPackages (shell access) and dplaned PATH (daemon exec).
-    environment.systemPackages = [ pkgs.nfs4-acl-tools ];
+    # nfs4-acl-tools (nfs4_getfacl / nfs4_setfacl) was removed from nixpkgs
+    # after 25.05. Include it when available; the daemon handles the missing
+    # binary gracefully (NFSv4 ACL endpoints return an error if not present).
+    environment.systemPackages = aclToolsPkgs;
 
-    systemd.services.dplaned.path = lib.mkAfter [ pkgs.nfs4-acl-tools ];
+    systemd.services.dplaned.path = lib.mkAfter aclToolsPkgs;
 
     # ── Firewall ──────────────────────────────────────────────────────────
     networking.firewall = lib.mkIf cfg.openFirewall {

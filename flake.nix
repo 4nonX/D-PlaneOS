@@ -5,18 +5,18 @@
   #
   # PINNING STRATEGY (Task 4.3):
   #
-  # nixpkgs is pinned to nixos-25.11 (the current stable channel).
+  # nixpkgs is pinned to nixos-26.05 (the current stable channel).
   # We do NOT track nixpkgs-unstable : appliance builds must be reproducible.
   #
   # Kernel pin: 6.6 LTS
   #   Linux 6.6 is an LTS kernel supported until December 2026.
-  #   nixpkgs 25.11 DEFAULT kernel is 6.12 (changed from 6.6 in 25.05).
+  #   nixpkgs 26.05 DEFAULT kernel is 6.12.
   #   We explicitly pin to 6.6 for proven ZFS compat : still available in
-  #   25.11 as pkgs.linuxPackages_6_6, just no longer the default.
+  #   26.05 as pkgs.linuxPackages_6_6, just not the default.
   #   Set via: boot.kernelPackages = pkgs.linuxPackages_6_6
   #
   # ZFS pin: stable (LTS) branch
-  #   As of early 2026: OpenZFS current = 2.4.x, LTS = 2.3.x.
+  #   As of mid 2026: OpenZFS current = 2.4.x, LTS = 2.3.x.
   #   nixpkgs pkgs.zfs tracks the LTS branch; pkgs.zfs_unstable tracks current.
   #   Pinned via: boot.zfs.package = pkgs.zfs  (NOT pkgs.zfs_unstable)
   #   Verify actual version: nix eval nixpkgs#zfs.version
@@ -25,10 +25,10 @@
   # unavailable in the nixpkgs revision, nixos-rebuild fails at eval time.
   #
   inputs = {
-    # ── NixOS base (LTS channel) ───────────────────────────────────────────
-    # Pin to 25.11. Update policy: bump only after 3-month soak period.
+    # ── NixOS base (stable channel) ───────────────────────────────────────
+    # Pin to 26.05. Update policy: bump only after 3-month soak period.
     # To update: nix flake update nixpkgs
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     
     flake-utils.url = "github:numtide/flake-utils";
 
