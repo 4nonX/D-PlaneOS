@@ -6,36 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
-## v12.5.1 (2026-06-03) - post-release NixOS fixes
-
-Upgrade from: v12.5.0 - Drop-in. No schema migration. No API changes. NixOS configuration and CI fixes only.
-
-### Fixed
-
-- **NixOS base upgraded to 26.05**: `nixpkgs.url` bumped from `nixos-25.11` to `nixos-26.05`. All three NixOS evaluation bugs exposed by the upgrade are fixed in this release:
-
-  - **`services.nfs.server.extraNfsdConfig` removed** (nixpkgs 26.05 deprecation): replaced with `services.nfs.settings.nfsd` (INI-format attribute set). The old string interface was removed in 26.05.
-
-  - **`environment.etc."idmapd.conf"` conflict**: nixpkgs 26.05's NFS module now manages `/etc/idmapd.conf` directly. Our module's duplicate write conflicted. Fixed by using `services.nfs.idmapd.settings` instead.
-
-  - **`pkgs.nfs4-acl-tools` missing**: the package was removed from nixpkgs after 25.05. References guarded with `lib.optionals (pkgs ? nfs4-acl-tools)` so the module evaluates cleanly on any nixpkgs version.
-
-  - **`services.winbind` does not exist** in nixpkgs 25.11/26.05 (it is not a NixOS module). Reference removed; winbind is embedded in `pkgs.samba` and activated automatically by smbd when `security = ads`.
-
-  - **`services.samba.settings.global` type mismatch**: `lib.mkIf` was used as inline attribute values inside `services.samba.settings`, but that option type is `attrsOf (attrsOf str)` and does not accept NixOS special forms. Replaced with `lib.optionalAttrs` at the attribute-set level.
-
-  - **`python3.11-3.11.15-doc` build failure**: a Sphinx 9.1 + docutils 0.22.4 incompatibility in nixpkgs 26.05 causes Python 3.11 documentation to fail during builds. Fixed by setting `documentation.doc.enable = false` and `documentation.nixos.enable = false` in `applianceConfig`. A NAS appliance has no use for in-closure HTML documentation; this also removes ~100 MB from the system closure.
-
-- **`boot.zfs.forceImportRoot` warning silenced**: the option defaulted to `true` in 26.05 with a deprecation warning. Set explicitly to `false` in both `module.nix` and `installer.nix` (the installer does not import module.nix and required a separate fix).
-
-- **CI: API integration test removed two deleted endpoints**: `/api/docker/templates` and `/api/docker/templates/installed` were removed in v12.5.0 with the Compose Templates page. Tests still calling them received 404 and failed. Calls removed.
-
-- **CI: HA NixOS modules test fixed for default-enabled Samba/NFS**: `module.nix` now imports `samba.nix` and `nfs.nix` with `enable = true` by default. The ha-failover test VMs imported these modules via `haModule = module.nix` and inherited the defaults. Added `samba.enable = false; nfs.enable = false;` to the test VM configuration since SMB and NFS are not needed for the HA failover test.
-
-- **CI: log sections now expandable**: added GitHub Actions `::group::` / `::endgroup::` annotations to every section of the API integration test script. Added `set +e` after the setup phase so test failures accumulate and the full failure list is always printed rather than the script exiting on the first error.
-
----
-
 ## v12.5.0 (2026-06-03) - "Operator"
 
 Upgrade from: v12.4.0 - No schema migration required. No breaking API changes. No breaking configuration changes. Pure frontend, NixOS, and design system changes.
@@ -143,6 +113,22 @@ Upgrade from: v12.4.0 - No schema migration required. No breaking API changes. N
 - **SSHKeysPage port change shows clear reconnection warning**: A `toast.warning` is shown after a successful port change, naming the new port and noting that connections on the old port will be refused after the next `nixos-rebuild switch`.
 
 - **UPSPage shutdown_level field has unit hint**: Field now explains the value is a battery percentage (e.g. 20 for 20%).
+
+- **NixOS base upgraded to 26.05**: `nixpkgs.url` bumped from `nixos-25.11` to `nixos-26.05`. Six evaluation errors exposed by the upgrade fixed:
+  - `services.nfs.server.extraNfsdConfig` removed in 26.05 - replaced with `services.nfs.settings.nfsd` (INI attrset).
+  - `environment.etc."idmapd.conf"` conflict - nixpkgs 26.05's NFS module now manages that file; use `services.nfs.idmapd.settings` instead.
+  - `pkgs.nfs4-acl-tools` removed from nixpkgs after 25.05 - reference guarded with `lib.optionals (pkgs ? nfs4-acl-tools)`.
+  - `services.winbind` is not a NixOS module in 26.05 - reference removed; winbind activates automatically via smbd when `security = ads`.
+  - `lib.mkIf` used as inline values inside `services.samba.settings.global` - `settings` expects plain `str` values; replaced with `lib.optionalAttrs` at the attrset level.
+  - `python3.11-3.11.15-doc` fails to build in nixpkgs 26.05 (Sphinx 9.1 + docutils 0.22.4 incompatibility). `documentation.doc.enable = false` only unlinks doc files, it does not prevent the derivation from being built. Fixed with a nixpkgs overlay that replaces `pkgs.python311.doc` with an empty stub, eliminating the broken build from the closure entirely.
+
+- **`boot.zfs.forceImportRoot` warning silenced**: new deprecation warning in 26.05. Set explicitly to `false` in both `module.nix` and `installer.nix`.
+
+- **CI: deleted `/api/docker/templates*` routes removed from integration test**: both endpoints 404'd after the Compose Templates page was removed in this release.
+
+- **CI: HA NixOS modules test updated for default-enabled Samba and NFS**: ha-failover test VMs now explicitly set `samba.enable = false; nfs.enable = false;` since those services are not needed for the failover test but now default to enabled via `module.nix`.
+
+- **CI: integration test log sections are expandable**: added `::group::` / `::endgroup::` annotations; moved `set +e` after the setup phase so the full failure list always prints.
 
 ---
 

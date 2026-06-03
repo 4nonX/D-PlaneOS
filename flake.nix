@@ -144,7 +144,6 @@
 
       # Shared inline config applied to all nixosConfigurations
       applianceConfig = { config, lib, pkgs, ... }: {
-        # ... (unchanged)
         boot.kernelPackages = pkgs.linuxPackages_6_6;
         boot.zfs.package = pkgs.zfs;
         boot.kernelParams = [ "zfs.zfs_arc_max=17179869184" ];
@@ -164,11 +163,19 @@
         nix.settings.auto-optimise-store = true;
         nix.gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 14d"; };
 
-        # Appliance: never build HTML/PDF package documentation into the system
-        # closure. The python3.11-doc build fails in nixpkgs 26.05 due to a
-        # Sphinx 9.1 + docutils 0.22.4 incompatibility, and NAS operators have
-        # no use for in-closure HTML docs regardless.
-        documentation.doc.enable   = false;
+        # python3.11-3.11.15-doc fails to build in nixpkgs 26.05 due to a
+        # Sphinx 9.1 + docutils 0.22.4 incompatibility. Something in the
+        # closure explicitly requests pkgs.python311.doc, so the
+        # documentation.doc.enable = false option (which only unlinks the doc
+        # files, it doesn't prevent the derivation from being built) has no
+        # effect. Replace the failing derivation with an empty stub so the
+        # appliance build succeeds - a NAS has no use for in-closure Python docs.
+        nixpkgs.overlays = [(final: prev: {
+          python311 = prev.python311 // {
+            doc = final.runCommand "python311-doc-stub" {} "mkdir $out";
+          };
+        })];
+
         documentation.nixos.enable = false;
       };
 
