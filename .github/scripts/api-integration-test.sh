@@ -449,11 +449,19 @@ assert_json "GitOps plan" "success" "true"
 
 # 11. SECURITY & WHITELISTING
 echo "--- Testing Security & Whitelisting ---"
-# Test cron-hook bypass for localhost (#29)
-CRON_RESP=$(curl -s -X POST http://127.0.0.1:9000/api/zfs/snapshots/cron-hook -H 'Content-Type: application/json' -H 'X-Internal-Token: dplaneos-internal-reconciliation-secret-v1' -d "{\"dataset\":\"testpool\",\"prefix\":\"ci-test\",\"retention\":1}")
-# Ensure /tmp/last_resp.json is updated so fail() doesn't report STALE output from previous tests
+# Since v12.2.0 the internal cron-hook token is generated per-boot (crypto/rand).
+# The old hardcoded value must now be rejected - confirm the rotation is active.
+OLD_TOKEN_RESP=$(curl -s -X POST http://127.0.0.1:9000/api/zfs/snapshots/cron-hook \
+  -H 'Content-Type: application/json' \
+  -H 'X-Internal-Token: dplaneos-internal-reconciliation-secret-v1' \
+  -d '{"dataset":"testpool","prefix":"ci-test","retention":1}')
+echo "$OLD_TOKEN_RESP" > /tmp/last_resp.json
+echo "$OLD_TOKEN_RESP" | grep -qiE "Unauthorized|401" && ok "Security: Hardcoded token rejected (per-boot rotation active)" || fail "Security: Hardcoded token should be rejected after v12.2.0"
+
+# The cron hook must still be reachable via an authenticated session.
+CRON_RESP=$(api POST /api/zfs/snapshots/cron-hook "{\"dataset\":\"testpool\",\"prefix\":\"ci-test\",\"retention\":1}")
 echo "$CRON_RESP" > /tmp/last_resp.json
-echo "$CRON_RESP" | grep -q "success\":true" && ok "Security: Cron hook localhost bypass verified" || fail "Security: Cron hook localhost bypass FAILED"
+echo "$CRON_RESP" | grep -q "success\":true" && ok "Security: Cron hook accessible via authenticated session" || fail "Security: Cron hook via authenticated session FAILED"
 
 INJECT=$(api POST /api/zfs/command "{\"command\":\"ls\",\"args\":[\"/etc/passwd\"],\"session_id\":\"$SESSION\",\"user\":\"admin\"}")
 echo "$INJECT" | grep -qiE "Forbidden|not allowed|success\":false" && ok "Security: Injection blocked" || fail "Security: Injection NOT blocked"
