@@ -47,7 +47,7 @@ The apply engine holds a global lock while running so only one apply can execute
 ### Top-Level Structure
 
 ```yaml
-version: "1"
+version: "6"
 ignore_extraneous: false   # if true, reconciler ignores resources not in desired state
 
 pools:        []  # ZFS pools
@@ -311,7 +311,7 @@ Triggering an apply (`POST /api/gitops/apply`) runs the following steps:
 The engine fetches `state.yaml` from the configured Git repository checkout and parses it. Any parse or validation error aborts immediately - nothing is changed.
 
 Validation rules include:
-- `version` must be `"1"` or `"6"`
+- `version` must be `"1"` or `"6"` (`"6"` is recommended for new configurations)
 - All disk paths must begin with `/dev/disk/by-id/`
 - Pool and dataset names must match `[a-zA-Z0-9][a-zA-Z0-9/_\-\.]*`
 - Stack names must be lowercase alphanumeric + hyphens/underscores

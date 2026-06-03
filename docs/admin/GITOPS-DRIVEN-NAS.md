@@ -210,7 +210,7 @@ The daemon verifies the HMAC-SHA256 signature on every webhook delivery and igno
 This is a fully annotated `state.yaml` for a typical home/small-business NAS with two users, a media share, a Docker stack, and NFS for Linux clients.
 
 ```yaml
-version: "1"
+version: "6"
 
 # When false, resources that exist on the live system but are absent
 # from state.yaml will appear as DELETE items. Set to true during
@@ -603,6 +603,12 @@ Set `active: false`. The account is suspended but the data and history are retai
 ### Running a one-off container
 
 Use a Docker stack with `restart: "no"`. Apply starts the container once. Capture will export it; you can then delete it from `state.yaml` and apply again to remove it.
+
+### Stopped containers are restarted by apply
+
+A stack in `state.yaml` is desired to be running. If a container is stopped (manually via `docker stop` or by the container itself exiting), the diff engine sees `status: stopped → running` and the next apply will restart it.
+
+This is intentional: GitOps owns the desired state, and the desired state for a declared stack is "running." If you want a stack to be stopped, remove it from `state.yaml`. If you need it stopped temporarily without triggering a DELETE plan item, set `ignore_extraneous: true` and stop the container manually - the reconciler will not notice the extraneous stopped stack. Remember to set `ignore_extraneous: false` again once the operation is complete.
 
 ### Decommissioning a share
 

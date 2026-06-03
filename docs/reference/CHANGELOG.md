@@ -20,8 +20,6 @@ Upgrade from: v12.4.0 - No schema migration required. No breaking API changes. N
 
 - **`--surface-2` CSS token**: Added to both `:root` (dark: `hsla(hue, 20%, 22%, 0.5)`) and `[data-theme="light"]` (light: `hsl(hue, 15%, 87%)`). Was referenced in 20 places across DockerPage and NVMeOFPage but never defined, causing all panel headers, code blocks, and toolbar backgrounds to silently render transparent.
 
-- **WireGuard VPN compose template (`daemon/internal/handlers/docker_templates.go`)**: Added `vpn-wireguard` template to the Docker Compose template catalogue. Covers wg-easy with variables for public hostname, WireGuard port, web UI port, admin password hash, DNS, and config directory. Kernel 6.6 has WireGuard built-in (CONFIG_WIREGUARD=y); no separate module required.
-
 - **NixOS: `tun` kernel module (`nixos/module.nix`)**: Added `"tun"` to `boot.kernelModules`. Required for OpenVPN and Tailscale Docker containers to create `/dev/net/tun`. Previously absent, causing OpenVPN and Tailscale containers to fail at startup with "cannot open /dev/net/tun: No such file or directory".
 
 ### Fixed

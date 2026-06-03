@@ -42,11 +42,13 @@ DPlaneOS is built around a strict separation between declaration, reconciliation
 
 There are two declaration surfaces:
 
-**`state.yaml`** - Runtime configuration managed by the daemon and the GitOps engine. Covers everything that changes during normal NAS operation: ZFS datasets and their properties, SMB/NFS/iSCSI shares, Docker stacks, users and groups, replication schedules, network config, LDAP settings, ACME certificates. This file lives in a Git repository so every change is version-controlled and auditable.
+**`state.yaml`** - Runtime configuration managed by the daemon and the GitOps engine. Covers everything that changes during normal NAS operation: ZFS datasets and their properties, SMB/NFS/iSCSI shares, Docker stacks, users and groups, replication schedules, network config, LDAP settings, ACME certificates. This file lives in a Git repository so every change is version-controlled and auditable. **Git is the authoritative source of desired runtime state.** The PostgreSQL database caches a subset of this state (share definitions, user records, replication schedules) for fast reads, but the database is a read cache - it never overrides what is in `state.yaml` and reconciliation always starts from the Git checkout, not from the DB.
 
 **`configuration.nix` / `flake.nix`** - OS-level configuration managed by NixOS. Covers everything that is fixed for the lifetime of the appliance: kernel version, ZFS package pin, systemd units, firewall baseline, package set, impermanence rules, HA cluster membership. Changes here require a NixOS rebuild (either OTA or manual `nixos-rebuild switch`).
 
-The division of responsibility is: NixOS owns the platform, the daemon owns the workload.
+**etcd** is used exclusively as the distributed config store (DCS) for Patroni's PostgreSQL leader election. It is not a GitOps state store and does not hold `state.yaml` content. In an HA cluster, etcd runs on each data node (and optionally a witness) for quorum; outside HA it is not present.
+
+The division of responsibility is: NixOS owns the platform, the daemon owns the workload, Git owns the desired runtime state.
 
 ### Reconciliation Layer
 
@@ -268,6 +270,18 @@ PostgreSQL is replicated from primary to standby in streaming replication mode. 
 5. The daemon reconnects within seconds
 
 HAProxy runs on each node and listens on `127.0.0.1:5000`. It health-checks Patroni (`GET /primary` returns 200 on primary, 503 on standby) and routes only to the current primary. The daemon always connects to `localhost:5000`, never directly to PostgreSQL.
+
+### Roles of the Three HA Subsystems
+
+The three HA subsystems operate at different layers and are complementary, not alternatives:
+
+| Subsystem | Layer | Role |
+|-----------|-------|------|
+| **Patroni + etcd** | Software | PostgreSQL primary election. Authoritative for which node runs the PostgreSQL writer. Also gates ZFS pool import: the primary imports and mounts pools; the standby does not. |
+| **Witness HTTP probe** | Software | Network-partition guard for the DPlaneOS cluster manager. Before triggering failover, the cluster manager probes the witness to confirm it can still reach the outside network - preventing a false failover when the surviving node is the one that is network-isolated. |
+| **`dplane-fenced` (SCSI-3 PR)** | Hardware | Storage exclusion enforcement at the disk controller. Not an arbiter - it makes the failover decision stick by preventing the fenced node from issuing writes to the shared SAS disks regardless of software state. Survives reboots (APTPL=1). |
+
+For replicated topology (no shared SAS), IPMI or SBD fencing replaces SCSI-3 PR. The witness role is filled by a separate etcd member on a third machine instead of an HTTP probe.
 
 ### ZFS Split-Brain Protection
 
