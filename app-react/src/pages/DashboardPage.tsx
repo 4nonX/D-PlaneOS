@@ -103,7 +103,7 @@ function MetricCard({ icon, label, value, sub, percent, loading, onClick, accent
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        padding: '20px 22px',
+        padding: '20px 24px',
         position: 'relative', overflow: 'hidden',
         border: hov && onClick ? `1px solid ${color}` : undefined}}
     >
@@ -114,7 +114,7 @@ function MetricCard({ icon, label, value, sub, percent, loading, onClick, accent
         background: `radial-gradient(circle, ${color}22 0%, transparent 70%)`,
         pointerEvents: 'none'}} />
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{
           width: 34, height: 34, borderRadius: 10,
           background: `${color}18`,
@@ -166,7 +166,7 @@ function SectionCard({ title, icon, children, onAction, actionLabel }: {
     <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '18px 24px', borderBottom: '1px solid var(--border-subtle)',
+        padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)',
         background: 'hsla(0,0%,0%,0.2)'}}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Icon name={icon} size={17} style={{ color: 'var(--primary)' }} />
@@ -204,7 +204,7 @@ function PoolRow({ pool, onClick }: { pool: ZFSPool; onClick: () => void }) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        padding: '10px 12px', borderRadius: 'var(--radius-md)',
+        padding: '12px', borderRadius: 'var(--radius-md)',
         background: hov ? 'var(--surface)' : 'transparent',
         cursor: 'pointer', transition: 'background var(--transition-fast)'}}
     >
@@ -657,8 +657,9 @@ export function DashboardPage() {
               {poolsQ.isLoading && [1,2].map(k => <Skeleton key={k} height={56} borderRadius="var(--radius-md)" />)}
               {poolsQ.isError && <ErrorState error={poolsQ.error} onRetry={() => poolsQ.refetch()} />}
               {!poolsQ.isLoading && !poolsQ.isError && pools.length === 0 && (
-                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>
-                  No ZFS pools configured
+                <div style={{ padding: '20px 0', textAlign: 'center' }}>
+                  <Icon name="database" size={28} style={{ color: 'var(--text-tertiary)', opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>No ZFS pools configured</div>
                 </div>
               )}
               {pools.map(p => <PoolRow key={p.name} pool={p} onClick={() => navigate({ to: '/pools' })} />)}
@@ -670,8 +671,9 @@ export function DashboardPage() {
               {containersQ.isLoading && [1,2,3].map(k => <Skeleton key={k} height={44} borderRadius="var(--radius-sm)" />)}
               {containersQ.isError && <ErrorState error={containersQ.error} onRetry={() => containersQ.refetch()} />}
               {!containersQ.isLoading && !containersQ.isError && running.length === 0 && (
-                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>
-                  No running containers
+                <div style={{ padding: '20px 0', textAlign: 'center' }}>
+                  <Icon name="deployed_code" size={28} style={{ color: 'var(--text-tertiary)', opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>No running containers</div>
                 </div>
               )}
               {running.slice(0, 8).map(c => <ContainerRow key={c.Id} c={c} onClick={() => navigate({ to: '/docker' })} />)}
@@ -752,8 +754,9 @@ export function DashboardPage() {
         )}
 
         {!smartQ.isLoading && !smartQ.isError && smartDisks.length === 0 && (
-          <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>
-            No disk data available
+          <div style={{ padding: '20px 0', textAlign: 'center' }}>
+            <Icon name="hard_drive" size={28} style={{ color: 'var(--text-tertiary)', opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>No disk data available</div>
           </div>
         )}
       </SectionCard>}
