@@ -94,6 +94,7 @@ sudo nixos-rebuild switch
 | [Installation Guide](../docs/admin/INSTALLATION-GUIDE.md) | System requirements, ISO install flow, post-install checklist |
 | [NixOS Install Guide](NIXOS-INSTALL-GUIDE.md) | Step-by-step for NixOS beginners: from empty hardware to running NAS |
 | [Administrator Guide](../docs/admin/ADMIN-GUIDE.md) | Users, roles, storage management, containers, LDAP/AD, security practices |
+| [Git-Driven NAS](../docs/admin/GITOPS-DRIVEN-NAS.md) | Operating DPlaneOS entirely via state.yaml: bootstrap, auto-apply on push, secret handling, rollback, PR workflow, HA |
 | [Backup and Replication](../docs/admin/BACKUP-REPLICATION.md) | ZFS snapshots, ZFS Send/Receive, Cloud Sync, Cold Tier, rsync, database backup |
 | [High Availability](../docs/admin/HIGH-AVAILABILITY.md) | Two-topology HA: shared-SAS with SCSI-3 PR (no separate witness) or replicated ZFS with witness node; Patroni, Keepalived, STONITH, rolling upgrades |
 | [OTA Updates](../docs/admin/OTA-UPDATES.md) | A/B slot system, health check, auto-revert, manual rollback, HA rolling upgrades |
