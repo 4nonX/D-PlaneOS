@@ -111,6 +111,7 @@ start_daemon() {
     DATABASE_DSN="$DB_DSN" nohup "$DAEMON_BIN" \
         -db-dsn "$DB_DSN" \
         -listen "${DAEMON_SOCK}" \
+        -socket-group www-data \
         -smb-conf "$SMB_CONF" \
         >> "$LOG_DIR/dplaned.log" 2>&1 &
     echo $! > "$PID_FILE"

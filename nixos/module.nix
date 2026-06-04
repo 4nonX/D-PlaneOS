@@ -205,6 +205,11 @@ in {
     # ─── SSH authorised keys (replaces password auth) ───────────────────
     users.users.root.openssh.authorizedKeys.keys = cfg.sshKeys;
 
+    # Shared group for Unix socket access between dplaned (root) and nginx.
+    # The socket is created 0660 root:dplaned so only these two can connect.
+    users.groups.dplaned = {};
+    users.users.nginx.extraGroups = [ "dplaned" ];
+
     # ─── Firewall ─────────────────────────────────────────────────────────
     networking.firewall = lib.mkIf cfg.openFirewall {
       enable              = true;
@@ -255,7 +260,7 @@ in {
           "${pkgs.coreutils}/bin/mkdir -p /var/lib/dplaneos /var/log/dplaneos /run/dplaneos /etc/dplaneos"
           "${pkgs.coreutils}/bin/chmod 755 /run/dplaneos"
         ];
-        ExecStart       = "${cfg.daemonPackage}/bin/dplaned -db-dsn \"${cfg.dbDSN}\" -listen ${cfg.socketPath}";
+        ExecStart       = "${cfg.daemonPackage}/bin/dplaned -db-dsn \"${cfg.dbDSN}\" -listen ${cfg.socketPath} -socket-group dplaned";
         WorkingDirectory = "/var/lib/dplaneos";
         Restart         = "on-failure";
         RestartSec      = "5s";

@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	osUser "os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -48,7 +49,8 @@ var (
 
 func main() {
 	// Parse flags
-	listenAddr := flag.String("listen", "/run/dplaneos/dplaned.sock", "Listen address: Unix socket path (default) or TCP host:port for testing")
+	listenAddr    := flag.String("listen", "/run/dplaneos/dplaned.sock", "Listen address: Unix socket path (default) or TCP host:port for testing")
+	socketGroup   := flag.String("socket-group", "", "Group that owns the Unix socket (nginx's group, e.g. www-data or nginx); sets 0660 instead of 0666")
 	dbDSN := flag.String("db-dsn", "postgres://dplaneos@localhost/dplaneos?sslmode=disable", "PostgreSQL DSN")
 	telegramBot := flag.String("telegram-bot", "", "Telegram bot token (optional, for alerts)")
 	telegramChat := flag.String("telegram-chat", "", "Telegram chat ID (optional, for alerts)")
@@ -1358,10 +1360,27 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to listen on Unix socket %s: %v", *listenAddr, err)
 		}
-		// 0666: nginx (which may run as www-data, not in root's group) must be
-		// able to connect. Auth is enforced at the API layer, not the socket.
-		if err := os.Chmod(*listenAddr, 0666); err != nil {
-			log.Printf("Warning: could not chmod socket %s: %v", *listenAddr, err)
+		// Set group ownership so nginx can connect with 0660 (owner+group only).
+		// If the group is not found or not specified, fall back to 0666 with a
+		// warning - better to be reachable than to silently break the proxy.
+		if *socketGroup != "" {
+			g, lookupErr := osUser.LookupGroup(*socketGroup)
+			if lookupErr == nil {
+				gid, _ := strconv.Atoi(g.Gid)
+				if chownErr := os.Chown(*listenAddr, -1, gid); chownErr != nil {
+					log.Printf("Warning: could not chown socket to group %q: %v; using 0666", *socketGroup, chownErr)
+					os.Chmod(*listenAddr, 0666)
+				} else {
+					os.Chmod(*listenAddr, 0660)
+				}
+			} else {
+				log.Printf("Warning: group %q not found (%v); socket set to 0666", *socketGroup, lookupErr)
+				os.Chmod(*listenAddr, 0666)
+			}
+		} else {
+			if err := os.Chmod(*listenAddr, 0660); err != nil {
+				log.Printf("Warning: could not chmod socket %s: %v", *listenAddr, err)
+			}
 		}
 		listener = ln
 	} else {
