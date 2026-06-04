@@ -1358,8 +1358,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to listen on Unix socket %s: %v", *listenAddr, err)
 		}
-		// 0660: nginx (group dplaneos or www-data) can connect; world cannot.
-		if err := os.Chmod(*listenAddr, 0660); err != nil {
+		// 0666: nginx (which may run as www-data, not in root's group) must be
+		// able to connect. Auth is enforced at the API layer, not the socket.
+		if err := os.Chmod(*listenAddr, 0666); err != nil {
 			log.Printf("Warning: could not chmod socket %s: %v", *listenAddr, err)
 		}
 		listener = ln

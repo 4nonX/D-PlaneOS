@@ -60,6 +60,10 @@ write_nginx_conf() {
     local port="$1"
     mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
     cat > "$NGINX_AVAIL" <<EOF
+upstream dplaned {
+    server unix:${DAEMON_SOCK};
+}
+
 server {
     listen ${port} default_server;
     listen [::]:${port} default_server;
@@ -76,7 +80,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://unix:${DAEMON_SOCK}:/;
+        proxy_pass http://dplaned;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -85,7 +89,7 @@ server {
     }
 
     location /ws/ {
-        proxy_pass http://unix:${DAEMON_SOCK}:/;
+        proxy_pass http://dplaned;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -93,7 +97,7 @@ server {
     }
 
     location /health {
-        proxy_pass http://unix:${DAEMON_SOCK}:/health;
+        proxy_pass http://dplaned;
     }
 }
 EOF

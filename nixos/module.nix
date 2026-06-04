@@ -214,6 +214,10 @@ in {
     # ─── nginx reverse proxy ──────────────────────────────────────────────
     services.nginx = {
       enable = true;
+      # Named upstream so proxy_pass forwards the full URI unmodified.
+      # Inline unix: proxy_pass with a path suffix causes nginx to strip
+      # the location prefix, breaking all /api/* routes.
+      upstreams."dplaned".servers."unix:${cfg.socketPath}" = {};
       virtualHosts."_" = {
         root       = "${cfg.frontendPackage}";
         locations."/" = {
@@ -223,7 +227,7 @@ in {
           proxyPass = "http://127.0.0.1:8080";
         };
         locations."/api/" = {
-          proxyPass = "http://unix:${cfg.socketPath}:/";
+          proxyPass = "http://dplaned";
           proxyWebsockets = true;
           extraConfig = ''
             proxy_read_timeout 300s;
@@ -231,7 +235,7 @@ in {
           '';
         };
         locations."/ws" = {
-          proxyPass = "http://unix:${cfg.socketPath}:/";
+          proxyPass = "http://dplaned";
           proxyWebsockets = true;
         };
       };
