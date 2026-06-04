@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	osUser "os/user"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1511,7 +1512,10 @@ func sessionMiddleware(db *sql.DB, internalCronToken string) mux.MiddlewareFunc 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip validation for public endpoints
-			p := r.URL.Path
+			// Normalize the path before any authorization check so that traversals
+		// like /api/zfs/../ha/fence cannot bypass pattern matching while gorilla/mux
+		// later resolves the cleaned path to a different route.
+		p := path.Clean(r.URL.Path)
 			if p == "/health" ||
 				p == "/api/auth/login" ||
 				p == "/api/auth/logout" ||
@@ -1552,13 +1556,17 @@ func sessionMiddleware(db *sql.DB, internalCronToken string) mux.MiddlewareFunc 
 				sessionUser, err := security.ValidateAPITokenAndGetUser(token)
 				if err == nil {
 					// Enforce resource-level allowlist if the token carries one.
+					// Fail closed on every error: a malformed or empty-after-parse
+					// allowlist denies the request rather than granting access.
 					if sessionUser.AllowedResources != "" && sessionUser.AllowedResources != "[]" {
 						var rules []handlers.TokenResourceRule
-						if jsonErr := json.Unmarshal([]byte(sessionUser.AllowedResources), &rules); jsonErr == nil {
-							if !handlers.TokenAllows(rules, r.Method, p) {
-								http.Error(w, "Forbidden: this token is not permitted to access "+p, http.StatusForbidden)
-								return
-							}
+						if jsonErr := json.Unmarshal([]byte(sessionUser.AllowedResources), &rules); jsonErr != nil {
+							http.Error(w, "Forbidden: token allowlist is malformed", http.StatusForbidden)
+							return
+						}
+						if len(rules) == 0 || !handlers.TokenAllows(rules, r.Method, p) {
+							http.Error(w, "Forbidden: this token is not permitted to access "+p, http.StatusForbidden)
+							return
 						}
 					}
 					ctx := context.WithValue(r.Context(), middleware.UserContextKey, &middleware.User{
