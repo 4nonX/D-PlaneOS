@@ -80,14 +80,14 @@ Security in DPlaneOS is layered. Each layer independently limits what a compromi
 
 ### Trust Boundary
 
-The daemon listens on `127.0.0.1:9000` only. It is not reachable from the network without a reverse proxy (nginx, Caddy, or Pangolin). Everything behind the proxy is trusted; everything in front is not.
+The daemon communicates with nginx exclusively through a Unix domain socket (`/run/dplaneos/dplaned.sock`). It is not reachable from the network at all - no TCP port is open for internal plumbing. Everything behind nginx is trusted; everything in front is not.
 
 ```
 UNTRUSTED
   Browser ──── Network ──── Reverse Proxy (TLS terminated)
-                                     │ localhost only
+                                     │ Unix socket only
 TRUSTED
-  dplaned (Go, 127.0.0.1:9000)
+  dplaned (Go, /run/dplaneos/dplaned.sock)
     ├── PostgreSQL / Patroni
     ├── exec allowlist → zfs / zpool / docker / exportfs / smbcontrol
     ├── networkdwriter → /etc/systemd/network/
@@ -192,7 +192,7 @@ Internet / LAN
   [nginx :80/:443]
       │ proxy /api/ /ws/
       ▼
-  [dplaned :9000]    ←── WebSocket hub (real-time UI updates)
+  [dplaned (socket)] ←── WebSocket hub (real-time UI updates)
       │
       ├── PostgreSQL (local socket, /var/lib/dplaneos/pgsql/)
       ├── ZFS via libzfs (cgo) or exec allowlist fallback

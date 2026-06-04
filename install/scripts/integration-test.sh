@@ -45,7 +45,9 @@ mkdir -p "$REPORT_DIR"
 REPORT="$REPORT_DIR/integration-test-${TIMESTAMP}.txt"
 exec > >(tee -a "$REPORT") 2>&1
 
-API="http://127.0.0.1:9000"
+DAEMON_SOCK=/run/dplaneos/dplaned.sock
+API_FLAGS="--unix-socket $DAEMON_SOCK"
+API="http://localhost"
 DAEMON_BIN="/opt/dplaneos/daemon/dplaned"
 DB_PATH="/var/lib/dplaneos/dplaneos.db"
 
@@ -1022,11 +1024,11 @@ WEAK_PASS_RESP=$(api POST /api/auth/change-password \
     "{\"current_password\":\"$ADMIN_PASS\",\"new_password\":\"weak\"}")
 assert_json "Weak password rejected by change-password" "$WEAK_PASS_RESP" "success" "false"
 
-# Port 9000 not exposed beyond localhost
-if ss -tuln 2>/dev/null | grep ":9000" | grep -qv "127.0.0.1"; then
-    fail "CRITICAL: Port 9000 is exposed beyond localhost"
+# Daemon uses a Unix socket - no TCP port for internal comms
+if [ -S "$DAEMON_SOCK" ]; then
+    pass "Daemon socket present: $DAEMON_SOCK"
 else
-    pass "Port 9000 bound to localhost only"
+    fail "CRITICAL: Daemon socket not found at $DAEMON_SOCK"
 fi
 
 # ----------------------------------------------------------------

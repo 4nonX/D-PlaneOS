@@ -38,7 +38,7 @@ func RegenerateSMARTTimers(db *sql.DB) error {
 
 		payload := fmt.Sprintf(`{"device":"%s","type":"%s"}`, device, testType)
 		mainCmd := fmt.Sprintf(
-			`curl -sf -X POST http://127.0.0.1:9000/api/hardware/smart/cron-hook -H 'Content-Type: application/json' -H 'X-Internal-Token: %s' -d '%s'`,
+			`curl -sf --unix-socket /run/dplaneos/dplaned.sock -X POST http://localhost/api/hardware/smart/cron-hook -H 'Content-Type: application/json' -H 'X-Internal-Token: %s' -d '%s'`,
 			cronToken,
 			payload,
 		)

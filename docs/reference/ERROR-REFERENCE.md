@@ -177,7 +177,7 @@ systemctl status dplaned
 journalctl -u dplaned -f
 
 # Health check (no auth required)
-curl http://localhost:9000/health
+curl http://localhost/health
 
 # DB integrity
 sudo -u postgres psql dplaneos -c "\dt"

@@ -216,7 +216,7 @@ sudo systemctl status postgresql
 
 ```bash
 sudo systemctl status nginx
-curl http://127.0.0.1:9000/health   # test daemon directly
+curl --unix-socket /run/dplaneos/dplaned.sock http://localhost/health   # test daemon directly
 ```
 
 ### ZFS pools not visible

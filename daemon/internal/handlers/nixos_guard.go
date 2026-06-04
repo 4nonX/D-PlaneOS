@@ -171,12 +171,12 @@ func checkDivergence(physical, intent []int, shadow *[]int) bool {
 
 	found := false
 	for _, p := range physical {
-		// DPlaneOS ignores internal ports (e.g. 22 for SSH, 9000 for daemon)
-		// and ports that the user intentionally opened via declarative NixOS config
-		// that the daemon doesn't manage. We only flag if it's NOT in our intent.
+		// DPlaneOS ignores well-known OS-managed ports and ports the user
+		// intentionally opened via declarative NixOS config. Flag only ports
+		// not declared in state.yaml and not in the fixed OS set.
 		if !intentMap[p] {
-			// Check if it's one of the "Immune" system ports (SSH, API)
-			if p == 22 || p == 80 || p == 443 || p == 9000 {
+			// SSH, HTTP, HTTPS are always managed by the OS, never by state.yaml.
+			if p == 22 || p == 80 || p == 443 {
 				continue
 			}
 			*shadow = append(*shadow, p)

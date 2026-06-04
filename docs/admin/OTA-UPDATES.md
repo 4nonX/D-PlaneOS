@@ -51,7 +51,7 @@ If the health check passes, the system is on the new version. If it fails, the s
 
 The post-boot health check (`dplaneos-ota-health`) verifies four things:
 
-1. **Daemon API** - `GET http://127.0.0.1:9000/api/system/health` returns 200 within 10 seconds
+1. **Daemon API** - `GET http://localhost/api/system/health` (via nginx) returns 200 within 10 seconds
 2. **ZFS pool health** - `zpool list` reports all pools as ONLINE; a non-zero exit from `zpool list` also counts as failure
 3. **/persist mounted** - `/persist` is verified as an active mountpoint; not mounted counts as failure
 4. **Samba** (conditional) - if active SMB shares exist in the database, `smbd` must be running; if no shares are configured this check is skipped

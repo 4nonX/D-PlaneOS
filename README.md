@@ -136,7 +136,7 @@ The runtime is a single statically-linked Go daemon (`dplaned`) sitting behind n
 Browser
   └── nginx :80/:443          static files from /opt/dplaneos/app/
         └── proxy /api/ /ws/
-              └── dplaned :9000 (Go)
+              └── dplaned (Unix socket) (Go)
                     ├── PostgreSQL /var/lib/dplaneos/pgsql/ (embedded or Patroni-managed)
                     ├── ZFS     kernel module via allowlisted exec
                     ├── Docker  socket
@@ -179,7 +179,7 @@ sudo systemctl restart dplaned
 sudo journalctl -u dplaned -f
 
 # Health check
-curl http://127.0.0.1:9000/health
+curl --unix-socket /run/dplaneos/dplaned.sock http://localhost/health
 
 # Interactive recovery (locked out, DB issues, ZFS problems)
 sudo dplaneos-recovery

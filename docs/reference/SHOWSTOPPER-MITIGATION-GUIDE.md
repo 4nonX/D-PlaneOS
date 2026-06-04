@@ -76,7 +76,7 @@ Resource profile:
 
 Updates use an A/B slot system. The new system closure is written to the inactive slot while the running slot is untouched. After reboot, a post-boot health check fires 90 seconds after startup and evaluates four conditions:
 
-1. Daemon API responds 200 within 10 seconds (`GET http://127.0.0.1:9000/api/system/health`)
+1. Daemon API responds 200 within 10 seconds (`GET http://localhost/api/system/health` via nginx)
 2. All ZFS pools are ONLINE (`zpool list` exits 0)
 3. `/persist` is an active mountpoint
 4. If SMB shares are configured, `smbd` is running

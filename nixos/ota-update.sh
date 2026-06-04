@@ -289,11 +289,11 @@ cmd_health_check() {
 
     # Check 1: daemon is up and responding
     # /api/system/health is explicitly whitelisted in sessionMiddleware (no auth required)
-    if curl -sf --max-time 10 http://127.0.0.1:9000/api/system/health >/dev/null 2>&1; then
+    if curl -sf --max-time 10 --unix-socket /run/dplaneos/dplaned.sock http://localhost/api/system/health >/dev/null 2>&1; then
         log "PASS: daemon API is responding"
         checks_passed=$((checks_passed + 1))
     else
-        log "FAIL: daemon API not responding on port 9000"
+        log "FAIL: daemon API not responding on socket /run/dplaneos/dplaned.sock"
         checks_failed=$((checks_failed + 1))
     fi
 

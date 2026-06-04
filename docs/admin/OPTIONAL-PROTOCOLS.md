@@ -249,7 +249,7 @@ Settings: MinIO: Enable MinIO.
 
 Options:
 - **Data directory**: ZFS dataset path for bucket data (must exist)
-- **API port**: 9900 (default; do not conflict with the DPlaneOS daemon on 9000)
+- **API port**: 9000 (default MinIO port; the DPlaneOS daemon no longer uses any TCP port, so 9000 is available)
 - **Console port**: 9901
 
 The UI also shows the generated root credentials. Change them after first setup.

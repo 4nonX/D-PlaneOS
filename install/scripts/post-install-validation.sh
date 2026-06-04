@@ -73,16 +73,16 @@ echo ""
 # -- 4. Daemon API -------------------------------------------------------------
 echo "4. Checking daemon API..."
 
-HEALTH=$(curl -sf http://127.0.0.1:9000/health 2>/dev/null || echo "fail")
+SOCK=/run/dplaneos/dplaned.sock
+HEALTH=$(curl -sf --unix-socket "$SOCK" http://localhost/health 2>/dev/null || echo "fail")
 if echo "$HEALTH" | grep -qi "ok\|healthy\|running\|alive"; then
     pass "Daemon health endpoint OK"
 else
-    # Might just not have /health - try another safe endpoint
-    INFO=$(curl -sf http://127.0.0.1:9000/api/system/info 2>/dev/null || echo "fail")
+    INFO=$(curl -sf --unix-socket "$SOCK" http://localhost/api/system/info 2>/dev/null || echo "fail")
     if [ "$INFO" != "fail" ]; then
         pass "Daemon API responding"
     else
-        fail "Daemon not responding on :9000 - check: journalctl -xe -u dplaned"
+        fail "Daemon not responding on socket $SOCK - check: journalctl -xe -u dplaned"
     fi
 fi
 

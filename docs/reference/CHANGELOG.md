@@ -14,6 +14,17 @@ Upgrade from: v12.5.0 - No schema migration required. No breaking API changes. N
 
 - **Daemon switched to Unix domain socket (`/run/dplaneos/dplaned.sock`)**: The daemon previously listened on `127.0.0.1:9000` for nginx-to-daemon communication. This consumed a TCP port in the same address space as MinIO's standard API port, causing MinIO to fail to bind on a fresh install with default settings. The internal pipe is now a Unix socket - nginx proxies `/api/` and `/ws/` to `http://unix:/run/dplaneos/dplaned.sock:/`. No TCP port is consumed for DPlaneOS internal plumbing. This matches the pattern used by TrueNAS SCALE, OpenMediaVault, and other professional NAS operating systems. MinIO retains its standard 9000/9001 ports with no conflict. The `listenAddress` and `listenPort` NixOS module options are removed; `socketPath` replaces them (read-only, `/run/dplaneos/dplaned.sock`).
 
+- **All internal daemon references updated to Unix socket**: The socket change in the daemon itself was complete, but every other component that communicated with the daemon via `http://127.0.0.1:9000` also needed updating. Fixed in this release:
+  - Cron hook shell commands written by the backup scheduler, snapshot scheduler, and SMART task handler (`backup_schedule.go`, `system_extended.go`, `smart.go`) - these produce systemd timer `ExecStart` lines; all now use `curl --unix-socket /run/dplaneos/dplaned.sock`.
+  - Disk hot-plug notification scripts (`install/scripts/notify-disk-added.sh`, `notify-disk-removed.sh`) - previously read a port from config, now use the socket directly.
+  - OTA health check (`nixos/ota-update.sh`) - post-reboot daemon liveness check updated.
+  - Post-install validation (`install/scripts/post-install-validation.sh`) - health endpoint probe updated.
+  - System audit (`install/scripts/system-audit.sh`) - port 9000 TCP checks replaced with socket existence and connectivity checks.
+  - Integration test (`install/scripts/integration-test.sh`) - `API` base replaced with socket-based curl; port 9000 exposure check replaced with socket presence check.
+  - `install.sh` (non-NixOS path) - nginx `proxy_pass` directives and daemon `--listen` argument updated.
+  - `nixos_guard.go` - port 9000 was hardcoded as an "immune" system port exempt from firewall drift detection; removed (9000 is now available for user services such as MinIO).
+  - `gitops/verify.go` - post-apply service probe was checking TCP port 9000; now probes nginx on port 80, which is the actual public entry point.
+
 - **Installer ISO: python3.11 HTML doc build no longer blocks the ISO**: nixpkgs 26.05 ships Sphinx 9.1 + docutils 0.22.4, which produce a `TypeError` when building Python 3.11 HTML documentation. `documentation.doc.enable = false` was already set in `applianceConfig` (preventing the target system from pulling the broken derivation), but the installer ISO has its own separate NixOS evaluation that did not inherit this setting. Added `documentation.doc.enable = false` and `environment.extraOutputsToInstall = lib.mkForce []` to both `installer.nix` and `witness-installer.nix`.
 
 - **CI: docs-only pushes no longer trigger the full build pipeline**: The `paths-ignore` filter used `*.md` which only matches Markdown files at the repository root. Files such as `nixos/README.md` fell through and triggered CI. Changed to `**/*.md` to cover Markdown files in all subdirectories.

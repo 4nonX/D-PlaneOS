@@ -19,13 +19,7 @@ TYPE=$2
 SERIAL=$3
 WWN=$4
 
-# Read daemon port from config, defaulting to 9000
-DAEMON_PORT=9000
-if [ -f /etc/dplaneos/daemon.conf ]; then
-    _port=$(grep -E '^[[:space:]]*port[[:space:]]*=' /etc/dplaneos/daemon.conf \
-            | head -1 | sed 's/.*=[[:space:]]*//' | tr -d '[:space:]')
-    [ -n "$_port" ] && DAEMON_PORT="$_port"
-fi
+DAEMON_SOCK=/run/dplaneos/dplaned.sock
 
 # Wait for device to settle - kernel needs time after a hot-plug event
 # before lsblk returns valid MODEL/SIZE data. Without this loop, the
@@ -55,7 +49,7 @@ MODEL=$(lsblk -n -d -o MODEL "$DEVICE" 2>/dev/null | head -1 | xargs)
 logger -t dplaneos "Disk added: $DEVICE (type=$TYPE model=$MODEL size=$SIZE serial=$SERIAL wwn=$WWN)"
 
 # POST event to daemon HTTP API
-curl -sf --max-time 5 -X POST "http://127.0.0.1:${DAEMON_PORT}/api/internal/disk-event" \
+curl -sf --max-time 5 --unix-socket "$DAEMON_SOCK" -X POST "http://localhost/api/internal/disk-event" \
     -H "Content-Type: application/json" \
     -d "{\"action\":\"added\",\"device\":\"$DEVICE\",\"device_type\":\"$TYPE\",\"serial\":\"$SERIAL\",\"wwn\":\"$WWN\",\"model\":\"$MODEL\",\"size\":\"$SIZE\"}" || true
 

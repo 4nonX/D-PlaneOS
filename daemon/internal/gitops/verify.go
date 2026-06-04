@@ -44,7 +44,8 @@ func VerifyAppliedServices(desired *DesiredState) *VerificationReport {
 		probes = append(probes, struct{ name string; port int }{"NFS", 2049})
 	}
 	// Always probe essential management services (Phase 12.6)
-	probes = append(probes, struct{ name string; port int }{"API", 9000})
+	// API is probed via nginx on port 80; the daemon itself uses a Unix socket.
+	probes = append(probes, struct{ name string; port int }{"nginx", 80})
 	probes = append(probes, struct{ name string; port int }{"SSH", 22})
 
 	// 2. Execute probes with linear backoff (3 attempts over ~10 seconds)

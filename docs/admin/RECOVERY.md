@@ -9,7 +9,7 @@
 | Database corrupted | Restore from backup (see below) |
 | Lost admin access | `sudo dplaneos-recovery` (option 5) |
 | Pool not importing | `zpool import -f <pool>` |
-| Web UI unreachable | `curl http://127.0.0.1:9000/health` |
+| Web UI unreachable | `curl --unix-socket /run/dplaneos/dplaned.sock http://localhost/health` |
 | High memory usage | Check `MemoryMax` in systemd unit, restart service |
 
 ---
@@ -46,7 +46,7 @@ Graceful shutdown: the daemon drains active connections before stopping (15 s ti
 ### Verify Health
 
 ```bash
-curl http://127.0.0.1:9000/health
+curl --unix-socket /run/dplaneos/dplaned.sock http://localhost/health
 # Expected: {"status":"ok","version":"4.x.x"}
 ```
 
@@ -221,10 +221,10 @@ Or use the web UI: **Storage → Encryption → Unlock**.
 
 ## 5. Reverse Proxy Issues
 
-`dplaned` listens on `127.0.0.1:9000` by default. If the web UI is unreachable, test the daemon directly first:
+`dplaned` communicates with nginx via a Unix socket (`/run/dplaneos/dplaned.sock`). If the web UI is unreachable, test the daemon directly first:
 
 ```bash
-curl http://127.0.0.1:9000/health
+curl --unix-socket /run/dplaneos/dplaned.sock http://localhost/health
 ```
 
 If this returns `{"status":"ok"}` but the browser cannot reach the UI, the issue is in nginx.
@@ -339,7 +339,7 @@ sudo systemctl daemon-reload
 systemctl status dplaned postgresql patroni etcd
 
 # Health check
-curl -s http://127.0.0.1:9000/health | python3 -m json.tool
+curl -s --unix-socket /run/dplaneos/dplaned.sock http://localhost/health | python3 -m json.tool
 
 # Database tables
 sudo -u postgres psql dplaneos -c "\dt"
@@ -358,5 +358,5 @@ sudo -u postgres psql dplaneos -c \
 
 # Daemon version
 /opt/dplaneos/daemon/dplaned -version 2>/dev/null || \
-  curl -s http://127.0.0.1:9000/health | grep version
+  curl -s --unix-socket /run/dplaneos/dplaned.sock http://localhost/health | grep version
 ```

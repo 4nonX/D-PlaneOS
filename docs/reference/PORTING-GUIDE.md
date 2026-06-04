@@ -60,7 +60,7 @@ ZFS DKMS builds (rebuilding the module on every kernel update) are a common sour
 
 ### 4. nginx Configuration
 
-nginx proxies `/api/` and `/ws` to `dplaned` on `127.0.0.1:9000` and serves `/opt/dplaneos/app/` as static files. WebSocket proxying requires `proxy_read_timeout 300s`. A working nginx configuration can be extracted from `nixos/module.nix` lines 202-225.
+nginx proxies `/api/` and `/ws` to `dplaned` via Unix socket (`http://unix:/run/dplaneos/dplaned.sock:/`) and serves `/opt/dplaneos/app/` as static files. WebSocket proxying requires `proxy_read_timeout 300s`. A working nginx configuration can be extracted from `nixos/module.nix`.
 
 ### 5. PostgreSQL Initialisation
 

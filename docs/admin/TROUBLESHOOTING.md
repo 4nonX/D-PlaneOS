@@ -353,7 +353,7 @@ zpool status <pool-name>
 
 # Check resilver via API
 curl -s -H "X-Session-ID: <id>" \
-  http://localhost:9000/api/zfs/resilver/status?pool=<pool>
+  http://localhost/api/zfs/resilver/status?pool=<pool>
 ```
 
 **Note:** On large pools a resilver may take hours to days. The PoolsPage resilver progress card auto-refreshes every 10 seconds while active.
@@ -488,11 +488,11 @@ cat /etc/systemd/system/dplaneos-snapshot-<name>.service
 ls /var/lib/dplaneos/custom_icons/
 
 # Verify the daemon can serve it
-curl -I http://localhost:9000/api/assets/custom-icons/myapp.svg
+curl -I http://localhost/api/assets/custom-icons/myapp.svg
 
 # Check container labels are being returned
 curl -s -H "X-Session-ID: <id>" \
-  http://localhost:9000/api/docker/containers | \
+  http://localhost/api/docker/containers | \
   python3 -m json.tool | grep -A5 "Labels"
 ```
 
@@ -529,7 +529,7 @@ labels:
 **Diagnosis:**
 ```bash
 # Check the icon map is being served
-curl -s http://localhost:9000/api/docker/icon-map | \
+curl -s http://localhost/api/docker/icon-map | \
   python3 -m json.tool | grep jellyfin
 ```
 

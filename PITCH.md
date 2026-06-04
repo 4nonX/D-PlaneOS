@@ -108,7 +108,7 @@ Before rebooting into the new slot, the OTA system writes a pending-revert marke
 
 The health check fires 90 seconds after boot and verifies four things in sequence:
 
-1. The daemon API responds at `localhost:9000/api/health`
+1. The daemon API responds at `localhost/api/health` (via nginx)
 2. All ZFS pools report ONLINE with no faulted devices (`zpool status`)
 3. PostgreSQL accepts connections and executes `SELECT 1`
 4. Samba responds to `smbcontrol smbd ping`
@@ -125,7 +125,7 @@ See [OTA Updates](docs/admin/OTA-UPDATES.md) for the full procedure, verify-only
 
 ## No Cloud Dependency
 
-The daemon listens on `127.0.0.1:9000` only. It is not reachable from the network without a reverse proxy. It makes no outbound connections except to:
+The daemon communicates via a Unix socket only. It is not reachable from the network at all without a reverse proxy. It makes no outbound connections except to:
 
 - The Git repository you configure, which can be self-hosted on Gitea, Forgejo, GitLab, or any bare Git server
 - rclone targets you explicitly configure, which are opt-in and operator-controlled

@@ -158,7 +158,7 @@ curl -X POST http://nas/api/gitops/apply \
 **Via CLI (from the NAS itself):**
 ```bash
 curl -s -X POST -H "X-Session-ID: $(cat /tmp/session)" \
-  http://localhost:9000/api/gitops/apply
+  http://localhost/api/gitops/apply
 ```
 
 ### Reviewing the plan before applying
@@ -463,7 +463,7 @@ If Git is inaccessible (network outage, repository issue), you can revert direct
 cd /var/lib/dplaneos/gitops/repo
 git log --oneline    # Find the previous good commit
 git checkout abc1234 -- state.yaml    # Restore the file
-curl -X POST http://localhost:9000/api/gitops/apply \
+curl -X POST http://localhost/api/gitops/apply \
   -H "X-Session-ID: $(cat /tmp/session)"
 ```
 

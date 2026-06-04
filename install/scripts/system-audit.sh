@@ -348,10 +348,11 @@ fi
 section "5. DAEMON API"
 # ----------------------------------------------------------------
 
-API="http://127.0.0.1:9000"
+SOCK=/run/dplaneos/dplaned.sock
+API_CURL="curl -sf --max-time 5 --unix-socket $SOCK"
 
 # Health
-HEALTH=$(curl -sf --max-time 5 "$API/health" 2>/dev/null || echo "")
+HEALTH=$($API_CURL http://localhost/health 2>/dev/null || echo "")
 if echo "$HEALTH" | grep -q '"ok"'; then
     DAEMON_VER=$(echo "$HEALTH" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('version','unknown'))" 2>/dev/null || echo "unknown")
     pass "Health endpoint: OK (version: $DAEMON_VER)"
@@ -365,7 +366,7 @@ else
 fi
 
 # CSRF
-CSRF_RESP=$(curl -sf --max-time 5 "$API/api/csrf" 2>/dev/null || echo "")
+CSRF_RESP=$($API_CURL http://localhost/api/csrf 2>/dev/null || echo "")
 if echo "$CSRF_RESP" | grep -q "csrf_token"; then
     pass "CSRF endpoint: OK"
     CSRF_TOKEN=$(echo "$CSRF_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['csrf_token'])" 2>/dev/null || echo "")
@@ -375,25 +376,19 @@ else
 fi
 
 # Auth check (unauthenticated - expect 401)
-AUTH_CODE=$(curl -sf --max-time 5 -o /dev/null -w "%{http_code}" \
-    "$API/api/auth/check" 2>/dev/null || echo "000")
+AUTH_CODE=$($API_CURL -o /dev/null -w "%{http_code}" \
+    http://localhost/api/auth/check 2>/dev/null || echo "000")
 if [ "$AUTH_CODE" = "401" ]; then
     pass "Auth middleware: returning 401 on unauthenticated request"
 else
     warn "Auth middleware: expected 401, got $AUTH_CODE"
 fi
 
-# WebSocket port reachable (TCP only, no full WS handshake)
-if curl -sf --max-time 3 -o /dev/null "$API/health" &>/dev/null; then
-    pass "Daemon port 9000: reachable from localhost"
-fi
-
-# Port 9000 NOT exposed externally (should only be localhost)
-if ss -tuln 2>/dev/null | grep ":9000" | grep -q "0\.0\.0\.0\|::"; then
-    fail "Port 9000 is bound to 0.0.0.0 or :: - daemon is directly internet-exposed"
-    info "  It should only listen on 127.0.0.1:9000 (nginx proxies it)"
-elif ss -tuln 2>/dev/null | grep -q "127.0.0.1:9000"; then
-    pass "Port 9000: bound to 127.0.0.1 only (correct)"
+# Socket reachable
+if [ -S "$SOCK" ]; then
+    pass "Daemon socket: $SOCK exists"
+else
+    fail "Daemon socket $SOCK not found - is dplaned running?"
 fi
 
 # ----------------------------------------------------------------
@@ -582,9 +577,9 @@ fi
 section "9. SECURITY"
 # ----------------------------------------------------------------
 
-# Port 9000 exposure (already checked above, flag again in security context)
-if ss -tuln 2>/dev/null | grep ":9000" | grep -qv "127.0.0.1"; then
-    fail "Daemon port 9000 exposed beyond localhost"
+# Daemon uses a Unix socket - no TCP port to expose
+if [ -S /run/dplaneos/dplaned.sock ]; then
+    pass "Daemon socket present (no TCP port exposed for internal comms)"
 fi
 
 # SSH

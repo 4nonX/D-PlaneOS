@@ -18,7 +18,7 @@ flowchart LR
     end
 
     subgraph Backend["DPlaneOS Daemon"]
-        dplaned["dplaned (Go) :9000"]
+        dplaned["dplaned (Go) unix:/run/dplaneos/dplaned.sock"]
     end
 
     subgraph Data["Data and Runtime"]
@@ -108,7 +108,7 @@ sequenceDiagram
     participant C as libzfs / exec.Command / PostgreSQL
 
     B->>N: HTTP request
-    N->>M: proxy_pass :9000
+    N->>M: proxy_pass unix socket
     M->>M: session validation
     M->>M: CSRF check (mutating requests)
     M->>M: rate limit (100 req/min per IP)

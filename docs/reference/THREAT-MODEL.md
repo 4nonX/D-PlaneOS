@@ -2,7 +2,7 @@
 
 ## System Context
 
-DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), containers (Docker), network (systemd-networkd), and identity on a single server. It runs as one Go binary (`dplaned`) listening on `127.0.0.1:9000` by default. External access is via reverse proxy (nginx/Caddy/Pangolin).
+DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), containers (Docker), network (systemd-networkd), and identity on a single server. It runs as one Go binary (`dplaned`) communicating with nginx via a Unix socket (`/run/dplaneos/dplaned.sock`). No TCP port is consumed for internal plumbing. External access is via reverse proxy (nginx/Caddy/Pangolin).
 
 **Trust boundary**: the reverse proxy. Everything behind it (dplaned, PostgreSQL, ZFS/Docker/systemd commands) is trusted. Everything in front (browser, network) is untrusted.
 
@@ -44,7 +44,7 @@ DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), c
 |-------|-----------|------|
 | Remote unauthenticated | HTTP to reverse proxy | Data theft, service disruption |
 | Remote authenticated (low-priv) | Valid session, `viewer` or `user` role | Privilege escalation, unauthorized data access |
-| Local network attacker | Direct access to port 9000 if misconfigured | Full API access without TLS |
+| Local network attacker | Direct access to nginx port 80/443 | Full API access without TLS if HTTP allowed |
 | Physical attacker | Access to hardware | Disk theft, boot manipulation |
 | Malicious container | Docker container with host mounts | Escape to host filesystem |
 
@@ -185,7 +185,7 @@ DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), c
 **Vector**: Attacker intercepts traffic between browser and server.
 
 **Mitigation**:
-- `dplaned` defaults to `127.0.0.1:9000` - not reachable from the network without explicit reconfiguration
+- `dplaned` listens on a Unix socket (`/run/dplaneos/dplaned.sock`) - not reachable from the network at all; no TCP port is bound
 - TLS terminated at reverse proxy (nginx/Caddy/Pangolin)
 - Session tokens transmitted in request headers, not URL parameters
 
@@ -274,7 +274,7 @@ DPlaneOS is a NAS management layer running on NixOS. It manages storage (ZFS), c
 
 ## Recommended Deployment
 
-Run behind a VPN or reverse proxy with authentication (e.g. WireGuard, Tailscale, Cloudflare, Pangolin). Enable ZFS dataset encryption with a strong passphrase for protection against physical access. Do not expose port 9000 directly to the internet. For internet-facing deployments, layered security middlewares are strongly recommended: CrowdSec (proactive IP reputation), GeoBlock (country-level filtering), and Fail2ban (reactive ban on suspicious behaviour) in front of the reverse proxy.
+Run behind a VPN or reverse proxy with authentication (e.g. WireGuard, Tailscale, Cloudflare, Pangolin). Enable ZFS dataset encryption with a strong passphrase for protection against physical access. Do not expose nginx port 80 without TLS for internet-facing deployments. For internet-facing deployments, layered security middlewares are strongly recommended: CrowdSec (proactive IP reputation), GeoBlock (country-level filtering), and Fail2ban (reactive ban on suspicious behaviour) in front of the reverse proxy.
 
 ---
 
@@ -282,4 +282,4 @@ Run behind a VPN or reverse proxy with authentication (e.g. WireGuard, Tailscale
 
 - **ZFS keys not auto-locked on shutdown** - `zfs unload-key` must be called manually before powering down if encryption-at-rest is required
 - **PostgreSQL plaintext** - DB is not encrypted independently; relies on ZFS pool-level encryption if the pool is configured that way
-- **CSP not set by daemon** - CSP only present in nginx config; direct connections to port 9000 have no CSP
+- **CSP not set by daemon** - CSP only present in nginx config; the daemon socket is not directly accessible from the network, so this is only relevant if someone has local shell access

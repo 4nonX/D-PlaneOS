@@ -21,7 +21,7 @@ PORT=80
 DB_DSN="${DATABASE_DSN:-}"
 UPGRADE=false
 UNATTENDED=false
-DAEMON_INTERNAL_PORT=9000
+DAEMON_SOCK=/run/dplaneos/dplaned.sock
 
 # ---------- argument parsing --------------------------------------------------
 while [[ $# -gt 0 ]]; do
@@ -76,7 +76,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:${DAEMON_INTERNAL_PORT};
+        proxy_pass http://unix:${DAEMON_SOCK}:/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -85,7 +85,7 @@ server {
     }
 
     location /ws/ {
-        proxy_pass http://127.0.0.1:${DAEMON_INTERNAL_PORT};
+        proxy_pass http://unix:${DAEMON_SOCK}:/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -93,7 +93,7 @@ server {
     }
 
     location /health {
-        proxy_pass http://127.0.0.1:${DAEMON_INTERNAL_PORT}/health;
+        proxy_pass http://unix:${DAEMON_SOCK}:/health;
     }
 }
 EOF
@@ -106,7 +106,7 @@ start_daemon() {
     touch "$SMB_CONF"
     DATABASE_DSN="$DB_DSN" nohup "$DAEMON_BIN" \
         -db-dsn "$DB_DSN" \
-        -listen "127.0.0.1:${DAEMON_INTERNAL_PORT}" \
+        -listen "${DAEMON_SOCK}" \
         -smb-conf "$SMB_CONF" \
         >> "$LOG_DIR/dplaned.log" 2>&1 &
     echo $! > "$PID_FILE"
