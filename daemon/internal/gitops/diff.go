@@ -1,6 +1,7 @@
 package gitops
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -10,6 +11,15 @@ import (
 
 	"dplaned/internal/nixwriter"
 )
+
+// DiffContext carries optional runtime state for the diff engine.
+// Pass a non-nil DB to enable full attachment-graph checks: the engine
+// will query for active SMB shares, NFS exports, Docker stacks, and
+// iSCSI targets that reference a dataset before allowing its deletion.
+// Without a DB the engine falls back to the basic "used bytes > 0" check.
+type DiffContext struct {
+	DB *sql.DB
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  DIFF ENGINE + BLOCKED SAFETY CONTRACT
@@ -166,7 +176,14 @@ type Plan struct {
 // The diff engine makes live ZFS/smbstatus calls for BLOCKED classification -
 // callers must ensure these are acceptable at call time (e.g., not during
 // a ZFS scrub or replication operation).
-func ComputeDiff(desired *DesiredState, live *LiveState) *Plan {
+//
+// Pass a non-nil DiffContext to enable attachment-graph checks on dataset
+// deletion. With a nil ctx the engine falls back to the byte-usage check only.
+func ComputeDiff(desired *DesiredState, live *LiveState, ctx ...*DiffContext) *Plan {
+	var diffCtx *DiffContext
+	if len(ctx) > 0 {
+		diffCtx = ctx[0]
+	}
 	plan := &Plan{}
 
 	// Build lookup maps for O(1) access
@@ -888,7 +905,7 @@ func ComputeDiff(desired *DesiredState, live *LiveState) *Plan {
 			if _, isPool := desiredPools[ld.Name]; isPool {
 				continue
 			}
-			item := blockedCheckDataset(ld)
+			item := blockedCheckDataset(ld, diffCtx)
 			plan.Items = append(plan.Items, item)
 		}
 	}
@@ -1110,21 +1127,32 @@ func blockedCheckPool(lp LivePool) DiffItem {
 
 // blockedCheckDataset evaluates whether destroying a dataset should be BLOCKED.
 //
-// Rule: if the dataset has ANY used space (used > 0 bytes), the action is BLOCKED.
-// We re-query `zfs get used` live at diff time - not the cached LiveState value -
-// because data may have been written between ReadLiveState() and this check.
+// Checks in order:
+//  1. Attachment graph (if ctx.DB is set): SMB shares, NFS exports, Docker
+//     stacks with volumes, and iSCSI/NVMe-oF targets referencing this dataset
+//     or its mountpoint. Mirrors TrueNAS dataset_attachments pattern.
+//  2. Used-byte check: re-queries `zfs get used` live so data written between
+//     ReadLiveState() and now is caught.
 //
-// Fallback: when the zfs binary is not in PATH (e.g. unit-test or CI environments
-// that have no ZFS installed), we fall back to the cached ld.Used value rather
-// than blocking every deletion. This is safe because ReadLiveState() would have
-// already failed hard if zfs were absent in a real production environment.
-func blockedCheckDataset(ld LiveDataset) DiffItem {
-	// Re-query used space live - must not rely on cached value
-	usedBytes, err := GetDatasetUsedBytes(ld.Name)
+// Fallback: when zfs is not in PATH (CI/test), uses cached ld.Used.
+func blockedCheckDataset(ld LiveDataset, ctx *DiffContext) DiffItem {
+	// ── Attachment-graph check ────────────────────────────────────────────────
+	if ctx != nil && ctx.DB != nil {
+		if reason := datasetAttachmentReason(ctx.DB, ld.Name, ld.Mountpoint); reason != "" {
+			return DiffItem{
+				Kind:        KindDataset,
+				Name:        ld.Name,
+				Action:      ActionBlocked,
+				BlockReason: reason,
+				RiskLevel:   "critical",
+			}
+		}
+	}
 
+	// ── Used-byte check ───────────────────────────────────────────────────────
+	usedBytes, err := GetDatasetUsedBytes(ld.Name)
 	if err != nil {
-		// Real error - block to be safe.
-		reason := fmt.Sprintf("Dataset %q usage could not be verified safely due to an error: %v. Deletion is BLOCKED.", ld.Name, err)
+		reason := fmt.Sprintf("Dataset %q usage could not be verified: %v. Deletion is BLOCKED.", ld.Name, err)
 		return DiffItem{
 			Kind:        KindDataset,
 			Name:        ld.Name,
@@ -1152,13 +1180,68 @@ func blockedCheckDataset(ld LiveDataset) DiffItem {
 		}
 	}
 
-	// Dataset exists but is genuinely empty - safe to delete
 	return DiffItem{
 		Kind:      KindDataset,
 		Name:      ld.Name,
 		Action:    ActionDelete,
-		RiskLevel: "medium", // medium even when empty - irreversible
+		RiskLevel: "medium",
 	}
+}
+
+// datasetAttachmentReason queries the database for services that reference
+// the given dataset name or mountpoint. Returns a non-empty string if any
+// attachment is found, which becomes the BLOCKED reason.
+//
+// Mirrors TrueNAS pool_/dataset_attachments.py: before a dataset can be
+// destroyed, all attachment services (shares, exports, containers, targets)
+// are queried. This prevents destroying a dataset that has an active NFS
+// export, SMB share, Docker volume, or iSCSI target pointing at it.
+func datasetAttachmentReason(db *sql.DB, datasetName, mountpoint string) string {
+	var attachments []string
+
+	// Check SMB shares referencing this dataset's mountpoint
+	if mountpoint != "" {
+		var shareCount int
+		db.QueryRow(`SELECT COUNT(*) FROM smb_shares WHERE path = $1`, mountpoint).Scan(&shareCount) //nolint:errcheck
+		if shareCount > 0 {
+			attachments = append(attachments, fmt.Sprintf("%d SMB share(s) at %s", shareCount, mountpoint))
+		}
+
+		// Check NFS exports referencing this mountpoint
+		var nfsCount int
+		db.QueryRow(`SELECT COUNT(*) FROM nfs_exports WHERE path = $1`, mountpoint).Scan(&nfsCount) //nolint:errcheck
+		if nfsCount > 0 {
+			attachments = append(attachments, fmt.Sprintf("%d NFS export(s) at %s", nfsCount, mountpoint))
+		}
+	}
+
+	// Check iSCSI extents referencing a ZVol from this dataset (e.g. tank/data/vol)
+	var iscsiCount int
+	db.QueryRow(`SELECT COUNT(*) FROM iscsi_targets WHERE zvol_path LIKE $1`,
+		datasetName+"/%").Scan(&iscsiCount) //nolint:errcheck
+	if iscsiCount > 0 {
+		attachments = append(attachments, fmt.Sprintf("%d iSCSI target(s) using ZVols under %s", iscsiCount, datasetName))
+	}
+
+	// Check Docker stack configs referencing this mountpoint as a bind mount
+	if mountpoint != "" {
+		var stackCount int
+		db.QueryRow(`SELECT COUNT(*) FROM docker_stacks WHERE compose_yaml LIKE $1`,
+			"%"+mountpoint+"%").Scan(&stackCount) //nolint:errcheck
+		if stackCount > 0 {
+			attachments = append(attachments, fmt.Sprintf("%d Docker stack(s) with volumes from %s", stackCount, mountpoint))
+		}
+	}
+
+	if len(attachments) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf(
+		"Dataset %q cannot be deleted: it is still referenced by active services: %s. "+
+			"Remove these attachments first, then re-apply the plan.",
+		datasetName, strings.Join(attachments, "; "),
+	)
 }
 
 // isToolNotFound returns true when the error indicates an executable was not

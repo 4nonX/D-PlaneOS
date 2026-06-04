@@ -36,10 +36,51 @@ func (h *HAHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		status.HAEnabled = NixWriter.State().HAEnable
 	}
 	witnessCfg, _ := h.mgr.GetWitnessConfig()
+
+	// Compute granular disabled reasons so the UI triage panel can show
+	// the specific condition (e.g. "VERSION_MISMATCH") instead of a
+	// generic "HA is broken" message.
+	rawReasons := h.mgr.ClusterDisabledReasons()
+	type reasonDetail struct {
+		Code        ha.DisabledReason `json:"code"`
+		Description string            `json:"description"`
+	}
+	details := make([]reasonDetail, 0, len(rawReasons))
+	for _, r := range rawReasons {
+		details = append(details, reasonDetail{
+			Code:        r,
+			Description: ha.DisabledReasonDescription(r),
+		})
+	}
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success":          true,
+		"cluster":          status,
+		"witness":          witnessCfg,
+		"disabled_reasons": details,
+	})
+}
+
+// BecomeStandby handles the graceful demotion path: export all ZFS pools
+// within the deadline, then yield. If export times out, the node reboots
+// itself to prevent split-brain. Called by:
+//   - Keepalived notify scripts on BACKUP state transition
+//   - Operator-initiated planned failover via the UI
+//
+// POST /api/ha/standby
+func (h *HAHandler) BecomeStandby(w http.ResponseWriter, r *http.Request) {
+	log.Printf("HA STANDBY: graceful demotion requested by %s", r.RemoteAddr)
+	go func() {
+		if err := ha.BecomeStandby(); err != nil {
+			log.Printf("HA STANDBY: demotion error: %v", err)
+		}
+	}()
+	// Respond immediately so the caller (Keepalived notify script) does not
+	// block waiting. The actual export happens asynchronously; if it fails the
+	// node will reboot before the new primary imports the pools.
+	respondJSON(w, http.StatusAccepted, map[string]interface{}{
 		"success": true,
-		"cluster": status,
-		"witness": witnessCfg,
+		"message": "Graceful standby transition initiated - node will export pools and yield within 4 seconds or reboot",
 	})
 }
 

@@ -289,7 +289,18 @@ EOF
         virtualRouterId = 51;
         virtualIps = [ { addr = cfg.virtualIP; } ];
         trackScripts = [ "check_dplaneos" ];
-        extraConfig = lib.optionalString (cfg.vrrpPassword != null) ''
+        # notify_backup triggers the graceful standby transition: the daemon
+        # exports all ZFS pools within 4 seconds then yields. If it cannot
+        # export in time it force-reboots itself to prevent split-brain.
+        # This mirrors TrueNAS's ZPOOL_EXPORT_TIMEOUT = 4s pattern.
+        extraConfig = ''
+          notify_backup "${pkgs.writeShellScript "vrrp-notify-backup" ''
+            ${pkgs.curl}/bin/curl -sf -X POST \
+              --unix-socket /run/dplaneos/dplaned.sock \
+              -H "X-Internal-Token: $(cat /var/lib/dplaneos/internal-token 2>/dev/null || true)" \
+              http://localhost/api/ha/standby || true
+          ''}"
+        '' + lib.optionalString (cfg.vrrpPassword != null) ''
           authentication {
             auth_type PASS
             auth_pass ${cfg.vrrpPassword}

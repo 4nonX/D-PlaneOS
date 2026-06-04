@@ -9,11 +9,41 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
 	"dplaned/internal/audit"
 )
+
+// TokenResourceRule defines a single resource the token is permitted to access.
+// Method is an HTTP verb ("GET", "POST", etc.) or "*" for any method.
+// Resource is the URL path with optional fnmatch wildcards (e.g. "/api/zfs/*").
+type TokenResourceRule struct {
+	Method   string `json:"method"`
+	Resource string `json:"resource"`
+}
+
+// TokenAllows returns true if the given HTTP method and path are permitted by
+// the token's resource rules. An empty rules list means unrestricted (governed
+// only by the coarse scope). Rules are evaluated in order; first match wins.
+// Wildcards use path.Match semantics (fnmatch-style, "/" is significant).
+func TokenAllows(rules []TokenResourceRule, method, urlPath string) bool {
+	if len(rules) == 0 {
+		return true // no resource restriction - coarse scope governs
+	}
+	for _, rule := range rules {
+		methodMatch := rule.Method == "*" || strings.EqualFold(rule.Method, method)
+		if !methodMatch {
+			continue
+		}
+		matched, err := path.Match(rule.Resource, urlPath)
+		if err == nil && matched {
+			return true
+		}
+	}
+	return false
+}
 
 // APITokenHandler manages long-lived API tokens for automation
 type APITokenHandler struct {
@@ -25,13 +55,14 @@ func NewAPITokenHandler(db *sql.DB) *APITokenHandler {
 }
 
 type apiToken struct {
-	ID          int     `json:"id"`
-	Name        string  `json:"name"`
-	Prefix      string  `json:"prefix"`
-	Scopes      string  `json:"scopes"`
-	LastUsed    *string `json:"last_used"`
-	ExpiresAt   *string `json:"expires_at"`
-	CreatedAt   string  `json:"created_at"`
+	ID               int     `json:"id"`
+	Name             string  `json:"name"`
+	Prefix           string  `json:"prefix"`
+	Scopes           string  `json:"scopes"`
+	AllowedResources string  `json:"allowed_resources"` // JSON array of TokenResourceRule
+	LastUsed         *string `json:"last_used"`
+	ExpiresAt        *string `json:"expires_at"`
+	CreatedAt        string  `json:"created_at"`
 }
 
 // generateToken creates a new dpl_<prefix>_<random> token
@@ -59,48 +90,65 @@ func HashToken(raw string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// ValidateAPIToken checks if a bearer token is valid and returns the user_id
-// Used by session middleware to support token-based auth
-func ValidateAPIToken(db *sql.DB, token string) (int, string, error) {
+// ValidateAPITokenResult carries all data the middleware needs to authorize
+// a token-authenticated request.
+type ValidateAPITokenResult struct {
+	UserID           int
+	Username         string
+	Scopes           string
+	AllowedResources []TokenResourceRule
+}
+
+// ValidateAPIToken checks if a bearer token is valid and returns the full
+// authorization result including any resource-level allowlist.
+func ValidateAPIToken(db *sql.DB, token string) (*ValidateAPITokenResult, error) {
 	if !strings.HasPrefix(token, "dpl_") {
-		return 0, "", fmt.Errorf("not an API token")
+		return nil, fmt.Errorf("not an API token")
 	}
 
 	hash := HashToken(token)
 
 	var userID int
-	var username, scopes string
+	var username, scopes, allowedResourcesJSON string
 	var expiresAt *string
 
 	err := db.QueryRow(`
-		SELECT at.user_id, u.username, at.scopes, at.expires_at
+		SELECT at.user_id, u.username, at.scopes, at.allowed_resources, at.expires_at
 		FROM api_tokens at
 		JOIN users u ON u.id = at.user_id
 		WHERE at.token_hash = $1 AND u.active = 1
-	`, hash).Scan(&userID, &username, &scopes, &expiresAt)
+	`, hash).Scan(&userID, &username, &scopes, &allowedResourcesJSON, &expiresAt)
 	if err == sql.ErrNoRows {
-		return 0, "", fmt.Errorf("invalid token")
+		return nil, fmt.Errorf("invalid token")
 	}
 	if err != nil {
-		return 0, "", err
+		return nil, err
 	}
 
-	// Check expiry
 	if expiresAt != nil && *expiresAt != "" {
 		t, err := time.Parse("2006-01-02 15:04:05", *expiresAt)
 		if err == nil && time.Now().After(t) {
-			return 0, "", fmt.Errorf("token expired")
+			return nil, fmt.Errorf("token expired")
 		}
 	}
 
-	// Update last_used asynchronously - errors are non-fatal but should be visible.
+	var rules []TokenResourceRule
+	if allowedResourcesJSON != "" && allowedResourcesJSON != "[]" {
+		_ = json.Unmarshal([]byte(allowedResourcesJSON), &rules)
+	}
+
 	go func() {
 		if _, err := db.Exec(`UPDATE api_tokens SET last_used = NOW() WHERE token_hash = $1`, hash); err != nil {
 			log.Printf("API TOKEN: failed to update last_used: %v", err)
 		}
 	}()
 
-	return userID, username, nil
+	return &ValidateAPITokenResult{
+		UserID:           userID,
+		Username:         username,
+		Scopes:           scopes,
+		AllowedResources: rules,
+	}, nil
 }
 
 // HandleTokens - GET: list tokens for user, POST: create/revoke
@@ -132,7 +180,7 @@ func (h *APITokenHandler) HandleTokens(w http.ResponseWriter, r *http.Request) {
 
 func (h *APITokenHandler) listTokens(w http.ResponseWriter, userID int) {
 	rows, err := h.db.Query(`
-		SELECT id, name, token_prefix, scopes,
+		SELECT id, name, token_prefix, scopes, allowed_resources,
 		       TO_CHAR(last_used, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		       TO_CHAR(expires_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		       TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
@@ -148,7 +196,7 @@ func (h *APITokenHandler) listTokens(w http.ResponseWriter, userID int) {
 	var tokens []apiToken
 	for rows.Next() {
 		var t apiToken
-		if err := rows.Scan(&t.ID, &t.Name, &t.Prefix, &t.Scopes, &t.LastUsed, &t.ExpiresAt, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Prefix, &t.Scopes, &t.AllowedResources, &t.LastUsed, &t.ExpiresAt, &t.CreatedAt); err != nil {
 			log.Printf("API TOKEN LIST SCAN ERROR: %v", err)
 			continue
 		}
@@ -170,11 +218,12 @@ func (h *APITokenHandler) listTokens(w http.ResponseWriter, userID int) {
 
 func (h *APITokenHandler) tokenAction(w http.ResponseWriter, r *http.Request, userID int, username string) {
 	var req struct {
-		Action    string `json:"action"`
-		Name      string `json:"name"`
-		Scopes    string `json:"scopes"`
-		ExpiresIn int    `json:"expires_in_days"` // 0 = never
-		ID        int    `json:"id"`
+		Action           string               `json:"action"`
+		Name             string               `json:"name"`
+		Scopes           string               `json:"scopes"`
+		AllowedResources []TokenResourceRule  `json:"allowed_resources"`
+		ExpiresIn        int                  `json:"expires_in_days"` // 0 = never
+		ID               int                  `json:"id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request", http.StatusBadRequest)
@@ -183,7 +232,7 @@ func (h *APITokenHandler) tokenAction(w http.ResponseWriter, r *http.Request, us
 
 	switch req.Action {
 	case "create":
-		h.createToken(w, userID, username, req.Name, req.Scopes, req.ExpiresIn)
+		h.createToken(w, userID, username, req.Name, req.Scopes, req.AllowedResources, req.ExpiresIn)
 	case "revoke":
 		h.revokeByID(w, req.ID, userID, username)
 	default:
@@ -191,7 +240,7 @@ func (h *APITokenHandler) tokenAction(w http.ResponseWriter, r *http.Request, us
 	}
 }
 
-func (h *APITokenHandler) createToken(w http.ResponseWriter, userID int, username, name, scopes string, expiresDays int) {
+func (h *APITokenHandler) createToken(w http.ResponseWriter, userID int, username, name, scopes string, allowedResources []TokenResourceRule, expiresDays int) {
 	if name == "" {
 		respondErrorSimple(w, "Token name is required", http.StatusBadRequest)
 		return
@@ -224,11 +273,18 @@ func (h *APITokenHandler) createToken(w http.ResponseWriter, userID int, usernam
 		expiresAt = time.Now().AddDate(0, 0, expiresDays).Format("2006-01-02 15:04:05")
 	}
 
+	allowedResourcesJSON := "[]"
+	if len(allowedResources) > 0 {
+		if b, err := json.Marshal(allowedResources); err == nil {
+			allowedResourcesJSON = string(b)
+		}
+	}
+
 	var id int64
 	err = h.db.QueryRow(`
-		INSERT INTO api_tokens (user_id, name, token_hash, token_prefix, scopes, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-	`, userID, name, hash, prefix, scopes, expiresAt).Scan(&id)
+		INSERT INTO api_tokens (user_id, name, token_hash, token_prefix, scopes, allowed_resources, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
+	`, userID, name, hash, prefix, scopes, allowedResourcesJSON, expiresAt).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
 			respondErrorSimple(w, "A token named '"+name+"' already exists", http.StatusConflict)
@@ -239,16 +295,21 @@ func (h *APITokenHandler) createToken(w http.ResponseWriter, userID int, usernam
 		return
 	}
 
-	audit.LogAction("api_token", username, fmt.Sprintf("Created API token '%s' (scopes: %s)", name, scopes), true, 0)
+	resourceDesc := "unrestricted"
+	if len(allowedResources) > 0 {
+		resourceDesc = fmt.Sprintf("%d resource rule(s)", len(allowedResources))
+	}
+	audit.LogAction("api_token", username, fmt.Sprintf("Created API token '%s' (scopes: %s, resources: %s)", name, scopes, resourceDesc), true, 0)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"token":   fullToken, // shown ONCE only
-		"id":      id,
-		"name":    name,
-		"prefix":  prefix,
-		"scopes":  scopes,
-		"message": "Store this token securely - it will not be shown again.",
+		"success":           true,
+		"token":             fullToken, // shown ONCE only
+		"id":                id,
+		"name":              name,
+		"prefix":            prefix,
+		"scopes":            scopes,
+		"allowed_resources": allowedResources,
+		"message":           "Store this token securely - it will not be shown again.",
 	})
 }
 

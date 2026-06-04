@@ -1287,6 +1287,7 @@ func main() {
 	r.Handle("/api/ha/sbd/configure", permRoute("system", "admin", haHandler.ConfigureSBD)).Methods("POST")
 	r.Handle("/api/ha/sbd/configure", permRoute("system", "admin", haHandler.GetSBDConfig)).Methods("GET")
 	r.Handle("/api/ha/clear_fault", permRoute("system", "admin", haHandler.ClearFault)).Methods("POST")
+	r.Handle("/api/ha/standby", permRoute("system", "admin", haHandler.BecomeStandby)).Methods("POST")
 	r.Handle("/api/ha/cluster-secret/configure", permRoute("system", "admin", haHandler.GetClusterSecretConfig)).Methods("GET")
 	r.Handle("/api/ha/cluster-secret/configure", permRoute("system", "admin", haHandler.SetClusterSecretConfig)).Methods("POST")
 	// /api/ha/heartbeat and /api/ha/sync/status are deliberately PUBLIC - peer daemons call them without a session
@@ -1550,7 +1551,16 @@ func sessionMiddleware(db *sql.DB, internalCronToken string) mux.MiddlewareFunc 
 				token := strings.TrimPrefix(authHeader, "Bearer ")
 				sessionUser, err := security.ValidateAPITokenAndGetUser(token)
 				if err == nil {
-					// Token valid - set user in context and proceed
+					// Enforce resource-level allowlist if the token carries one.
+					if sessionUser.AllowedResources != "" && sessionUser.AllowedResources != "[]" {
+						var rules []handlers.TokenResourceRule
+						if jsonErr := json.Unmarshal([]byte(sessionUser.AllowedResources), &rules); jsonErr == nil {
+							if !handlers.TokenAllows(rules, r.Method, p) {
+								http.Error(w, "Forbidden: this token is not permitted to access "+p, http.StatusForbidden)
+								return
+							}
+						}
+					}
 					ctx := context.WithValue(r.Context(), middleware.UserContextKey, &middleware.User{
 						ID:       sessionUser.ID,
 						Username: sessionUser.Username,
@@ -1559,7 +1569,7 @@ func sessionMiddleware(db *sql.DB, internalCronToken string) mux.MiddlewareFunc 
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
-				// If token provided but invalid, we fall through to session check or fail later
+				// Token provided but invalid - fall through to session check or fail later
 			}
 
 			// SSE one-time ticket check. EventSource cannot send custom headers, so

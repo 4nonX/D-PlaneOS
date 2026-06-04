@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v13.0.0 (2026-06-04) - "Aegis"
+
+Upgrade from: v12.5.1 - Schema migration required (migration 00005 adds `allowed_resources` column to `api_tokens`; applied automatically at startup). No breaking API changes. No breaking configuration changes.
+
+The version jump reflects a fundamental architectural advance: the safety and operational patterns documented in TrueNAS SCALE's source code have been studied and applied to DPlaneOS. The result is a system that knows why it cannot fail over, refuses to corrupt pools by rebooting itself rather than yielding dirty, refuses to delete datasets that have active service attachments, and gives API consumers fine-grained access boundaries that cannot be exceeded regardless of the token holder's role.
+
+### Added
+
+- **HA: Force-reboot on pool export timeout (`daemon/internal/ha/standby.go`)**: When this node needs to yield (planned failover, Keepalived BACKUP event), it now exports all ZFS pools within a 4-second deadline. If export does not complete in time, the node calls `reboot -f` unconditionally. A node that cannot cleanly yield its pools must be considered unsafe - rebooting eliminates the split-brain risk without requiring the peer to fence it. Mirrors TrueNAS `ZPOOL_EXPORT_TIMEOUT = 4s` from `plugins/failover_/event.py`. The Keepalived `notify_backup` script now calls `POST /api/ha/standby` to trigger this path on VIP demotion.
+
+- **HA: Granular disabled reasons (`daemon/internal/ha/disabled_reasons.go`)**: `GET /api/ha/status` now returns a `disabled_reasons` array with typed reason codes and human-readable descriptions. Codes: `NO_FENCING_CONFIGURED`, `NO_WITNESS_REACHABLE`, `HYSTERESIS_ACTIVE`, `SUBORDINATE_MODE`, `MAINTENANCE_MODE`, `FENCING_IN_PROGRESS`, `NO_PEERS`, `ALL_PEERS_HEALTHY`, `VERSION_MISMATCH`, `CLUSTER_SECRET_MISMATCH`. Mirrors TrueNAS `DisabledReasonsEnum` from `plugins/failover_/enums.py`. The UI triage panel can now show "daemon versions differ between nodes" instead of a generic "HA is broken" banner.
+
+- **GitOps: Dataset attachment graph (`daemon/internal/gitops/diff.go`)**: `blockedCheckDataset` now accepts a `DiffContext` carrying the database handle and queries for active service attachments before allowing dataset deletion: SMB shares pointing to the dataset's mountpoint, NFS exports at the same path, iSCSI targets with ZVols under the dataset, and Docker stacks with volume bind-mounts to the path. A dataset with any active attachment is `BLOCKED` with a message naming the specific services. This closes the gap with TrueNAS `pool_/dataset_attachments.py`, which performs the same graph traversal before any destructive operation. All `ComputeDiff` callers in the GitOps handler and convergence check now pass `DiffContext{DB: h.db}`.
+
+- **LDAP: Directory cache with TTL and resilience (`daemon/internal/ldap/cache.go`)**: New `DirectoryCache` with configurable TTL (default 5 minutes), background refresh at TTL/2, and stale-data fallback when the directory server is temporarily unreachable. `CachedClient` wraps `Client` and starts the refresh goroutine automatically. On login the cache entry for the authenticated user is updated immediately. `Config` gains `CacheTTL` and `SyncInterval` fields. Mirrors TrueNAS `DSCacheFill` pattern from `plugins/directoryservices_/cache.py`.
+
+- **API tokens: Resource-level scoping (`daemon/internal/handlers/api_tokens.go`, migration 00005)**: API tokens can now carry an `allowed_resources` JSON array of `{method, resource}` rules using fnmatch-style wildcards (e.g. `{"method":"GET","resource":"/api/zfs/*"}`). The session middleware enforces these rules before every request - a token with a resource allowlist cannot access endpoints outside its declared pattern regardless of the holder's role. An empty `allowed_resources` array preserves the previous coarse-scope behaviour. Mirrors TrueNAS `utils/allowlist.py` (Allowlist class with exact + pattern matching). Migration 00005 adds `allowed_resources TEXT NOT NULL DEFAULT '[]'` to `api_tokens`; existing tokens are unaffected.
+
+### Changed
+
+- **HA `BecomeStandby` API endpoint (`POST /api/ha/standby`)**: New endpoint that initiates graceful pool export. Returns 202 immediately; the export and potential self-reboot happen asynchronously so the calling Keepalived notify script does not block.
+
+- **HA status response extended**: `GET /api/ha/status` now includes `disabled_reasons` alongside the existing `cluster` and `witness` objects.
+
+- **`SessionUser` extended with `AllowedResources`**: The security package's `SessionUser` struct now carries the token's `allowed_resources` JSON for middleware enforcement. This is an internal type change with no API surface impact.
+
+---
+
 ## v12.5.1 (2026-06-04) - "Conduit"
 
 Upgrade from: v12.5.0 - No schema migration required. No breaking API changes. No breaking configuration changes. Drop-in upgrade.

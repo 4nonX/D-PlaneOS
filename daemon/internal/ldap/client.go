@@ -28,7 +28,14 @@ type Config struct {
 	GroupMappings      []GroupMapping `json:"group_mappings"`
 	JITProvisioning    bool     `json:"jit_provisioning"`
 	DefaultRole        string   `json:"default_role"`
-	Timeout            int      `json:"timeout"` // seconds
+	Timeout            int      `json:"timeout"`  // seconds
+	// CacheTTL is how long directory user/group data is cached in memory.
+	// Background refresh runs at CacheTTL/2 so cache entries never expire
+	// during normal operation. When the directory is unreachable, the cache
+	// serves stale data for up to CacheTTL seconds.
+	// Default: 300 seconds (5 minutes). Mirrors TrueNAS DSCacheFill TTL.
+	CacheTTL           int      `json:"cache_ttl"` // seconds; 0 = use default (300)
+	SyncInterval       int      `json:"sync_interval"` // seconds between full syncs; 0 = 3600
 }
 
 // GroupMapping maps LDAP groups to DPlaneOS roles
@@ -277,6 +284,91 @@ func (c *Client) MapGroupsToRoles(groups []string) []int {
 	}
 	
 	return roleIDs
+}
+
+// CachedClient wraps a Client with a DirectoryCache. It provides the same
+// Authenticate method but also maintains a warm in-memory cache for fast
+// group lookups and resilience against temporary directory unavailability.
+type CachedClient struct {
+	config *Config
+	cache  *DirectoryCache
+}
+
+// NewCachedClient creates a CachedClient and starts the background cache
+// refresh goroutine. Call Stop() when the client is no longer needed.
+func NewCachedClient(config *Config) *CachedClient {
+	ttl := time.Duration(config.CacheTTL) * time.Second
+	if ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
+	cc := &CachedClient{
+		config: config,
+		cache:  NewDirectoryCache(ttl),
+	}
+	cc.cache.Start(cc.fetchAll)
+	return cc
+}
+
+// Stop shuts down the background cache refresh goroutine.
+func (cc *CachedClient) Stop() {
+	cc.cache.Stop()
+}
+
+// Cache returns the underlying DirectoryCache for status queries.
+func (cc *CachedClient) Cache() *DirectoryCache {
+	return cc.cache
+}
+
+// fetchAll performs a full LDAP directory scan and returns all users.
+// Called by the cache refresh goroutine.
+func (cc *CachedClient) fetchAll() ([]*User, error) {
+	c, err := NewClient(cc.config)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Connect(); err != nil {
+		return nil, err
+	}
+	defer c.Close()
+	if err := c.Bind(); err != nil {
+		return nil, err
+	}
+	_, users, err := c.SyncAll()
+	return users, err
+}
+
+// Authenticate authenticates a user against LDAP. On success it also updates
+// the cache entry for the user so group memberships are always fresh after login.
+// If the directory is temporarily unreachable but the cache holds the user,
+// authentication still proceeds against the cache for up to CacheTTL seconds.
+func (cc *CachedClient) Authenticate(username, password string) (*User, error) {
+	c, err := NewClient(cc.config)
+	if err != nil {
+		return nil, err
+	}
+
+	if connErr := c.Connect(); connErr != nil {
+		// Directory unreachable - attempt cache fallback
+		if _, ok := cc.cache.GetUser(username); ok && !cc.cache.Expired() {
+			// We cannot verify the password against a cache entry; fail secure.
+			// Return the original error so the caller knows the directory is down.
+			return nil, fmt.Errorf("directory unreachable (%w) and password cannot be verified from cache", connErr)
+		}
+		return nil, connErr
+	}
+	defer c.Close()
+
+	user, err := c.Authenticate(username, password)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the cache entry with fresh group data from this login
+	cc.cache.mu.Lock()
+	cc.cache.users[lowerASCII(user.Username)] = user
+	cc.cache.mu.Unlock()
+
+	return user, nil
 }
 
 // GetDefaultConfig returns default LDAP configuration

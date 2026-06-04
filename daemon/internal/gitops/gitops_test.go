@@ -421,7 +421,7 @@ func TestBlockedContract_EmptyDatasetIsSafeDelete(t *testing.T) {
 	}
 
 	ld := LiveDataset{Name: "tank/empty", Used: 0}
-	item := blockedCheckDataset(ld)
+	item := blockedCheckDataset(ld, nil)
 	if item.Action != ActionDelete {
 		t.Errorf("empty dataset (Used=0) should be DELETE, got %s (reason: %s)",
 			item.Action, item.BlockReason)

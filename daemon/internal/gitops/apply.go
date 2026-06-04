@@ -1350,7 +1350,7 @@ func ConvergenceCheck(db *sql.DB, desired *DesiredState) (string, error) {
 		return "FAILED", fmt.Errorf("live state read failed during convergence check: %w", err)
 	}
 
-	plan := ComputeDiff(desired, live)
+	plan := ComputeDiff(desired, live, &DiffContext{DB: db})
 
 	// If there are any CREATE/MODIFY actions or non-BLOCKED DELETEs, we haven't converged.
 	driftCount := 0

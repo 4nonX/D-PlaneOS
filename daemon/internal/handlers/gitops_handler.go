@@ -119,7 +119,7 @@ func (h *GitOpsHandler) Plan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan := gitops.ComputeDiff(desired, live)
+	plan := gitops.ComputeDiff(desired, live, &gitops.DiffContext{DB: h.db})
 	h.stampApprovals(plan)
 
 	// Build the flat `changes` list consumed by the UI plan view.
@@ -194,7 +194,7 @@ func (h *GitOpsHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan := gitops.ComputeDiff(desired, live)
+	plan := gitops.ComputeDiff(desired, live, &gitops.DiffContext{DB: h.db})
 	h.stampApprovals(plan)
 
 	if plan.HasBlocked {
@@ -301,7 +301,7 @@ func (h *GitOpsHandler) Approve(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "cannot read live state", err)
 		return
 	}
-	plan := gitops.ComputeDiff(desired, live)
+	plan := gitops.ComputeDiff(desired, live, &gitops.DiffContext{DB: h.db})
 
 	found := false
 	var blockReason string

@@ -144,9 +144,13 @@ func ValidateUser(username string) (bool, error) {
 
 // SessionUser represents basic user info returned from session validation
 type SessionUser struct {
-	ID       int
-	Username string
-	Email    string
+	ID               int
+	Username         string
+	Email            string
+	// AllowedResources is non-nil when the session was established via an API
+	// token that has resource-level allowlist rules. The middleware enforces
+	// these before the request reaches any handler.
+	AllowedResources string // JSON array of TokenResourceRule; "" or "[]" = unrestricted
 }
 
 // ValidateSessionAndGetUser validates a session token and returns the associated user
@@ -208,7 +212,7 @@ func ValidateAPITokenAndGetUser(token string) (*SessionUser, error) {
 	var user SessionUser
 	var expiresAt *string
 	query := `
-		SELECT u.id, u.username, COALESCE(u.email, ''), at.expires_at
+		SELECT u.id, u.username, COALESCE(u.email, ''), COALESCE(at.allowed_resources, '[]'), at.expires_at
 		FROM api_tokens at
 		JOIN users u ON u.id = at.user_id
 		WHERE at.token_hash = $1 AND u.active = 1
@@ -216,7 +220,7 @@ func ValidateAPITokenAndGetUser(token string) (*SessionUser, error) {
 	`
 
 	err := db.QueryRowContext(ctx, query, hash).Scan(
-		&user.ID, &user.Username, &user.Email, &expiresAt,
+		&user.ID, &user.Username, &user.Email, &user.AllowedResources, &expiresAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
