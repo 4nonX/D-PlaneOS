@@ -1361,27 +1361,24 @@ func main() {
 			log.Fatalf("Failed to listen on Unix socket %s: %v", *listenAddr, err)
 		}
 		// Set group ownership so nginx can connect with 0660 (owner+group only).
-		// If the group is not found or not specified, fall back to 0666 with a
-		// warning - better to be reachable than to silently break the proxy.
+		// If group lookup or chown fails, the socket stays 0660 (owner only) and
+		// nginx cannot connect. This is intentional: a misconfigured -socket-group
+		// should produce a visible proxy failure, not silently open the control
+		// socket to all local processes.
 		if *socketGroup != "" {
 			g, lookupErr := osUser.LookupGroup(*socketGroup)
-			if lookupErr == nil {
+			if lookupErr != nil {
+				log.Printf("ERROR: -socket-group %q not found: %v; socket is 0660 owner-only (nginx cannot connect)", *socketGroup, lookupErr)
+			} else {
 				gid, _ := strconv.Atoi(g.Gid)
 				if chownErr := os.Chown(*listenAddr, -1, gid); chownErr != nil {
-					log.Printf("Warning: could not chown socket to group %q: %v; using 0666", *socketGroup, chownErr)
-					os.Chmod(*listenAddr, 0666)
+					log.Printf("ERROR: could not chown socket to group %q: %v; socket is 0660 owner-only", *socketGroup, chownErr)
 				} else {
-					os.Chmod(*listenAddr, 0660)
+					log.Printf("Socket %s: 0660 root:%s", *listenAddr, *socketGroup)
 				}
-			} else {
-				log.Printf("Warning: group %q not found (%v); socket set to 0666", *socketGroup, lookupErr)
-				os.Chmod(*listenAddr, 0666)
-			}
-		} else {
-			if err := os.Chmod(*listenAddr, 0660); err != nil {
-				log.Printf("Warning: could not chmod socket %s: %v", *listenAddr, err)
 			}
 		}
+		os.Chmod(*listenAddr, 0660)
 		listener = ln
 	} else {
 		ln, err := net.Listen("tcp", *listenAddr)
