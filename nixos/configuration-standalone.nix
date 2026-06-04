@@ -234,7 +234,7 @@
     containers."newt" = {
       image     = "fosrl/newt:latest";
       autoStart = true;
-      # host network: Newt needs to reach DPlaneOS on 127.0.0.1:9000
+      # host network: Newt needs to reach DPlaneOS via the Unix socket
       # and expose tunnelled services on the host network interfaces.
       extraOptions = [ "--network=host" "--restart=unless-stopped" ];
       environment = {

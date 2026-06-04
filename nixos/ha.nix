@@ -277,7 +277,7 @@ EOF
     services.keepalived = lib.mkIf (cfg.virtualIP != null && cfg.interface != null) {
       enable = true;
       vrrpScripts.check_dplaneos = {
-        script = "${pkgs.curl}/bin/curl -sf http://127.0.0.1:9000/health";
+        script = "${pkgs.curl}/bin/curl -sf --unix-socket /run/dplaneos/dplaned.sock http://localhost/health";
         interval = 2;
         fall = 3;
         rise = 2;

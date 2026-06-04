@@ -102,16 +102,12 @@ let
       networking.interfaces.eth1.ipv4.addresses = [
         { address = localIP; prefixLength = 24; }
       ];
-      networking.firewall.allowedTCPPorts = [ 2379 2380 5000 5432 8008 9000 ];
+      networking.firewall.allowedTCPPorts = [ 2379 2380 5000 5432 8008 ];
 
       services.dplaneos = {
         enable = true;
         daemonPackage = daemonPkg;
         frontendPackage = pkgs.runCommand "dplaneos-frontend-test" {} "mkdir $out";
-        # listenAddress 0.0.0.0 so the peer node and the test driver can reach
-        # /health and /api/ha/* (default is 127.0.0.1).
-        listenAddress = "0.0.0.0";
-        listenPort = 9000;
 
         # Samba and NFS default to enabled in production but are not needed for
         # the HA failover test. Disabling them keeps the VM closure small and
@@ -200,8 +196,8 @@ pkgs.testers.runNixOSTest {
     with subtest("DPlaneOS daemon is up on both data nodes"):
         nodeA.wait_for_unit("dplaned.service")
         nodeB.wait_for_unit("dplaned.service")
-        nodeA.wait_until_succeeds("curl -sf http://localhost:9000/health", timeout=120)
-        nodeB.wait_until_succeeds("curl -sf http://localhost:9000/health", timeout=120)
+        nodeA.wait_until_succeeds("curl -sf --unix-socket /run/dplaneos/dplaned.sock http://localhost/health", timeout=120)
+        nodeB.wait_until_succeeds("curl -sf --unix-socket /run/dplaneos/dplaned.sock http://localhost/health", timeout=120)
 
     with subtest("failover: partition the current primary, survivor + witness promote"):
         primary_node  = nodeA if initial_primary == "nodeA" else nodeB
@@ -233,7 +229,7 @@ pkgs.testers.runNixOSTest {
     # ─────────────────────────────────────────────────────────────────────
     with subtest("daemon HA status endpoint responds"):
         # /api/ha/status is served by the daemon (verified in main.go).
-        status_raw = nodeA.succeed("curl -sf http://localhost:9000/api/ha/status")
+        status_raw = nodeA.succeed("curl -sf --unix-socket /run/dplaneos/dplaned.sock http://localhost/api/ha/status")
         status = json.loads(status_raw)
         assert "local_node" in status, f"unexpected /api/ha/status shape: {status_raw}"
         print(f"daemon HA status: ha_enabled={status.get('ha_enabled')}")
@@ -244,7 +240,7 @@ pkgs.testers.runNixOSTest {
         # and the node must not have performed an automated failover.
         # last_failover_at == 0 means checkFailover never promoted.
         status = json.loads(
-            nodeB.succeed("curl -sf http://localhost:9000/api/ha/status"))
+            nodeB.succeed("curl -sf --unix-socket /run/dplaneos/dplaned.sock http://localhost/api/ha/status"))
         assert status.get("last_failover_at", 0) == 0, (
             "daemon recorded an automated failover with no fencing/witness "
             "configured - the checkFailover guards failed"

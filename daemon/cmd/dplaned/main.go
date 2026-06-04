@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -47,7 +48,7 @@ var (
 
 func main() {
 	// Parse flags
-	listenAddr := flag.String("listen", "127.0.0.1:9000", "Listen address")
+	listenAddr := flag.String("listen", "/run/dplaneos/dplaned.sock", "Listen address: Unix socket path (default) or TCP host:port for testing")
 	dbDSN := flag.String("db-dsn", "postgres://dplaneos@localhost/dplaneos?sslmode=disable", "PostgreSQL DSN")
 	telegramBot := flag.String("telegram-bot", "", "Telegram bot token (optional, for alerts)")
 	telegramChat := flag.String("telegram-chat", "", "Telegram chat ID (optional, for alerts)")
@@ -346,7 +347,7 @@ func main() {
 		haID = handlers.LocalNodeID()
 	}
 	haAddr := *haLocalAddr
-	if haAddr == "" {
+	if haAddr == "" && !strings.HasPrefix(*listenAddr, "/") {
 		haAddr = "http://" + *listenAddr
 	}
 	clusterMgr := ha.NewManager(db, haID, haAddr, Version)
@@ -1342,11 +1343,32 @@ func main() {
 	// non-upload routes; chunked uploads reset the deadline per chunk via
 	// the 32 MB ParseMultipartForm call.
 	srv := &http.Server{
-		Addr:         *listenAddr,
 		Handler:      r,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 0, // streaming routes need no global write deadline
 		IdleTimeout:  120 * time.Second,
+	}
+
+	// Create the listener: Unix socket (production default) or TCP (CI/testing).
+	var listener net.Listener
+	if strings.HasPrefix(*listenAddr, "/") {
+		// Remove a stale socket file left by a previous unclean shutdown.
+		os.Remove(*listenAddr)
+		ln, err := net.Listen("unix", *listenAddr)
+		if err != nil {
+			log.Fatalf("Failed to listen on Unix socket %s: %v", *listenAddr, err)
+		}
+		// 0660: nginx (group dplaneos or www-data) can connect; world cannot.
+		if err := os.Chmod(*listenAddr, 0660); err != nil {
+			log.Printf("Warning: could not chmod socket %s: %v", *listenAddr, err)
+		}
+		listener = ln
+	} else {
+		ln, err := net.Listen("tcp", *listenAddr)
+		if err != nil {
+			log.Fatalf("Failed to listen on TCP %s: %v", *listenAddr, err)
+		}
+		listener = ln
 	}
 
 	// Start background monitors
@@ -1356,7 +1378,7 @@ func main() {
 	// Start server in goroutine
 	go func() {
 		log.Printf("Listening on %s", *listenAddr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v", err)
 		}
 	}()

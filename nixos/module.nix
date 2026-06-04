@@ -39,16 +39,15 @@ in {
       '';
     };
 
-    listenAddress = lib.mkOption {
-      type    = lib.types.str;
-      default = "127.0.0.1";
-      description = "Address the daemon listens on (nginx proxies to it).";
-    };
-
-    listenPort = lib.mkOption {
-      type    = lib.types.port;
-      default = 9000;
-      description = "Port the daemon listens on.";
+    socketPath = lib.mkOption {
+      type     = lib.types.str;
+      default  = "/run/dplaneos/dplaned.sock";
+      readOnly = true;
+      description = ''
+        Unix socket path for nginx-to-daemon communication.
+        nginx proxies /api/ and /ws to this socket; no TCP port is consumed.
+        Read-only: changing this would desync the daemon and nginx.
+      '';
     };
 
     dbDSN = lib.mkOption {
@@ -224,7 +223,7 @@ in {
           proxyPass = "http://127.0.0.1:8080";
         };
         locations."/api/" = {
-          proxyPass = "http://${cfg.listenAddress}:${toString cfg.listenPort}";
+          proxyPass = "http://unix:${cfg.socketPath}:/";
           proxyWebsockets = true;
           extraConfig = ''
             proxy_read_timeout 300s;
@@ -232,7 +231,7 @@ in {
           '';
         };
         locations."/ws" = {
-          proxyPass = "http://${cfg.listenAddress}:${toString cfg.listenPort}";
+          proxyPass = "http://unix:${cfg.socketPath}:/";
           proxyWebsockets = true;
         };
       };
@@ -252,7 +251,7 @@ in {
           "${pkgs.coreutils}/bin/mkdir -p /var/lib/dplaneos /var/log/dplaneos /run/dplaneos /etc/dplaneos"
           "${pkgs.coreutils}/bin/chmod 755 /run/dplaneos"
         ];
-        ExecStart       = "${cfg.daemonPackage}/bin/dplaned -db-dsn \"${cfg.dbDSN}\" -listen ${cfg.listenAddress}:${toString cfg.listenPort}";
+        ExecStart       = "${cfg.daemonPackage}/bin/dplaned -db-dsn \"${cfg.dbDSN}\" -listen ${cfg.socketPath}";
         WorkingDirectory = "/var/lib/dplaneos";
         Restart         = "on-failure";
         RestartSec      = "5s";
