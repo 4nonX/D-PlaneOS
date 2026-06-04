@@ -115,6 +115,7 @@ sudo nixos-rebuild switch
 | [NixOS Technical Reference](NIXOS-README.md) | Declarative config, rollback, licensing, impermanence, advanced options |
 | [Porting Guide](../docs/reference/PORTING-GUIDE.md) | Forking DPlaneOS for other Linux distributions - what it takes, what you lose |
 | [Changelog](../docs/reference/CHANGELOG.md) | Full version history |
+| [Port Reference](../docs/reference/PORT-REFERENCE.md) | Every port the system listens on, its service, interface binding, and safe ranges for Docker containers |
 | [Error Reference](../docs/reference/ERROR-REFERENCE.md) | Every HTTP error code the API returns, with cause and fix |
 | [Showstopper Mitigation Guide](../docs/reference/SHOWSTOPPER-MITIGATION-GUIDE.md) | Honest assessment of HA limits, binary-trust, resolved vs open issues |
 | [Threat Model](../docs/reference/THREAT-MODEL.md) | Security architecture, threat scenarios, mitigations, residual risks |

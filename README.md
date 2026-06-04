@@ -225,6 +225,7 @@ sudo dplaneos-ota-update
 | [Architecture](docs/reference/ARCHITECTURE.md) | Three-layer model, persistence, single-node and HA architecture |
 | [GitOps Reference](docs/reference/GITOPS-REFERENCE.md) | `state.yaml` format, reconciliation engine, drift detection, Capture workflow |
 | [Changelog](docs/reference/CHANGELOG.md) | Full version history |
+| [Port Reference](docs/reference/PORT-REFERENCE.md) | Every port the system listens on, its service, interface binding, and safe ranges for Docker containers |
 | [Error Reference](docs/reference/ERROR-REFERENCE.md) | Every HTTP error code the API returns, with cause and fix |
 | [NixOS Rationale](docs/reference/NIXOS-RATIONALE.md) | Why DPlaneOS is NixOS-exclusive |
 | [Porting Guide](docs/reference/PORTING-GUIDE.md) | Forking for other Linux distributions: what it takes, what you lose |
