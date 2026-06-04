@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v12.5.1 (2026-06-04) - "Conduit"
+
+Upgrade from: v12.5.0 - No schema migration required. No breaking API changes. No breaking configuration changes. Drop-in upgrade.
+
+### Fixed
+
+- **Daemon switched to Unix domain socket (`/run/dplaneos/dplaned.sock`)**: The daemon previously listened on `127.0.0.1:9000` for nginx-to-daemon communication. This consumed a TCP port in the same address space as MinIO's standard API port, causing MinIO to fail to bind on a fresh install with default settings. The internal pipe is now a Unix socket - nginx proxies `/api/` and `/ws/` to `http://unix:/run/dplaneos/dplaned.sock:/`. No TCP port is consumed for DPlaneOS internal plumbing. This matches the pattern used by TrueNAS SCALE, OpenMediaVault, and other professional NAS operating systems. MinIO retains its standard 9000/9001 ports with no conflict. The `listenAddress` and `listenPort` NixOS module options are removed; `socketPath` replaces them (read-only, `/run/dplaneos/dplaned.sock`).
+
+- **Installer ISO: python3.11 HTML doc build no longer blocks the ISO**: nixpkgs 26.05 ships Sphinx 9.1 + docutils 0.22.4, which produce a `TypeError` when building Python 3.11 HTML documentation. `documentation.doc.enable = false` was already set in `applianceConfig` (preventing the target system from pulling the broken derivation), but the installer ISO has its own separate NixOS evaluation that did not inherit this setting. Added `documentation.doc.enable = false` and `environment.extraOutputsToInstall = lib.mkForce []` to both `installer.nix` and `witness-installer.nix`.
+
+- **CI: docs-only pushes no longer trigger the full build pipeline**: The `paths-ignore` filter used `*.md` which only matches Markdown files at the repository root. Files such as `nixos/README.md` fell through and triggered CI. Changed to `**/*.md` to cover Markdown files in all subdirectories.
+
+---
+
 ## v12.5.0 (2026-06-03) - "Operator"
 
 Upgrade from: v12.4.0 - No schema migration required. No breaking API changes. No breaking configuration changes. Pure frontend, NixOS, and design system changes.
