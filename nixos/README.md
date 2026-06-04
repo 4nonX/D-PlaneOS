@@ -107,16 +107,19 @@ sudo nixos-rebuild switch
 
 | Document | What it covers |
 |----------|---------------|
+| [Features](../FEATURES.md) | Complete feature list by category |
 | [Design Philosophy](../docs/reference/PHILOSOPHY.md) | Why DPlaneOS works the way it does: four core principles, design decisions |
 | [Architecture](../docs/reference/ARCHITECTURE.md) | Three-layer model, persistence, single-node and HA architecture, data flow |
 | [GitOps Reference](../docs/reference/GITOPS-REFERENCE.md) | state.yaml format, reconciliation engine, drift detection, Capture workflow |
 | [NixOS Rationale](../docs/reference/NIXOS-RATIONALE.md) | NixOS primitives DPlaneOS relies on: impermanence, disko, A/B OTA, Patroni |
+| [NixOS Technical Reference](NIXOS-README.md) | Declarative config, rollback, licensing, impermanence, advanced options |
 | [Porting Guide](../docs/reference/PORTING-GUIDE.md) | Forking DPlaneOS for other Linux distributions - what it takes, what you lose |
 | [Changelog](../docs/reference/CHANGELOG.md) | Full version history |
 | [Error Reference](../docs/reference/ERROR-REFERENCE.md) | Every HTTP error code the API returns, with cause and fix |
 | [Showstopper Mitigation Guide](../docs/reference/SHOWSTOPPER-MITIGATION-GUIDE.md) | Honest assessment of HA limits, binary-trust, resolved vs open issues |
 | [Threat Model](../docs/reference/THREAT-MODEL.md) | Security architecture, threat scenarios, mitigations, residual risks |
 | [Dependencies](../docs/reference/DEPENDENCIES.md) | All bundled Go and frontend deps, system requirements, build instructions |
+| [Pitch](../PITCH.md) | Git as control plane: the enterprise and fleet case |
 
 ### Hardware
 
@@ -124,6 +127,24 @@ sudo nixos-rebuild switch
 |----------|---------------|
 | [Hardware Compatibility](../docs/hardware/HARDWARE-COMPATIBILITY.md) | Supported CPUs, RAM, disk types, network, RAID controllers |
 | [Non-ECC RAM Warning](../docs/hardware/NON-ECC-WARNING.md) | Why ZFS + non-ECC is risky, probability analysis, mitigations |
+
+### Development
+
+| Document | What it covers |
+|----------|---------------|
+| [Contributing](../CONTRIBUTING.md) | Dev setup, project structure, coding conventions, security requirements for PRs |
+| [Codebase Diagram](../docs/development/CODEBASE-DIAGRAM.md) | Mermaid diagrams: system overview, daemon internals, request lifecycle, disk events, auth flow |
+| [Design System](../app-react/.stitch/DESIGN.md) | Frontend design tokens, spacing grid, component patterns, anti-pattern list |
+
+### Legal
+
+| Document | What it covers |
+|----------|---------------|
+| [Notice](../NOTICE.md) | Third-party components, attributions, and licenses |
+| [Security Policy](../SECURITY.md) | Vulnerability reporting, safe harbour, supported versions |
+| [Individual CLA](../docs/legal/CLA-INDIVIDUAL.md) | Contributor license agreement for individuals |
+| [Entity CLA](../docs/legal/CLA-ENTITY.md) | Contributor license agreement for organisations |
+| [PostgreSQL Migration Guide](../MIGRATION.md) | Upgrading from SQLite to PostgreSQL (v7.0.0) |
 
 ## System Requirements
 

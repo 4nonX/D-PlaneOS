@@ -206,6 +206,7 @@ sudo dplaneos-ota-update
 | [Installation Guide](docs/admin/INSTALLATION-GUIDE.md) | Requirements, ISO install flow, post-install checklist, OTA upgrades |
 | [NixOS Install Guide](nixos/NIXOS-INSTALL-GUIDE.md) | For NixOS beginners: empty hardware to running NAS |
 | [Administrator Guide](docs/admin/ADMIN-GUIDE.md) | Users, roles, permissions, storage, containers, LDAP/AD, security |
+| [Git-Driven NAS](docs/admin/GITOPS-DRIVEN-NAS.md) | Operating DPlaneOS entirely via state.yaml: bootstrap, auto-apply, rollback, PR workflow, HA |
 | [Backup and Replication](docs/admin/BACKUP-REPLICATION.md) | Snapshots, ZFS send/receive, cloud sync, cold tier, rsync, DB backup, recovery |
 | [High Availability](docs/admin/HIGH-AVAILABILITY.md) | Shared-SAS with SCSI-3 PR fencing, replicated ZFS with witness, Patroni, Keepalived, STONITH, rolling upgrades |
 | [OTA Updates](docs/admin/OTA-UPDATES.md) | A/B slots, health check, auto-revert, manual rollback, HA rolling upgrades |
@@ -218,6 +219,7 @@ sudo dplaneos-ota-update
 
 | Document | What it covers |
 |----------|---------------|
+| [Features](FEATURES.md) | Complete feature list by category |
 | [Pitch](PITCH.md) | Git as control plane: the enterprise and fleet case |
 | [Design Philosophy](docs/reference/PHILOSOPHY.md) | Four core principles, design decisions, tradeoffs |
 | [Architecture](docs/reference/ARCHITECTURE.md) | Three-layer model, persistence, single-node and HA architecture |
@@ -251,6 +253,7 @@ sudo dplaneos-ota-update
 |----------|---------------|
 | [Contributing](CONTRIBUTING.md) | Dev setup, project structure, coding conventions, security requirements for PRs |
 | [Codebase Diagram](docs/development/CODEBASE-DIAGRAM.md) | Mermaid diagrams: system overview, daemon internals, request lifecycle, disk events, auth flow |
+| [Design System](app-react/.stitch/DESIGN.md) | Frontend design tokens, spacing grid, component patterns, anti-pattern list |
 
 ### Legal
 
