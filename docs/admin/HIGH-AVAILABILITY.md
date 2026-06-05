@@ -353,6 +353,8 @@ When node A fails:
 
 Total RTO: approximately 10-30 seconds.
 
+**Client behavior during failover:** This is a stop-the-world failover, not live migration. NFS and SMB clients lose their connections when the VIP moves. Connections are not transferred. Clients will receive errors and reconnect automatically when the VIP is reachable on node B. Most NFS clients retry transparently within seconds; SMB clients show a brief reconnect dialog. Active byte-range locks (file locking) are not preserved across failover. Applications that depend on lock state continuity (database files over SMB, Outlook PSTs) will see lock loss and may need recovery. This is an inherent property of VIP-based active-passive failover: it is reconnect-on-failover, not transparent migration.
+
 When node A is repaired and reboots, it rejoins as a Patroni replica, streams missing WAL from node B, and waits in standby with pools unmounted. To fail back:
 
 ```bash
@@ -397,6 +399,8 @@ This section covers what the daemon does internally from the moment a peer goes 
 2. `checkFailover()` - evaluates whether the peer has been silent long enough to attempt promotion
 
 The failover threshold is 45 seconds. A peer must miss three consecutive heartbeats before the threshold is reached.
+
+**Important:** These values are compile-time constants (`FailoverAfter = 45s`, `HysteresisWindow = 60m` in `ha/cluster.go`), not database-configurable settings. They were chosen for the tested hardware profile: local LAN, sub-millisecond round-trip, no WAN links. Deployments with high-latency interconnects or bandwidth-limited management networks will see false-positive failovers. There is currently no per-deployment tuning knob; this is a known limitation for multi-site or WAN-linked configurations.
 
 ### Promotion Guards
 

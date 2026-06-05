@@ -8,12 +8,11 @@
   # nixpkgs is pinned to nixos-26.05 (the current stable channel).
   # We do NOT track nixpkgs-unstable : appliance builds must be reproducible.
   #
-  # Kernel pin: 6.6 LTS
-  #   Linux 6.6 is an LTS kernel supported until December 2026.
-  #   nixpkgs 26.05 DEFAULT kernel is 6.12.
-  #   We explicitly pin to 6.6 for proven ZFS compat : still available in
-  #   26.05 as pkgs.linuxPackages_6_6, just not the default.
-  #   Set via: boot.kernelPackages = pkgs.linuxPackages_6_6
+  # Kernel pin: 6.12 LTS
+  #   Linux 6.12 is the LTS kernel in nixpkgs 26.05 and the default.
+  #   Linux 6.6 LTS reaches end-of-life December 2026 and has been retired.
+  #   OpenZFS 2.3.x is validated against 6.12; all ZFS features remain stable.
+  #   Set via: boot.kernelPackages = pkgs.linuxPackages_6_12
   #
   # ZFS pin: stable (LTS) branch
   #   As of mid 2026: OpenZFS current = 2.4.x, LTS = 2.3.x.
@@ -144,13 +143,13 @@
 
       # Shared inline config applied to all nixosConfigurations
       applianceConfig = { config, lib, pkgs, ... }: {
-        boot.kernelPackages = pkgs.linuxPackages_6_6;
+        boot.kernelPackages = pkgs.linuxPackages_6_12;
         boot.zfs.package = pkgs.zfs;
         boot.kernelParams = [ "zfs.zfs_arc_max=17179869184" ];
         assertions = [
           {
-            assertion = lib.versionAtLeast config.boot.kernelPackages.kernel.version "6.6";
-            message = "DPlaneOS requires Linux kernel >= 6.6 LTS.";
+            assertion = lib.versionAtLeast config.boot.kernelPackages.kernel.version "6.12";
+            message = "DPlaneOS requires Linux kernel >= 6.12 LTS. Linux 6.6 LTS reached end-of-life December 2026.";
           }
           {
             assertion = lib.versionAtLeast config.boot.zfs.package.version "2.3";

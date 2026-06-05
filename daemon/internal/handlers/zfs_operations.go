@@ -444,7 +444,9 @@ func (h *ZFSHandler) SetDatasetQuota(w http.ResponseWriter, r *http.Request) {
 					respondJSON(w, http.StatusBadRequest, map[string]any{
 						"success": false,
 						"error": fmt.Sprintf(
-							"refquota (%s) is smaller than current referenced usage (%s); the dataset would be immediately over-quota",
+							"refquota (%s) is below current referenced usage (%s) - the dataset would be over-quota immediately and all new writes would be blocked. "+
+							"Note: if compression is enabled, 'referenced' reflects compressed size; your actual logical data may be larger. "+
+							"Set refquota above the referenced value shown, or use 'none' to remove the quota.",
 							req.RefQuota, usedStr),
 					})
 					return

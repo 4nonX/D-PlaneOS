@@ -14,6 +14,14 @@
 
 ---
 
+## System Halts on Boot
+
+If the system halts immediately after booting with no console output beyond early boot messages, the `persist-health-check` service has determined that `/persist` is not mounted or not writable. This is intentional: DPlaneOS cannot safely operate without its persistent state partition and halts rather than continuing in a degraded state that could corrupt the database or ZFS state.
+
+To diagnose: attach a serial console or IPMI SOL, then look for journal entries from `dplaneos-persist-check`. The most common cause is a failed `/persist` ext4 partition (fsck failure) or a missing partition entry after a disk replacement. Boot from the installer ISO, run `fsck.ext4 -f /dev/sdX2` (the persist partition), mount it, and verify `/persist/dplaneos/` is readable.
+
+If `/persist` is permanently lost, follow the Complete Database Reset procedure in section 2.
+
 ## 1. Service Management
 
 ### Check Status

@@ -218,14 +218,19 @@ func SnapshotListHolds(snapshot string) ([]HoldEntry, error) {
 }
 
 // DatasetCreateWithProps creates a ZFS filesystem dataset and sets initial
-// properties. Properties are applied sequentially after creation; if setting a
-// property fails, the dataset still exists with any already-applied properties.
+// properties. If any property set fails the dataset is destroyed so the caller
+// sees either full success or no side effect. Direct API callers (not the GitOps
+// reconciler) depend on this guarantee; the reconciler would self-heal on the
+// next cycle regardless.
 func DatasetCreateWithProps(name string, props map[string]string) error {
 	if err := DatasetCreate(name); err != nil {
 		return err
 	}
 	for k, v := range props {
 		if err := DatasetSet(name, k, v); err != nil {
+			// Best-effort cleanup. Ignore the destroy error: the original
+			// property-set error is the one the caller needs to act on.
+			_ = DatasetDestroy(name, false)
 			return err
 		}
 	}

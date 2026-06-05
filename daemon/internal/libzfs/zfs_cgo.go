@@ -334,12 +334,13 @@ func PoolIsMember(device string) (PoolMembership, error) {
 	return result, err
 }
 
-// PoolImportAll imports all importable pools found under /dev/disk/by-id.
-// The searchPath parameter is accepted for API compatibility but the
-// implementation always uses the security-whitelist-validated path.
+// PoolImportAll imports all importable pools from /dev/disk/by-id.
+// The path is hardcoded by design: the security whitelist entry "zpool_import_all"
+// permits only this path. By-id paths are stable across reboots, bus re-enumeration,
+// and kernel updates, and cannot be redirected via API call.
 // Individual pool import failures are non-fatal: zpool import -a continues
-// after each failed pool and reports a non-zero exit only when all pools fail.
-func PoolImportAll(searchPath string) error {
+// after each failed pool and reports non-zero only when all pools fail.
+func PoolImportAll() error {
 	out, err := cmdutil.RunZFS("zpool_import_all", "import", "-a", "-f", "-d", "/dev/disk/by-id")
 	if err != nil {
 		return fmt.Errorf("PoolImportAll: %w (output: %s)", err, out)
@@ -508,7 +509,10 @@ func DatasetDestroy(name string, recursive bool) error {
 		return libzfsErr("DatasetDestroy", err.Error())
 	}
 	if recursive {
-		// Recursive destroy: fall back to subprocess which handles child iteration.
+		// Recursive destroy uses the subprocess path even in the CGO build.
+		// libzfs.zfs_destroy() does not recurse; iterating children via the
+		// libzfs handle adds significant complexity for marginal gain. Both paths
+		// return *libzfs.Error, so the caller's error handling is identical.
 		args := []string{"destroy", "-r", name}
 		out, err := cmdutil.RunMedium("zfs_destroy", args...)
 		if err != nil {

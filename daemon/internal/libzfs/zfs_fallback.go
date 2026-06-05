@@ -7,7 +7,6 @@ package libzfs
 // All functions match the signatures in zfs_cgo.go exactly.
 
 import (
-	"fmt"
 	"strings"
 
 	"dplaned/internal/cmdutil"
@@ -41,20 +40,11 @@ func PoolIsMember(device string) (PoolMembership, error) {
 	return PoolMembership{InPool: false}, nil
 }
 
-// PoolImportAll forces import of all available pools from the given search
-// path. Mirrors `zpool import -a -f -d <path>`.
-func PoolImportAll(searchPath string) error {
-	// Whitelist entry "zpool_import_all" hardcodes /dev/disk/by-id.
-	// Accept any path in the fallback but validate it is reasonable.
-	if searchPath == "" {
-		searchPath = "/dev/disk/by-id"
-	}
-	if err := security.ValidateDevicePath(searchPath); err != nil {
-		// ValidateDevicePath rejects non-/dev paths; call directly for dirs.
-		if !strings.HasPrefix(searchPath, "/dev/") {
-			return libzfsErr("PoolImportAll", fmt.Sprintf("invalid search path: %s", searchPath))
-		}
-	}
+// PoolImportAll imports all importable pools from /dev/disk/by-id.
+// The path is hardcoded by design: the security whitelist entry "zpool_import_all"
+// permits only this path. By-id paths are stable across reboots, bus re-enumeration,
+// and kernel updates, and cannot be redirected via API call.
+func PoolImportAll() error {
 	out, err := cmdutil.RunSlow("zpool_import_all", "import", "-a", "-f", "-d", "/dev/disk/by-id")
 	if err != nil {
 		return libzfsErr("PoolImportAll", string(out))

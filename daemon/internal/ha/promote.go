@@ -19,7 +19,7 @@ func ExecutePromotion(candidate, leader string) {
 	// through the security allowlist. Stable by-id paths are required
 	// so pool discovery is not sensitive to kernel name assignment order.
 	log.Printf("HA Failover: Forcing import of all pools...")
-	if err := libzfs.PoolImportAll("/dev/disk/by-id"); err != nil {
+	if err := libzfs.PoolImportAll(); err != nil {
 		log.Printf("HA Failover Error: zpool import failed: %v", err)
 	}
 

@@ -327,14 +327,21 @@ in {
           timeout=120
           elapsed=0
           while [ $elapsed -lt $timeout ]; do
-            if zpool list -H -o health 2>/dev/null | grep -q ONLINE; then
-              echo "ZFS pools ONLINE - gate open"
+            pool_list=$(zpool list -H -o health 2>/dev/null || true)
+            if [ -z "$pool_list" ]; then
+              # No pools exist: first boot or standby node with no imported pools.
+              # Either case is valid - pass immediately so dplaned can start.
+              echo "ZFS gate: no pools present (first boot or standby node) - gate open"
+              exit 0
+            fi
+            if echo "$pool_list" | grep -q ONLINE; then
+              echo "ZFS gate: pools ONLINE - gate open"
               exit 0
             fi
             sleep 2
             elapsed=$((elapsed + 2))
           done
-          echo "ZFS gate timeout after ${toString 120}s - pools not ONLINE"
+          echo "ZFS gate timeout after ${toString 120}s - pools exist but not ONLINE"
           exit 1
         '';
       };
