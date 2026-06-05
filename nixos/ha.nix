@@ -301,12 +301,13 @@ EOF
         #   Daemon-DOWN path (daemon restarting or crashed):
         #   The || true on the curl calls is required: a non-zero curl exit would
         #   wedge Keepalived's state machine. But || true means a down daemon is
-        #   silent and the daemon-mediated export never runs - split-brain risk.
-        #   The daemon-down path therefore falls back to direct zpool export via
-        #   the zpool(8) binary. This is less graceful (no ALUA standby, no 4s
-        #   deadline enforced by the daemon) but prevents the node from holding
-        #   pools after the VIP has moved. If zpool export also fails, the node
-        #   logs to syslog; the peer's SCSI-3 PR fencing will handle exclusion.
+        #   silent and the daemon-mediated steps never run - split-brain risk.
+        #   The daemon-down path replicates the daemon's work directly using the
+        #   same binaries (targetcli, zpool) with the same deadlines:
+        #   - ALUA standby via targetcli (non-fatal, mirrors ALUAStandby handler)
+        #   - Per-pool export via timeout(1) with 4s deadline (matches ExportPoolTimeout)
+        #   - reboot -f on any export failure (matches ForceSelfReboot behaviour)
+        #   If zpool export also fails, the node reboots to prevent split-brain.
         #
         # This mirrors TrueNAS's ZPOOL_EXPORT_TIMEOUT = 4s pattern.
         extraConfig = ''
