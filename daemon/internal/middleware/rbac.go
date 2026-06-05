@@ -239,16 +239,25 @@ func RequireAAL2(next http.Handler) http.Handler {
 				sessionToken = cookie.Value
 			}
 		}
-		if sessionToken != "" {
-			if secUser, err := security.ValidateSessionAndGetUser(sessionToken); err == nil {
-				if secUser.AAL < 2 {
-					respondJSON(w, http.StatusForbidden, map[string]string{
-						"error":  "This operation requires two-factor authentication. Enable TOTP then log in again.",
-						"action": "enable_totp",
-					})
-					return
-				}
-			}
+		if sessionToken == "" {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{
+				"error": "authentication required",
+			})
+			return
+		}
+		secUser, err := security.ValidateSessionAndGetUser(sessionToken)
+		if err != nil || secUser == nil {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{
+				"error": "invalid or expired session",
+			})
+			return
+		}
+		if secUser.AAL < 2 {
+			respondJSON(w, http.StatusForbidden, map[string]string{
+				"error":  "This operation requires two-factor authentication. Enable TOTP then log in again.",
+				"action": "enable_totp",
+			})
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
