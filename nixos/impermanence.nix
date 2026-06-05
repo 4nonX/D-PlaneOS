@@ -236,8 +236,15 @@
         #!/bin/sh
         set -e
         if ! mountpoint -q /persist; then
-          echo "CRITICAL: /persist is NOT mounted. Daemon state will be lost on reboot."
-          echo "Check disko.nix and fstab. Halting DPlaneOS startup."
+          # Write to all available outputs before halting so operators
+          # can diagnose remotely via IPMI SOL, serial console, or journald.
+          msg="CRITICAL: /persist is NOT mounted - DPlaneOS cannot start safely."
+          echo "$msg"
+          logger -t dplaneos-persist -p daemon.crit "$msg"
+          # Write to /dev/console directly in case journald is not up yet
+          echo "$msg" > /dev/console 2>/dev/null || true
+          echo "Recovery: boot from installer ISO, run 'fsck.ext4 -f /dev/sdX2' on the persist partition, then reboot." > /dev/console 2>/dev/null || true
+          echo "See: https://docs.dplaneos.com/recovery#persist for the full procedure." > /dev/console 2>/dev/null || true
           exit 1
         fi
         # Verify key directories exist on the persist partition

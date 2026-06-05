@@ -311,19 +311,86 @@ func (m *Manager) GetPeer(id string) (*ClusterNode, bool) {
 	return &cp, true
 }
 
-// FailoverAfter defines the threshold over which a missed heartbeat triggers STONITH/Promotion.
-const FailoverAfter = 45 * time.Second
+// Default timing constants used when the database has no row yet.
+// These match the historical compile-time values.
+const (
+	DefaultFailoverAfter    = 45 * time.Second
+	DefaultHysteresisWindow = 60 * time.Minute
+	DefaultHeartbeatInterval = 15 * time.Second
+)
 
-// HysteresisWindow is the minimum time that must pass after a failover before another
-// automated failover is permitted. Prevents the "ping-pong" flapping scenario where
-// a dying switch causes repeated failovers and data stream interruptions.
-// Operators can reset this early via POST /api/ha/clear_fault.
-const HysteresisWindow = 60 * time.Minute
+// FailoverAfter and HysteresisWindow remain exported for callers that need
+// a fallback value before the database is available.
+const FailoverAfter = DefaultFailoverAfter
+const HysteresisWindow = DefaultHysteresisWindow
 
-// heartbeatLoop pings all peers every 15 seconds.
+// ClusterTimingConfig holds the runtime-configurable HA timing parameters.
+// Read from ha_cluster_config table; falls back to defaults if absent.
+type ClusterTimingConfig struct {
+	FailoverAfter     time.Duration
+	HysteresisWindow  time.Duration
+	HeartbeatInterval time.Duration
+}
+
+// GetClusterTimingConfig reads timing parameters from the database.
+// Returns defaults if the table is absent or the row is missing (pre-migration).
+func GetClusterTimingConfig(db *sql.DB) ClusterTimingConfig {
+	cfg := ClusterTimingConfig{
+		FailoverAfter:     DefaultFailoverAfter,
+		HysteresisWindow:  DefaultHysteresisWindow,
+		HeartbeatInterval: DefaultHeartbeatInterval,
+	}
+	var fa, hw, hi int
+	err := db.QueryRow(
+		`SELECT failover_after_seconds, hysteresis_window_minutes, heartbeat_interval_seconds
+		 FROM ha_cluster_config WHERE id = 1`).Scan(&fa, &hw, &hi)
+	if err != nil {
+		return cfg
+	}
+	if fa > 0 {
+		cfg.FailoverAfter = time.Duration(fa) * time.Second
+	}
+	if hw > 0 {
+		cfg.HysteresisWindow = time.Duration(hw) * time.Minute
+	}
+	if hi > 0 {
+		cfg.HeartbeatInterval = time.Duration(hi) * time.Second
+	}
+	return cfg
+}
+
+// SaveClusterTimingConfig persists timing parameters to the database.
+func SaveClusterTimingConfig(db *sql.DB, cfg ClusterTimingConfig) error {
+	fa := int(cfg.FailoverAfter.Seconds())
+	hw := int(cfg.HysteresisWindow.Minutes())
+	hi := int(cfg.HeartbeatInterval.Seconds())
+	if fa < 10 {
+		return fmt.Errorf("failover_after_seconds must be >= 10 (got %d)", fa)
+	}
+	if int(cfg.HeartbeatInterval.Seconds())*3 > fa {
+		return fmt.Errorf("failover_after_seconds (%d) must be >= heartbeat_interval_seconds * 3 (%d)",
+			fa, int(cfg.HeartbeatInterval.Seconds())*3)
+	}
+	if hw < 1 {
+		return fmt.Errorf("hysteresis_window_minutes must be >= 1 (got %d)", hw)
+	}
+	_, err := db.Exec(`
+		INSERT INTO ha_cluster_config (id, failover_after_seconds, hysteresis_window_minutes, heartbeat_interval_seconds)
+		VALUES (1, $1, $2, $3)
+		ON CONFLICT (id) DO UPDATE SET
+			failover_after_seconds     = excluded.failover_after_seconds,
+			hysteresis_window_minutes  = excluded.hysteresis_window_minutes,
+			heartbeat_interval_seconds = excluded.heartbeat_interval_seconds`,
+		fa, hw, hi)
+	return err
+}
+
+// heartbeatLoop pings all peers at the configured interval.
+// Timing is read from the database on startup; changes take effect after restart.
 func (m *Manager) heartbeatLoop() {
 	defer m.wg.Done()
-	ticker := time.NewTicker(15 * time.Second)
+	timing := GetClusterTimingConfig(m.db)
+	ticker := time.NewTicker(timing.HeartbeatInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -345,7 +412,8 @@ func (m *Manager) checkFailover() {
 		if n.Role == RoleActive && n.State != StateUnreachable {
 			isStandby = true
 		}
-		if n.State == StateUnreachable && time.Since(n.LastSeen) > FailoverAfter {
+		timing := GetClusterTimingConfig(m.db)
+		if n.State == StateUnreachable && time.Since(n.LastSeen) > timing.FailoverAfter {
 			cp := *n
 			deadPeer = &cp
 		}
@@ -369,10 +437,11 @@ func (m *Manager) checkFailover() {
 
 	// Guard 2: Hysteresis - suppress auto-failover for HysteresisWindow after the last
 	// failover to prevent flapping on an unstable network (e.g. dying core switch).
-	if !lastFailoverAt.IsZero() && time.Since(lastFailoverAt) < HysteresisWindow {
+	hyst := GetClusterTimingConfig(m.db).HysteresisWindow
+	if !lastFailoverAt.IsZero() && time.Since(lastFailoverAt) < hyst {
 		if deadPeer.MissedBeats == 3 {
 			log.Printf("HA HYSTERESIS: Failover suppressed - last failover was %v ago (window: %v). Use POST /api/ha/clear_fault to override.",
-				time.Since(lastFailoverAt).Truncate(time.Second), HysteresisWindow)
+				time.Since(lastFailoverAt).Truncate(time.Second), hyst)
 		}
 		return
 	}
@@ -653,6 +722,9 @@ func (m *Manager) ensureSchema() error {
 
 // SaveClusterSecretToDB persists the cluster secret to the database and updates
 // the running manager's in-memory value so the change takes effect immediately.
+// DB returns the database handle. Used by handlers that need to persist HA config.
+func (m *Manager) DB() *sql.DB { return m.db }
+
 func (m *Manager) SaveClusterSecretToDB(secret string) error {
 	_, err := m.db.Exec(`
 		INSERT INTO ha_cluster_secret (id, secret) VALUES (1, $1)

@@ -705,6 +705,56 @@ func (h *HAHandler) RegisterMaintenance(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// GetClusterTiming returns the current HA timing configuration.
+// GET /api/ha/timing
+func (h *HAHandler) GetClusterTiming(w http.ResponseWriter, r *http.Request) {
+	cfg := ha.GetClusterTimingConfig(h.mgr.DB())
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success":                    true,
+		"failover_after_seconds":     int(cfg.FailoverAfter.Seconds()),
+		"hysteresis_window_minutes":  int(cfg.HysteresisWindow.Minutes()),
+		"heartbeat_interval_seconds": int(cfg.HeartbeatInterval.Seconds()),
+		"note": "Changes to failover_after_seconds and heartbeat_interval_seconds take effect after daemon restart. hysteresis_window_minutes takes effect immediately.",
+	})
+}
+
+// SaveClusterTiming updates HA timing parameters.
+// POST /api/ha/timing
+// Body: { "failover_after_seconds": 45, "hysteresis_window_minutes": 60, "heartbeat_interval_seconds": 15 }
+func (h *HAHandler) SaveClusterTiming(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		FailoverAfterSeconds    int `json:"failover_after_seconds"`
+		HysteresisWindowMinutes int `json:"hysteresis_window_minutes"`
+		HeartbeatIntervalSeconds int `json:"heartbeat_interval_seconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	cfg := ha.ClusterTimingConfig{
+		FailoverAfter:     time.Duration(req.FailoverAfterSeconds) * time.Second,
+		HysteresisWindow:  time.Duration(req.HysteresisWindowMinutes) * time.Minute,
+		HeartbeatInterval: time.Duration(req.HeartbeatIntervalSeconds) * time.Second,
+	}
+	if cfg.FailoverAfter == 0 {
+		cfg.FailoverAfter = ha.DefaultFailoverAfter
+	}
+	if cfg.HysteresisWindow == 0 {
+		cfg.HysteresisWindow = ha.DefaultHysteresisWindow
+	}
+	if cfg.HeartbeatInterval == 0 {
+		cfg.HeartbeatInterval = ha.DefaultHeartbeatInterval
+	}
+	if err := ha.SaveClusterTimingConfig(h.mgr.DB(), cfg); err != nil {
+		respondErrorSimple(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "Timing configuration saved. Restart the daemon for heartbeat_interval_seconds and failover_after_seconds to take effect.",
+	})
+}
+
 // ALUAStandby sets all ALUA-enabled iSCSI targets to Standby access state.
 // This must be called BEFORE POST /api/ha/standby during a planned failover so
 // that initiators see a clean path-state transition (Optimized -> Standby) rather

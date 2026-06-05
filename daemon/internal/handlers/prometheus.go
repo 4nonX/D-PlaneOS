@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"dplaned/internal/ha"
 )
 
 // HandlePrometheusMetrics exposes system metrics in Prometheus text format.
@@ -66,22 +68,125 @@ func HandlePrometheusMetrics(w http.ResponseWriter, r *http.Request) {
 		writeMetric(b, "dplaneos_inotify_active_instances", nil, float64(count), "Approximate active inotify instances")
 	}
 
-	// ── ZFS pool health (via zpool list) ───────────────────────────
+	// ── ZFS pool health (via zpool list) ──────────────────────────
 	pools := readZpoolList()
 	for _, pool := range pools {
 		labels := map[string]string{"pool": pool.name}
 		writeMetric(b, "dplaneos_zfs_pool_size_bytes", labels, pool.size, "ZFS pool total size")
 		writeMetric(b, "dplaneos_zfs_pool_alloc_bytes", labels, pool.alloc, "ZFS pool allocated bytes")
 		writeMetric(b, "dplaneos_zfs_pool_free_bytes", labels, pool.free, "ZFS pool free bytes")
-		healthVal := 0.0
-		if pool.health == "ONLINE" {
+		var healthVal float64
+		switch pool.health {
+		case "ONLINE":
 			healthVal = 1.0
+		case "DEGRADED":
+			healthVal = 0.75
+		case "FAULTED":
+			healthVal = 0.5
+		default:
+			healthVal = 0.0
 		}
-		writeMetric(b, "dplaneos_zfs_pool_healthy", labels, healthVal, "ZFS pool health (1=ONLINE, 0=degraded/faulted)")
+		writeMetric(b, "dplaneos_zfs_pool_healthy", labels, healthVal,
+			"ZFS pool health: 1=ONLINE 0.75=DEGRADED 0.5=FAULTED 0=UNAVAIL/REMOVED")
 	}
+
+	// ── ZFS pool scrub/resilver progress ───────────────────────────
+	for _, pool := range pools {
+		scanLine := readZpoolScanLine(pool.name)
+		pct := parseZpoolScanPercent(scanLine)
+		labels := map[string]string{"pool": pool.name}
+		writeMetric(b, "dplaneos_zfs_pool_scan_percent", labels, pct,
+			"ZFS scrub or resilver progress (0-100; -1 if no active scan)")
+	}
+
+	// ── ZFS dataset usage ───────────────────────────────────────────
+	datasets := readZFSDatasets()
+	for _, ds := range datasets {
+		labels := map[string]string{"dataset": ds.name}
+		writeMetric(b, "dplaneos_zfs_dataset_used_bytes", labels, ds.used,
+			"ZFS dataset used bytes (includes children)")
+		writeMetric(b, "dplaneos_zfs_dataset_available_bytes", labels, ds.avail,
+			"ZFS dataset available bytes")
+		writeMetric(b, "dplaneos_zfs_dataset_quota_bytes", labels, ds.quota,
+			"ZFS dataset quota bytes (0 = no quota)")
+	}
+
+	// ── HA status ───────────────────────────────────────────────────
+	if prometheusHAMgr != nil {
+		s := prometheusHAMgr.Status()
+		writeMetric(b, "dplaneos_ha_enabled", nil, 1.0, "1 if HA is configured")
+		writeMetric(b, "dplaneos_ha_peer_count", nil, float64(len(s.Peers)),
+			"Number of registered cluster peers")
+		quorum := 0.0
+		if s.Quorum {
+			quorum = 1.0
+		}
+		writeMetric(b, "dplaneos_ha_quorum", nil, quorum, "1 if cluster has quorum")
+		maint := 0.0
+		if s.MaintenanceActive {
+			maint = 1.0
+		}
+		writeMetric(b, "dplaneos_ha_maintenance_active", nil, maint,
+			"1 if node is in maintenance mode")
+		writeMetric(b, "dplaneos_ha_last_failover_timestamp_seconds", nil,
+			float64(s.LastFailoverAt),
+			"Unix timestamp of last automated failover (0 = never)")
+		for _, peer := range s.Peers {
+			var ph float64
+			switch string(peer.State) {
+			case "healthy":
+				ph = 1.0
+			case "degraded":
+				ph = 0.5
+			}
+			writeMetric(b, "dplaneos_ha_peer_health",
+				map[string]string{"peer": peer.ID, "role": string(peer.Role)},
+				ph, "Per-peer health: 1=healthy 0.5=degraded 0=unreachable")
+		}
+	} else {
+		writeMetric(b, "dplaneos_ha_enabled", nil, 0.0, "1 if HA is configured")
+	}
+
+	// ── Replication schedule status ─────────────────────────────────
+	if schedules, err := loadReplicationSchedules(); err == nil {
+		for _, s := range schedules {
+			labels := map[string]string{"schedule": s.Name, "dataset": s.SourceDataset}
+			enabled := 0.0
+			if s.Enabled {
+				enabled = 1.0
+			}
+			writeMetric(b, "dplaneos_replication_enabled", labels, enabled,
+				"1 if replication schedule is enabled")
+			lastRun := 0.0
+			if s.LastRun != nil {
+				lastRun = float64(s.LastRun.Unix())
+			}
+			writeMetric(b, "dplaneos_replication_last_run_timestamp_seconds", labels, lastRun,
+				"Unix timestamp of last replication run (0 = never)")
+			success := 0.0
+			if s.LastStatus == "done" {
+				success = 1.0
+			}
+			writeMetric(b, "dplaneos_replication_last_success", labels, success,
+				"1 if last replication run succeeded")
+		}
+	}
+
+	// ── Build info ──────────────────────────────────────────────────
+	writeMetric(b, "dplaneos_build_info",
+		map[string]string{"version": DaemonVersion},
+		1.0, "DPlaneOS build metadata (value always 1; use labels)")
 
 	fmt.Fprint(w, b.String())
 }
+
+// prometheusHAMgr is set from main.go after the HA Manager is initialised.
+// Nil means single-node mode; HA metrics are omitted.
+var prometheusHAMgr *ha.Manager
+
+// SetPrometheusHAManager wires the HA Manager into the Prometheus exporter.
+// Call once from main after the Manager is created.
+func SetPrometheusHAManager(mgr *ha.Manager) { prometheusHAMgr = mgr }
 
 // ─── Prometheus text format helpers ─────────────────────────────
 
@@ -100,6 +205,73 @@ func writeMetric(b *strings.Builder, name string, labels map[string]string, valu
 }
 
 func kbToBytes(kb float64) float64 { return kb * 1024 }
+
+// readZpoolScanLine returns the scan: line from `zpool status <pool>`.
+func readZpoolScanLine(pool string) string {
+	out, err := executeCommandWithTimeout(TimeoutFast, "zpool", []string{"status", pool})
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "scan:") {
+			return line
+		}
+	}
+	return ""
+}
+
+// parseZpoolScanPercent extracts percent done from a zpool status scan line.
+// Returns -1 if no active scan.
+func parseZpoolScanPercent(scanLine string) float64 {
+	if !strings.Contains(scanLine, "in progress") {
+		return -1
+	}
+	idx := strings.Index(scanLine, "% done")
+	if idx < 0 {
+		return -1
+	}
+	start := idx
+	for start > 0 && (scanLine[start-1] == '.' || (scanLine[start-1] >= '0' && scanLine[start-1] <= '9')) {
+		start--
+	}
+	v, err := strconv.ParseFloat(scanLine[start:idx], 64)
+	if err != nil {
+		return -1
+	}
+	return v
+}
+
+// zfsDSStat holds parsed dataset stats.
+type zfsDSStat struct {
+	name  string
+	used  float64
+	avail float64
+	quota float64
+}
+
+// readZFSDatasets runs zfs list and returns per-dataset usage.
+func readZFSDatasets() []zfsDSStat {
+	out, err := executeCommandWithTimeout(TimeoutFast, "zfs",
+		[]string{"list", "-Hp", "-o", "name,used,avail,quota", "-t", "filesystem,volume"})
+	if err != nil {
+		return nil
+	}
+	var result []zfsDSStat
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		ds := zfsDSStat{name: fields[0]}
+		ds.used, _ = strconv.ParseFloat(fields[1], 64)
+		ds.avail, _ = strconv.ParseFloat(fields[2], 64)
+		if fields[3] != "none" && fields[3] != "-" {
+			ds.quota, _ = strconv.ParseFloat(fields[3], 64)
+		}
+		result = append(result, ds)
+	}
+	return result
+}
 
 // ─── /proc readers ──────────────────────────────────────────────
 

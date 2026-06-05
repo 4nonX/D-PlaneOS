@@ -205,7 +205,9 @@ func RequireAuth(next http.Handler) http.Handler {
 		// temporary password from being used to access any other resource.
 		if secUser.MustChangePassword && r.URL.Path != "/api/auth/change-password" {
 			respondJSON(w, http.StatusForbidden, map[string]string{
-				"error":  "Password change required before accessing this resource",
+				"error":  "Your password must be changed before accessing this resource.",
+				"guide":  "An administrator has set a temporary password for your account. Go to Settings > Account > Change Password to set a new password. All other operations are blocked until this is done.",
+				"code":   "must_change_password",
 				"action": "change_password",
 			})
 			return
@@ -248,20 +250,27 @@ func RequireAAL2(next http.Handler) http.Handler {
 		}
 		if sessionToken == "" {
 			respondJSON(w, http.StatusUnauthorized, map[string]string{
-				"error": "authentication required",
+				"error":  "authentication required",
+				"guide":  "Please log in to access this resource.",
+				"action": "login",
 			})
 			return
 		}
 		secUser, err := security.ValidateSessionAndGetUser(sessionToken)
 		if err != nil || secUser == nil {
 			respondJSON(w, http.StatusUnauthorized, map[string]string{
-				"error": "invalid or expired session",
+				"error":  "invalid or expired session",
+				"guide":  "Your session has expired. Please log in again. Sessions expire after 24 hours of inactivity.",
+				"code":   "session_expired",
+				"action": "login",
 			})
 			return
 		}
 		if secUser.AAL < 2 {
 			respondJSON(w, http.StatusForbidden, map[string]string{
-				"error":  "This operation requires two-factor authentication. Enable TOTP then log in again.",
+				"error":  "This operation requires two-factor authentication.",
+				"guide":  "Your session was authenticated with a password only. Enable TOTP under Settings > Security > Two-Factor Authentication, then log out and log in again.",
+				"code":   "aal2_required",
 				"action": "enable_totp",
 			})
 			return

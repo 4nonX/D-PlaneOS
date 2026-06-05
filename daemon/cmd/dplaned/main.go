@@ -1310,6 +1310,11 @@ func main() {
 	r.HandleFunc("/api/ha/sync/status", haHandler.GetSyncStatus).Methods("GET")
 	r.HandleFunc("/api/ha/local", haHandler.LocalNodeInfo).Methods("GET")
 	r.Handle("/api/ha/toggle", permRoute("system", "admin", haHandler.ToggleHA)).Methods("POST")
+	r.Handle("/api/ha/timing", permRoute("system", "admin", haHandler.GetClusterTiming)).Methods("GET")
+	r.Handle("/api/ha/timing", middleware.RequireAAL2(permRoute("system", "admin", haHandler.SaveClusterTiming))).Methods("POST")
+
+	// Wire HA manager into the Prometheus exporter
+	handlers.SetPrometheusHAManager(clusterMgr)
 
 	// WebSocket for real-time monitoring
 	wsHandler := handlers.NewWebSocketHandler(wsHub)
@@ -1339,7 +1344,9 @@ func main() {
 	r.Handle("/api/nvmet/targets", permRoute("storage", "write", handlers.UpdateNVMeTarget)).Methods("PUT")
 	r.Handle("/api/nvmet/targets", permRoute("storage", "write", handlers.DeleteNVMeTarget)).Methods("DELETE")
 
-	// v3.2.0: Prometheus metrics exporter (Phase 2)
+	// v3.2.0 / v14.0.0: Prometheus/OpenMetrics exporter
+	// No auth required so Prometheus can scrape without tokens.
+	// Restrict access via firewall / nginx allow list if needed.
 	r.HandleFunc("/metrics", handlers.HandlePrometheusMetrics).Methods("GET")
 
 	// Dataset search

@@ -117,11 +117,7 @@ func (h *ZFSHandler) HandlePoolDestroy(w http.ResponseWriter, r *http.Request) {
 	if !req.Force {
 		deps, err := poolDependencyCheck(h.db, req.Name)
 		if err == nil && len(deps) > 0 {
-			respondJSON(w, http.StatusConflict, map[string]any{
-				"success":      false,
-				"error":        "pool has active dependencies; stop all shares and services first, or use force=true",
-				"dependencies": deps,
-			})
+			guidedPoolDestroyBlocked(w, req.Name, deps)
 			return
 		}
 	}
