@@ -332,13 +332,33 @@ EOF
                 -H "X-Internal-Token: $TOKEN" \
                 http://localhost/api/ha/standby || true
             else
-              # Daemon-DOWN path: export pools directly to prevent split-brain.
-              # Apply the same 4-second per-pool deadline as the daemon-up path
-              # (matches ExportPoolTimeout = 4s in ha/standby.go). On timeout or
-              # error, reboot immediately - the same guarantee as daemon self-reboot.
-              # stderr is NOT suppressed: zpool export failures belong in syslog.
+              # Daemon-DOWN path: daemon unavailable, replicate its work directly.
+              # The daemon's ALUAStandby and BecomeStandby handlers are shell-
+              # transparent wrappers: they call targetcli and zpool. Both binaries
+              # are available here. Run them directly with the same deadlines.
               logger -t dplaneos-ha -p daemon.crit \
-                "STONITH: daemon unreachable during notify_backup - exporting ZFS pools directly"
+                "STONITH: daemon unreachable during notify_backup - executing failover sequence directly"
+
+              # Step 1 (mirrors POST /api/ha/alua-standby):
+              # Set all ALUA-enabled iSCSI targets to Standby so initiators see a
+              # clean path-state change instead of an abrupt loss.
+              # Non-fatal: not all deployments use iSCSI ALUA.
+              for iqn in $(${pkgs.targetcli}/bin/targetcli /iscsi ls 2>/dev/null \
+                           | grep -oE 'iqn\.[^ ]+' 2>/dev/null); do
+                ${pkgs.targetcli}/bin/targetcli "/iscsi/$iqn/tpg1" \
+                  set attribute alua_support=1 2>/dev/null || true
+                ${pkgs.targetcli}/bin/targetcli \
+                  "/iscsi/$iqn/tpg1/alua/default_tg_pt_gp" \
+                  set alua_access_state=2 2>/dev/null || true
+                logger -t dplaneos-ha "STONITH: set ALUA Standby on $iqn (direct path)"
+              done
+              ${pkgs.targetcli}/bin/targetcli / saveconfig 2>/dev/null || true
+
+              # Step 2 (mirrors BecomeStandby / exportAllPools):
+              # Export each pool with the same 4-second per-pool deadline as
+              # ExportPoolTimeout in ha/standby.go. On timeout or error, reboot
+              # immediately - same guarantee as daemon ForceSelfReboot.
+              # stderr is NOT suppressed: failures belong in syslog.
               for pool in $(${pkgs.zfs}/bin/zpool list -H -o name 2>/dev/null); do
                 if ${pkgs.coreutils}/bin/timeout 4 ${pkgs.zfs}/bin/zpool export "$pool"; then
                   logger -t dplaneos-ha "STONITH: exported pool $pool (direct path)"
