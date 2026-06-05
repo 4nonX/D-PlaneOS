@@ -333,16 +333,20 @@ EOF
                 http://localhost/api/ha/standby || true
             else
               # Daemon-DOWN path: export pools directly to prevent split-brain.
-              # The daemon is unavailable so its 4s timeout and self-reboot logic
-              # will not fire. Export directly and log loudly.
+              # Apply the same 4-second per-pool deadline as the daemon-up path
+              # (matches ExportPoolTimeout = 4s in ha/standby.go). On timeout or
+              # error, reboot immediately - the same guarantee as daemon self-reboot.
+              # stderr is NOT suppressed: zpool export failures belong in syslog.
               logger -t dplaneos-ha -p daemon.crit \
                 "STONITH: daemon unreachable during notify_backup - exporting ZFS pools directly"
               for pool in $(${pkgs.zfs}/bin/zpool list -H -o name 2>/dev/null); do
-                if ${pkgs.zfs}/bin/zpool export "$pool" 2>/dev/null; then
+                if ${pkgs.coreutils}/bin/timeout 4 ${pkgs.zfs}/bin/zpool export "$pool"; then
                   logger -t dplaneos-ha "STONITH: exported pool $pool (direct path)"
                 else
                   logger -t dplaneos-ha -p daemon.crit \
-                    "STONITH: failed to export pool $pool - peer fencing required"
+                    "STONITH: export of $pool failed or timed out within 4s - rebooting to prevent split-brain"
+                  reboot -f
+                  exit 1
                 fi
               done
             fi
