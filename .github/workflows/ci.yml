@@ -611,6 +611,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: flake-lock
+          path: /tmp/flake-lock-artifact
+
+      - name: Install flake.lock in repo root
+        run: |
+          if [ -f /tmp/flake-lock-artifact/flake.lock ]; then
+            cp /tmp/flake-lock-artifact/flake.lock flake.lock
+            echo "flake.lock installed ($(wc -c < flake.lock) bytes)"
+          else
+            echo "WARNING: artifact did not contain flake.lock at expected path"
+            ls -la /tmp/flake-lock-artifact/ || true
+          fi
 
       - name: Free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be  # v1.3.1
@@ -634,9 +645,6 @@ jobs:
             accept-flake-config = true
             extra-substituters = https://cache.nixos.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
-
-      - name: Cache Nix store paths (magic-nix-cache)
-        uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b  # v8
 
       - name: Report available disk space
         run: df -h /
@@ -703,6 +711,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: flake-lock
+          path: /tmp/flake-lock-artifact
+
+      - name: Install flake.lock in repo root
+        run: |
+          if [ -f /tmp/flake-lock-artifact/flake.lock ]; then
+            cp /tmp/flake-lock-artifact/flake.lock flake.lock
+            echo "flake.lock installed ($(wc -c < flake.lock) bytes)"
+          else
+            echo "WARNING: artifact did not contain flake.lock at expected path"
+            ls -la /tmp/flake-lock-artifact/ || true
+          fi
 
       - name: Free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be  # v1.3.1
@@ -726,9 +745,6 @@ jobs:
             accept-flake-config = true
             extra-substituters = https://cache.nixos.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
-
-      - name: Cache Nix store paths (magic-nix-cache)
-        uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b  # v8
 
       - name: Report available disk space
         run: df -h /
