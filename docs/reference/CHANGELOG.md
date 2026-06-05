@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v14.1.0 (2026-06-05) - "Beacon"
+
+Upgrade from: v14.0.0 - Schema migration required (migration 00008 adds `ha_cluster_config` table for runtime-configurable HA timing; applied automatically at startup). No breaking API changes. No breaking configuration changes.
+
+This release addresses the operational maturity gaps identified by the sysadmin, nerd, support technician, and TrueNAS convert perspectives: the monitoring island (no scrape endpoint), hardcoded HA timing constants, opaque technical error messages, and the absence of an honest integration guide. The foundation is unchanged; this release closes the last-mile-of-utility gap.
+
+### Added
+
+- **Prometheus/OpenMetrics exporter extension (`daemon/internal/handlers/prometheus.go`)**: `/metrics` now exposes ZFS dataset usage and quota per dataset, scrub/resilver progress per pool (with -1 when no scan is active), pool health at four levels (ONLINE=1, DEGRADED=0.75, FAULTED=0.5, UNAVAIL=0), per-peer HA health with role labels, replication schedule status (enabled, last run timestamp, last success), and build info. The HA manager is wired in at startup via `SetPrometheusHAManager`. Scrape with any Prometheus-compatible collector; no authentication required so existing scrape configs work without token management.
+
+- **HA timing parameters configurable at runtime (`daemon/internal/ha/cluster.go`, migration 00008)**: `failover_after_seconds`, `hysteresis_window_minutes`, and `heartbeat_interval_seconds` moved from compile-time constants to the `ha_cluster_config` database table. `GetClusterTimingConfig` reads from the DB at each heartbeat cycle with fallback to historical defaults (45s/60m/15s). Constraint enforced: `failover_after_seconds >= heartbeat_interval_seconds * 3`. `GET /api/ha/timing` returns current values; `POST /api/ha/timing` updates them (requires AAL2). Changes to failover and heartbeat thresholds take effect after daemon restart; hysteresis takes effect immediately. This unblocks WAN-linked and high-latency deployments that previously required a recompile to tune.
+
+- **Guided error responses (`daemon/internal/handlers/error_guide.go`)**: A `guidedError` type enriches error responses with a `guide` field (plain-English next step), a `code` field (machine-readable for UI routing), and an `action` field (UI hint). Applied to the five highest-volume error states: AAL2 gate, session expired, must-change-password, quota below current usage, and pool destroy blocked by active dependencies. Example: the pool destroy 409 now says which specific services are blocking and gives step-by-step resolution rather than "stop all shares and services first."
+
+- **Persist-health-check console output**: When the `/persist` partition is not mounted at boot, the health check now writes the failure reason and recovery URL to `/dev/console` (in addition to syslog) before halting. Operators with IPMI SOL or serial console access see the reason immediately rather than a silent black screen.
+
+- **`INTEGRATION-GUIDE.md` (`docs/admin/`)**: Honest documentation covering Prometheus scrape config and the full metrics table, the AD/Winbind gap (explicitly states the limitation and recommends TrueNAS SCALE for AD-integrated SMB deployments until Winbind support is added), SMB reconnect-on-failover behavior, NVMe-oF client setup, iSCSI ALUA HA configuration, GitOps/CI automation, and the HA timing API. No overclaiming.
+
+### Changed
+
+- **Pool health metric**: `dplaneos_zfs_pool_healthy` now returns 0.75 for DEGRADED and 0.5 for FAULTED instead of collapsing all non-ONLINE states to 0. Allows alerting rules to distinguish a degraded-but-functional pool from a completely unavailable one.
+
+- **HA `heartbeatLoop`**: Reads `HeartbeatInterval` from the database on startup rather than hardcoding 15 seconds. Default unchanged.
+
+- **HA `checkFailover`**: Reads `FailoverAfter` and `HysteresisWindow` from the database on each evaluation rather than hardcoding constants. Default values unchanged; behavior is identical on existing deployments.
+
+- **`ha.Manager.DB()` accessor added**: Returns the database handle. Used by API handlers that need to persist HA config without direct access to the internal `db` field.
+
+- **AAL2 and session-expired middleware errors**: Now include `guide`, `code`, and `action` fields alongside `error`. Clients that only read the `error` field are unaffected.
+
+### Known gap - not closed in this release
+
+See v14.0.0 entry. The Winbind/NSS/CTDB gap is documented in `INTEGRATION-GUIDE.md` with explicit guidance on when to use TrueNAS instead.
+
+`flake.lock` is still absent from the repository. Run `nix flake lock && git add flake.lock` in a Nix environment to satisfy the reproducibility guarantee stated in the flake comment.
+
+---
+
 ## v14.0.0 (2026-06-05) - "Vanguard"
 
 Upgrade from: v13.0.0 - Schema migrations required (00006 adds SCRAM-SHA-512 credential columns to `users` and `disk_fault_tolerance_pct` to `ha_fencing_config`; 00007 adds `aal` to `sessions`; both applied automatically at startup). No breaking API changes. No breaking configuration changes.
