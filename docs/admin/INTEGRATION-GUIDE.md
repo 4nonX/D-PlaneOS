@@ -221,3 +221,61 @@ POST /api/ha/timing  - update values (requires AAL2)
 Default values: 45s failover threshold, 15s heartbeat interval, 60m hysteresis. For high-latency WAN links, increase failover_after_seconds proportionally. The constraint `failover_after_seconds >= heartbeat_interval_seconds * 3` is enforced.
 
 Changes to failover_after_seconds and heartbeat_interval_seconds take effect after daemon restart. hysteresis_window_minutes takes effect immediately.
+
+## Docker and Hardware Video Transcoding
+
+DPlaneOS ships Docker and docker-compose in the running system. Containers have full access to the host network and can mount ZFS datasets as volumes.
+
+### Intel hardware transcoding (Jellyfin, Plex, Handbrake)
+
+Intel VA-API hardware video transcoding is supported via `intel-media-driver` (iHD, for Gen 9-12 including Raptor Lake) and `intel-compute-runtime` (OpenCL). These are included in the running system by default:
+
+```nix
+hardware.graphics = {
+  enable        = true;
+  extraPackages = [ pkgs.intel-media-driver pkgs.intel-compute-runtime ];
+};
+```
+
+To use hardware transcoding in a Docker container, pass the render device:
+
+```yaml
+# docker-compose.yml (Jellyfin example)
+devices:
+  - /dev/dri/renderD128:/dev/dri/renderD128
+environment:
+  - LIBVA_DRIVER_NAME=iHD
+```
+
+**Verify VA-API is working on the host before configuring containers:**
+
+```bash
+nix-shell -p libva-utils --run "vainfo"
+# Should show iHD driver and VAEntrypointEncSlice / VAEntrypointVLD profiles
+```
+
+### Offline installs and hardware transcoding
+
+The installer ISO embeds the core DPlaneOS system for airgapped installation but excludes `intel-media-driver` and `intel-compute-runtime` to keep the ISO within a manageable size (~2 GB). These packages grew substantially in nixpkgs 26.05 (~400 MB combined).
+
+**On a system installed from ISO without internet access:**
+
+Hardware transcoding will not be available immediately after installation. To enable it once the system is on the network:
+
+```bash
+nixos-rebuild switch
+```
+
+This fetches the packages from `cache.nixos.org` and activates VA-API. All other NAS functionality (ZFS, SMB, NFS, iSCSI, NVMe-oF, HA, Docker) works immediately from an offline install.
+
+**On a system installed from ISO with internet access**, or on any system that was deployed via GitOps (not from ISO), the packages are present from the first boot.
+
+### GPU passthrough to VMs
+
+GPU passthrough (VFIO) to virtual machines or containers does not require `intel-media-driver` or `intel-compute-runtime` on the host. The host needs:
+
+- `kvm-intel` kernel module (included)
+- IOMMU enabled: add `intel_iommu=on iommu=pt` to `boot.kernelParams` in your NixOS configuration
+- The GPU bound to `vfio-pci` before the host driver claims it
+
+The guest VM installs its own GPU drivers. No special host-side GPU software is required beyond the VFIO kernel modules.
