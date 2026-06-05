@@ -1,6 +1,8 @@
+-- +goose Up
+
 -- SCRAM-SHA-512 credential storage (RFC 5802).
--- scram_stored_key = H(ClientKey)  – verifies client proof without knowing the password.
--- scram_server_key = HMAC(SaltedPassword, "Server Key") – proves server identity to client.
+-- scram_stored_key = H(ClientKey)  - verifies client proof without knowing the password.
+-- scram_server_key = HMAC(SaltedPassword, "Server Key") - proves server identity to client.
 -- scram_salt / scram_iterations are required to recompute the auth-message on the server side.
 -- bcrypt password_hash is kept for backward compatibility during the transition window;
 -- once all users have logged in and triggered SCRAM key derivation it will be cleared.
@@ -20,3 +22,14 @@ ALTER TABLE users
 
 ALTER TABLE ha_fencing_config
     ADD COLUMN IF NOT EXISTS disk_fault_tolerance_pct INTEGER NOT NULL DEFAULT 10;
+
+-- +goose Down
+
+ALTER TABLE users
+    DROP COLUMN IF EXISTS scram_salt,
+    DROP COLUMN IF EXISTS scram_iterations,
+    DROP COLUMN IF EXISTS scram_stored_key,
+    DROP COLUMN IF EXISTS scram_server_key;
+
+ALTER TABLE ha_fencing_config
+    DROP COLUMN IF EXISTS disk_fault_tolerance_pct;
