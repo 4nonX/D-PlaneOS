@@ -63,6 +63,15 @@ in {
   boot.zfs.package             = pkgs.zfs;
   boot.zfs.forceImportRoot     = false; # new default in 26.11; set explicitly to silence warning
 
+  # ── Disable GPU/graphics stack - NAS installer is always headless ─────────
+  # The NixOS minimal ISO profile enables hardware.graphics by default, which
+  # pulls intel-compute-runtime, intel-graphics-compiler, intel-media-driver,
+  # mesa, and related packages. None of these are needed for a server NAS
+  # installer that runs on a serial console or SSH. Disabling them removes
+  # ~400 MB from the x86_64 squashfs closure and keeps the ISO within the
+  # GitHub Actions runner disk limit.
+  hardware.graphics.enable     = lib.mkForce false;
+
   # Serial console support for headless/IPMI installs
   boot.kernelParams = [ "console=tty0" "console=ttyS0,115200n8" ];
 
