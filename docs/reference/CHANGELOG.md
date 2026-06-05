@@ -80,9 +80,24 @@ This release addresses the operational maturity gaps identified by the sysadmin,
 
 - **Third-party GitHub Actions pinned to SHA** (`.github/workflows/ci.yml`): `jlumbroso/free-disk-space`, `DeterminateSystems/magic-nix-cache-action`, and `wimpysworld/nothing-but-nix` pinned to specific commit SHAs. Mutable `@main` and `@v8` refs replaced.
 
+### Release-integrity improvements
+
+A pipeline review identified that the tarball binary (tested by all CI jobs) and the ISO binary (what users boot) were compiled by different paths: `CGO_ENABLED=0` subprocess-ZFS for the tarball, `CGO_ENABLED=1 -tags libzfs` for the Nix closure. Every integration test was exercising the wrong code path. The following changes close that gap and add the provenance and scanning the ISO was missing:
+
+- **CGO build parity**: `prepare` now installs `libzfs-dev` and builds a third binary `dplaned-linux-amd64-cgo` (`CGO_ENABLED=1 -tags libzfs`). All four test stages (`validate`, `convergence`, `storage-failure`, `integration`) run this binary, matching the code path that ships on the ISO. The CGO_ENABLED=0 binary remains for the distribution tarballs (portable, no libzfs runtime requirement).
+
+- **ARM64 behavioral coverage** (`arm64-api` job, `ubuntu-22.04-arm` runner): ARM64 was previously only sanity-checked with `--version` under QEMU. A new native arm64 job builds the daemon on the arm64 runner and runs the full REST API test suite. ZFS kernel-module tests are skipped via `SKIP_ZFS_TESTS=1` (module not available on the GitHub-hosted arm64 runner); auth, session, SCRAM, HA config, directory, and BMC endpoints are exercised natively.
+
+- **ISO signing and SBOM**: Both `iso` (amd64) and `iso-arm` (arm64) jobs now run `cosign sign-blob` and `syft scan` after packaging. The `.bundle` (cosign signature) and `.sbom.json` (SPDX) are attached to the GitHub Release. The ISO now has the same provenance chain as the release tarballs. A checksum alone is integrity; the signature is provenance.
+
+- **Vulnerability scanning** (`govulncheck`): Added to `prepare` after `go test`. Consumes the full dependency tree already enumerated in `go.sum`. Fails the build on known CVEs in direct or transitive Go dependencies. The project generates SBOMs and now also acts on them.
+
+- **Frontend lint** (`eslint`): Added `eslint@10` with `typescript-eslint` and `eslint-plugin-react-hooks@7`. `npm run lint` runs in `prepare` after `tsc --noEmit`. Eight real bugs fixed in the process: ternary expressions used as statements in toggle-set handlers (expressions whose return values were silently discarded), empty `catch {}` blocks, `Math.random()` called during render (moved to `useMemo`), a useless null initialisation in the WebSocket store, a `useState` declaration appearing after the `useEffect` that uses its setter, and a ternary used as a statement in an `onSuccess` callback. The safety UX (STONITH confirmation gate, FAILOVER confirmation, IQN deletion gate) is now covered by a lint rule that will catch regressions.
+
 ### Known gaps
 
-`flake.lock` is committed automatically by CI on each main-branch push. A committed `flake.lock` will be present in the repository from this release onward.
+- `flake.lock` is committed automatically by CI on each main-branch push. A committed `flake.lock` will be present in the repository from this release onward.
+- ARM64 ZFS integration tests (degraded-pool, interrupted-send, promotion mechanics) require a self-hosted arm64 runner with the ZFS kernel module loaded. The GitHub-hosted `ubuntu-22.04-arm` runner does not support it. The amd64 CGO path covers ZFS integration fully; the arm64 gap is infrastructure, not code.
 
 ---
 
