@@ -579,21 +579,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Free disk space (remove preinstalled bloat)
-        run: |
-          # GitHub-hosted ubuntu-22.04 runners ship ~20 GB of tools that the
-          # NixOS ISO build does not need. Remove them before Nix claims the disk.
-          # Order: largest first to fail fast if something goes wrong.
-          sudo rm -rf /usr/local/lib/android        # ~8 GB
-          sudo rm -rf /usr/share/dotnet             # ~2 GB
-          sudo rm -rf /opt/ghc                      # ~5 GB
-          sudo rm -rf /usr/local/share/boost        # ~1 GB
-          sudo rm -rf /opt/hostedtoolcache/CodeQL   # ~3 GB
-          sudo rm -rf /usr/local/share/chromium     # if present
-          sudo rm -rf /usr/share/swift              # if present
-          sudo docker image prune --all --force || true
-          # Report remaining space so we can track trends
-          df -h /
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
       - name: Reclaim disk space for Nix store
         uses: wimpysworld/nothing-but-nix@main
@@ -606,6 +601,12 @@ jobs:
             accept-flake-config = true
             extra-substituters = https://cache.nixos.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+
+      - name: Cache Nix store paths (magic-nix-cache)
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Report available disk space
+        run: df -h /
 
       - name: Verify VERSION matches tag (Tags only)
         id: version
@@ -665,15 +666,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Free disk space (remove preinstalled bloat)
-        run: |
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force || true
-          df -h /
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
       - name: Reclaim disk space for Nix store
         uses: wimpysworld/nothing-but-nix@main
@@ -686,6 +688,12 @@ jobs:
             accept-flake-config = true
             extra-substituters = https://cache.nixos.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+
+      - name: Cache Nix store paths (magic-nix-cache)
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Report available disk space
+        run: df -h /
 
       - name: Verify VERSION matches tag (Tags only)
         id: version
