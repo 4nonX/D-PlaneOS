@@ -227,7 +227,14 @@ func RequireAuth(next http.Handler) http.Handler {
 // RequireAAL2 wraps a handler and rejects requests whose session has not been
 // upgraded to AAL2 (password + TOTP). Apply this to routes where the operation
 // is irreversible or has elevated blast radius: user deletion, password reset,
-// pool destroy, fencing configuration, and API token management.
+// pool destroy, fencing configuration, and ALUA state flip.
+//
+// API token requests (Authorization: Bearer dpl_...) do not carry a session ID
+// and will receive HTTP 401 "authentication required". This is intentional policy:
+// irreversible operations with large blast radius require a human MFA-verified
+// session. Automation must not be able to destroy pools or reset passwords without
+// human involvement. If a specific route needs to be accessible by API tokens,
+// apply permRoute without RequireAAL2 and document the rationale.
 //
 // The response body contains action:"enable_totp" so the UI can prompt the user
 // to set up TOTP before retrying.

@@ -361,15 +361,23 @@ patronictl -c /etc/dplaneos/patroni.yaml switchover dplaneos --primary node-b --
 
 ### iSCSI ALUA and NVMe-oF ANA Path State Management
 
-For deployments with ALUA-enabled iSCSI targets or ANA-enabled NVMe-oF exports, the Keepalived `notify_backup` script performs path-state negotiation before pool export:
+For deployments with ALUA-enabled iSCSI targets or ANA-enabled NVMe-oF exports, the Keepalived `notify_backup` script performs path-state negotiation before pool export.
+
+**Daemon-up path (normal failover):**
 
 1. Keepalived detects role change to BACKUP.
-2. `notify_backup` calls `POST /api/ha/alua-standby`, which sets all ALUA-enabled iSCSI targets to Standby access state. Non-fatal if targetcli is unavailable.
-3. `notify_backup` calls `POST /api/ha/standby` to export ZFS pools (4-second deadline, self-reboot on timeout).
+2. `notify_backup` probes `GET /health` on the daemon socket (2-second timeout).
+3. If the daemon responds: calls `POST /api/ha/alua-standby` (ALUA targets to Standby), then `POST /api/ha/standby` (4-second pool export deadline, self-reboot on timeout).
 
-The sequence is critical: path state changes before pool export. This allows initiators to see a clean Standby state transition rather than an abrupt path loss when the VIP moves. Without this ordering, connected iSCSI clients experience I/O errors during failover.
+The path-state change before pool export allows initiators to see a clean Standby transition rather than an abrupt path loss. The NVMe-oF ANA write includes a 200ms propagation wait (configurable via `ANAPropagationDelay`) as a timing heuristic for AEN propagation. iSCSI ALUA changes are synchronous.
 
-The NVMe-oF ANA write includes a 200ms propagation wait (configurable via `ANAPropagationDelay`) to allow kernel AEN notifications to reach connected hosts before the primary relinquishes control. This is a timing heuristic, not a protocol confirmation. iSCSI ALUA state changes are synchronous.
+**Daemon-down path (daemon crashed or restarting):**
+
+If the daemon socket is unavailable, the `|| true` on the curl calls is required to avoid wedging Keepalived's state machine, but it means the daemon-mediated export and the ALUA standby both silently fail. Without intervention, the VIP moves to the peer while this node still holds the pools - split-brain.
+
+The `notify_backup` script therefore falls back to direct `zpool export` via the `zpool(8)` binary when the daemon health probe fails. This path has no ALUA pre-notification and no daemon-enforced 4-second deadline, but it prevents the node from holding imported pools after the VIP has moved. All actions are logged to syslog at `daemon.crit` level.
+
+**Residual risk:** If both the daemon-mediated export and the direct `zpool export` fail (e.g., pool I/O stuck in D-state), the node cannot yield its pools. In this case the SCSI-3 PR fencing held by `dplane-fenced` is the last defence: the peer's promotion will preempt this node's reservations and take ownership. `dplane-fenced` runs in a separate systemd slice specifically to survive daemon restarts and continue holding reservations until an explicit release.
 
 ### Adding a Disk to the Active Pool
 

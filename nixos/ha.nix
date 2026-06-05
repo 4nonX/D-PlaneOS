@@ -291,27 +291,61 @@ EOF
         trackScripts = [ "check_dplaneos" ];
         # notify_backup fires when this node loses the VRRP VIP (transitions
         # MASTER -> BACKUP). The sequence is:
-        #   1. Set all ALUA-enabled iSCSI targets to Standby so initiators see
-        #      a clean path-state change before the VIP moves. Non-fatal: if
-        #      targetcli is unavailable the endpoint returns success with
-        #      skipped=true and the failover continues.
-        #   2. Export ZFS pools within 4 seconds then yield. If the export times
-        #      out the daemon force-reboots itself (no sync before reboot) to
-        #      prevent split-brain data corruption.
+        #
+        #   Daemon-UP path (normal):
+        #   1. ALUA standby: move iSCSI targets to Standby so initiators see a
+        #      clean path-state change. Non-fatal if targetcli unavailable.
+        #   2. Daemon-mediated pool export (4s deadline). On timeout the daemon
+        #      force-reboots itself via syscall.Reboot to prevent split-brain.
+        #
+        #   Daemon-DOWN path (daemon restarting or crashed):
+        #   The || true on the curl calls is required: a non-zero curl exit would
+        #   wedge Keepalived's state machine. But || true means a down daemon is
+        #   silent and the daemon-mediated export never runs - split-brain risk.
+        #   The daemon-down path therefore falls back to direct zpool export via
+        #   the zpool(8) binary. This is less graceful (no ALUA standby, no 4s
+        #   deadline enforced by the daemon) but prevents the node from holding
+        #   pools after the VIP has moved. If zpool export also fails, the node
+        #   logs to syslog; the peer's SCSI-3 PR fencing will handle exclusion.
+        #
         # This mirrors TrueNAS's ZPOOL_EXPORT_TIMEOUT = 4s pattern.
         extraConfig = ''
           notify_backup "${pkgs.writeShellScript "vrrp-notify-backup" ''
             TOKEN=$(cat /var/lib/dplaneos/internal-token 2>/dev/null || true)
-            # Step 1: move iSCSI ALUA paths to Standby before yielding the VIP.
-            ${pkgs.curl}/bin/curl -sf -X POST \
-              --unix-socket /run/dplaneos/dplaned.sock \
-              -H "X-Internal-Token: $TOKEN" \
-              http://localhost/api/ha/alua-standby || true
-            # Step 2: export ZFS pools (4s deadline) then yield.
-            ${pkgs.curl}/bin/curl -sf -X POST \
-              --unix-socket /run/dplaneos/dplaned.sock \
-              -H "X-Internal-Token: $TOKEN" \
-              http://localhost/api/ha/standby || true
+
+            # Probe daemon. One attempt, 2s timeout, no retry.
+            DAEMON_UP=0
+            if ${pkgs.curl}/bin/curl -sf --max-time 2 \
+                --unix-socket /run/dplaneos/dplaned.sock \
+                http://localhost/health >/dev/null 2>&1; then
+              DAEMON_UP=1
+            fi
+
+            if [ "$DAEMON_UP" = "1" ]; then
+              # Daemon-UP path: ALUA standby then daemon-mediated pool export.
+              ${pkgs.curl}/bin/curl -sf --max-time 5 -X POST \
+                --unix-socket /run/dplaneos/dplaned.sock \
+                -H "X-Internal-Token: $TOKEN" \
+                http://localhost/api/ha/alua-standby || true
+              ${pkgs.curl}/bin/curl -sf --max-time 10 -X POST \
+                --unix-socket /run/dplaneos/dplaned.sock \
+                -H "X-Internal-Token: $TOKEN" \
+                http://localhost/api/ha/standby || true
+            else
+              # Daemon-DOWN path: export pools directly to prevent split-brain.
+              # The daemon is unavailable so its 4s timeout and self-reboot logic
+              # will not fire. Export directly and log loudly.
+              logger -t dplaneos-ha -p daemon.crit \
+                "STONITH: daemon unreachable during notify_backup - exporting ZFS pools directly"
+              for pool in $(${pkgs.zfs}/bin/zpool list -H -o name 2>/dev/null); do
+                if ${pkgs.zfs}/bin/zpool export "$pool" 2>/dev/null; then
+                  logger -t dplaneos-ha "STONITH: exported pool $pool (direct path)"
+                else
+                  logger -t dplaneos-ha -p daemon.crit \
+                    "STONITH: failed to export pool $pool - peer fencing required"
+                fi
+              done
+            fi
           ''}"
         '' + lib.optionalString (cfg.vrrpPassword != null) ''
           authentication {
