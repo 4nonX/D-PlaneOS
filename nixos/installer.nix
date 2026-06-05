@@ -56,7 +56,9 @@ in {
   ];
 
   # ── Kernel - match appliance pin exactly ──────────────────────────────────
-  boot.kernelPackages          = pkgs.linuxPackages_6_6;
+  # Must stay in sync with applianceConfig in flake.nix. A mismatch causes
+  # both kernels to appear in the squashfs, adding ~600 MB to the ISO.
+  boot.kernelPackages          = pkgs.linuxPackages_6_12;
   boot.supportedFilesystems    = [ "zfs" "vfat" "ext4" ];
   boot.zfs.package             = pkgs.zfs;
   boot.zfs.forceImportRoot     = false; # new default in 26.11; set explicitly to silence warning
