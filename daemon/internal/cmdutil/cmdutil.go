@@ -27,11 +27,13 @@ const (
 // If the command exceeds the timeout, it is killed and an error is returned.
 // A timeout of 0 means no timeout (use with caution).
 func Run(timeout time.Duration, name string, args ...string) ([]byte, error) {
-	return runInternal(context.Background(), timeout, name, args...)
+	return runInternal(context.Background(), timeout, false, name, args...)
 }
 
 // runInternal handles the core command execution with security validation.
-func runInternal(ctx context.Context, timeout time.Duration, name string, args ...string) ([]byte, error) {
+// trusted=true suppresses the governed-binary warning for paths that construct
+// arguments from validated state rather than raw user input (e.g. RunZFS).
+func runInternal(ctx context.Context, timeout time.Duration, trusted bool, name string, args ...string) ([]byte, error) {
 	// 1. Mandatory Security Whitelist Routing (Finding 23)
 	if cmd, exists := security.CommandWhitelist[name]; exists {
 		if err := security.ValidateCommand(name, args); err != nil {
@@ -39,8 +41,10 @@ func runInternal(ctx context.Context, timeout time.Duration, name string, args .
 		}
 		// Rewrite the name to the absolute binary path from the whitelist
 		name = cmd.Path
-	} else {
-		// Safety check for governed binaries
+	} else if !trusted {
+		// Warn when a governed binary is called without whitelist validation.
+		// trusted=true means the caller (RunZFS) guarantees arguments come from
+		// validated state - pool/dataset names parsed from state.yaml, not raw input.
 		governed := map[string]bool{"zfs": true, "zpool": true, "systemctl": true, "ipmitool": true, "docker": true}
 		if governed[name] {
 			log.Printf("SECURITY WARNING: Binary '%s' invoked directly via cmdutil without a whitelist KEY. This bypasses structural validation.", name)
@@ -124,8 +128,14 @@ func RunMedium(name string, args ...string) ([]byte, error) {
 // RunZFS executes a ZFS/zpool command with TimeoutZFS (2min).
 // Use for: zfs list, zpool status, zfs get - commands that may hang on bad disks.
 // For long-running operations (scrub, send/receive), use RunSlow.
+//
+// RunZFS bypasses the governed-binary warning because ZFS subcommand+argument
+// combinations are too varied to enumerate in a static whitelist. Callers MUST
+// construct arguments from validated state (pool names, dataset paths, property
+// names from parsed state.yaml or API-validated inputs) - never from raw strings
+// provided by external clients.
 func RunZFS(name string, args ...string) ([]byte, error) {
-	return Run(TimeoutZFS, name, args...)
+	return runInternal(context.Background(), TimeoutZFS, true, name, args...)
 }
 
 // RunSlow executes a command with TimeoutSlow (5min).
