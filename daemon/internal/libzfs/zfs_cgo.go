@@ -398,6 +398,12 @@ func DatasetGet(dataset, prop string) (string, error) {
 
 // DatasetSet sets a ZFS property on a dataset.
 func DatasetSet(dataset, prop, value string) error {
+	// Mirror the fault injection that cmdutil.RunZFS provides for the subprocess
+	// path. Without this, DPLANE_FAULT_INJECT=zfs:set=N has no effect on the
+	// CGO build because libzfs calls bypass cmdutil entirely.
+	if err := cmdutil.CheckFaultForCI("zfs", "set"); err != nil {
+		return err
+	}
 	cDataset := C.CString(dataset)
 	defer C.free(unsafe.Pointer(cDataset))
 	cProp := C.CString(prop)
@@ -488,6 +494,9 @@ func PoolClear(pool string) error {
 
 // PoolSetProperty sets a pool-level property.
 func PoolSetProperty(pool, key, value string) error {
+	if err := cmdutil.CheckFaultForCI("zpool", "set"); err != nil {
+		return err
+	}
 	cPool := C.CString(pool)
 	defer C.free(unsafe.Pointer(cPool))
 	cKey := C.CString(key)

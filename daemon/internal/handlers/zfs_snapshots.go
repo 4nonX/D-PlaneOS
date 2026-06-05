@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -208,6 +209,15 @@ func (h *ZFSSnapshotHandler) RollbackSnapshot(w http.ResponseWriter, r *http.Req
 			"error":   fmt.Sprintf("Failed to rollback: %v", err),
 		})
 		return
+	}
+
+	// Ensure the dataset is mounted after rollback. ZFS unmounts the dataset
+	// during rollback and NixOS's ZFS systemd integration remounts it; issuing
+	// an explicit mount is safe (no-op if already mounted) and makes the
+	// post-rollback state deterministic regardless of OS automount behaviour.
+	dataset := req.Snapshot[:strings.IndexByte(req.Snapshot, '@')]
+	if _, mountErr := executeCommand("zfs", []string{"mount", dataset}); mountErr != nil {
+		log.Printf("RollbackSnapshot: zfs mount %s after rollback: %v (may already be mounted)", dataset, mountErr)
 	}
 
 	respondOK(w, map[string]any{

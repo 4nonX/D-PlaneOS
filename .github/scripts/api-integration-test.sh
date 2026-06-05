@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e  # fail fast during setup; turned off before the test suite begins
 
+# Ensure ZFS tools are on the PATH when invoked via sudo.
+# On Ubuntu the ZFS binaries live in /usr/sbin which is not always included
+# in the secure_path used by sudo when it is invoked without a full path.
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
 # --- SETUP ---
 echo "--- Setting up ZFS loopbacks ---"
 sudo truncate -s 512M /tmp/vdisk0.img
@@ -275,9 +280,6 @@ assert_array "List snapshots returns array" "snapshots"
 # Rollback
 api POST /api/zfs/snapshots/rollback "{\"snapshot\":\"testpool/api-test@ci-snap-1\",\"force\":true}" >/dev/null
 assert_json "Rollback snapshot" "success" "true"
-# force=true rollback unmounts the dataset during the operation; remount so
-# subsequent ACL and NFS tests can reach the mountpoint.
-sudo zfs mount testpool/api-test 2>/dev/null || true
 
 # Health & Iostat
 api GET /api/zfs/health >/dev/null

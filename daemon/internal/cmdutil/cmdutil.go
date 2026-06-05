@@ -74,6 +74,18 @@ func runInternal(ctx context.Context, timeout time.Duration, trusted bool, name 
 	return output, err
 }
 
+// CheckFaultForCI checks DPLANE_FAULT_INJECT and returns an error if the
+// operation should be faulted. Used by libzfs CGO wrappers which call C
+// library functions directly and therefore bypass the subprocess path where
+// fault injection normally fires. This ensures DPLANE_FAULT_INJECT works
+// identically for both the CGO and subprocess builds in CI.
+func CheckFaultForCI(name string, args ...string) error {
+	if os.Getenv("DPLANE_FAULT_INJECT") == "" {
+		return nil
+	}
+	return checkForFault(name, args...)
+}
+
 // checkForFault parses DPLANE_FAULT_INJECT environment variable.
 // Format: cmd:subcmd=prob;cmd=prob
 // Example: zfs:set=1.0;docker=0.5
