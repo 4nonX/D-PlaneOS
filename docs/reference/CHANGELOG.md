@@ -22,7 +22,7 @@ This release addresses the operational maturity gaps identified by the sysadmin,
 
 - **Persist-health-check console output**: When the `/persist` partition is not mounted at boot, the health check now writes the failure reason and recovery URL to `/dev/console` (in addition to syslog) before halting. Operators with IPMI SOL or serial console access see the reason immediately rather than a silent black screen.
 
-- **`INTEGRATION-GUIDE.md` (`docs/admin/`)**: Honest documentation covering Prometheus scrape config and the full metrics table, the AD/Winbind gap (explicitly states the limitation and recommends TrueNAS SCALE for AD-integrated SMB deployments until Winbind support is added), SMB reconnect-on-failover behavior, NVMe-oF client setup, iSCSI ALUA HA configuration, GitOps/CI automation, and the HA timing API. No overclaiming.
+- **`INTEGRATION-GUIDE.md` (`docs/admin/`)**: Honest documentation covering Prometheus scrape config and the full metrics table, SMB reconnect-on-failover behavior, NVMe-oF client setup, iSCSI ALUA HA configuration, GitOps/CI automation, the HA timing API, Docker hardware video transcoding (VA-API setup, device passthrough for Jellyfin/Plex, GPU passthrough via VFIO), and the offline install note for Intel GPU packages. See "Known behaviour" below for the transcoding and offline install detail.
 
 ### Changed
 
@@ -62,9 +62,27 @@ This release addresses the operational maturity gaps identified by the sysadmin,
 
   `nixos/module.nix`: added `pkgs.dmidecode` (hardware identity) and `pkgs.lm_sensors` (local sensor fallback). Migration 00009 adds `bmc_tls_fingerprint`, `bmc_tls_pinned_at`, and `bmc_protocol` columns to `ha_fencing_config`.
 
-### Known gaps - not closed in this release
+### Security fixes
 
-`flake.lock` is still absent from the repository. Run `nix flake lock && git add flake.lock` in a Nix environment to satisfy the reproducibility guarantee stated in the flake comment.
+- **BMC TLS pinning bypass closed (`daemon/internal/bmc/client.go`, `daemon/internal/bmc/detect.go`)**: The initial BMC Redfish implementation fell through from a failed pinned connection to an unpinned probe that sent BasicAuth credentials over an unverified TLS channel. Fixed: if a certificate fingerprint is enrolled, a failed pinned connection returns an error immediately - no retry on an unverified channel. Detection probes (`probeRedfishUnauthenticated`, `probeILO4Unauthenticated`) no longer send credentials; the Redfish and iLO 4 service roots return metadata without authentication per spec.
+
+### Known behaviour
+
+- **Intel hardware video transcoding on offline installs**: The installer ISO excludes `intel-media-driver` (~100 MB, VA-API) and `intel-compute-runtime` (~300 MB, OpenCL) to keep the ISO within a manageable size. These packages were present in ISOs through v12.5.1 but grew significantly in nixpkgs 26.05. Systems installed from ISO without internet access will not have VA-API hardware transcoding until `nixos-rebuild` is run once the system is online. Systems deployed via GitOps or installed with internet access are unaffected. GPU passthrough (VFIO to VMs/containers) is not affected - it does not use these host-side packages. See `INTEGRATION-GUIDE.md` for setup instructions.
+
+### CI / build fixes
+
+- **Installer kernel pinned to 6.12 LTS** (`nixos/installer.nix`): The installer environment was still using `linuxPackages_6_6` after the appliance was bumped to 6.12. The mismatch caused both kernel versions to appear in the squashfs simultaneously, adding ~600 MB to the ISO. Fixed by syncing the installer kernel with `applianceConfig`.
+
+- **`dplaneos-for-iso` target introduced** (`flake.nix`): The ISO now embeds a `dplaneos-for-iso` closure identical to `dplaneos` except `hardware.graphics.extraPackages` is stripped. This keeps the x86_64 ISO under the GitHub Actions runner disk limit while the running system retains the full Intel GPU stack. CPU microcode updates (security mitigations) are intentionally not stripped.
+
+- **`flake.lock` auto-generated in CI** (`.github/workflows/ci.yml`): The `ha-vm-cluster` job now runs `nix flake lock`, commits the result back to main with `[skip ci]`, and uploads it as an artifact. Both ISO jobs download the artifact before building, ensuring all jobs in a run use the same nixpkgs revision. This closes the known gap documented since v12.5.1 where each CI job independently resolved nixpkgs HEAD and could silently pull in different package versions.
+
+- **Third-party GitHub Actions pinned to SHA** (`.github/workflows/ci.yml`): `jlumbroso/free-disk-space`, `DeterminateSystems/magic-nix-cache-action`, and `wimpysworld/nothing-but-nix` pinned to specific commit SHAs. Mutable `@main` and `@v8` refs replaced.
+
+### Known gaps
+
+`flake.lock` is committed automatically by CI on each main-branch push. A committed `flake.lock` will be present in the repository from this release onward.
 
 ---
 
