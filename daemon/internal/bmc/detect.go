@@ -10,18 +10,20 @@ import (
 	"time"
 )
 
-// probeRedfish attempts to connect to the Redfish service root using a
-// capture-mode client (TOFU first contact). Returns Info on success.
-func probeRedfish(ctx context.Context, creds Credentials) (Info, error) {
+// probeRedfishUnauthenticated probes the Redfish service root WITHOUT sending
+// credentials. The service root (/redfish/v1/) does not require authentication
+// per the Redfish specification - it contains only version and link metadata.
+// Credentials must never be transmitted over an unverified (unpinned) connection.
+func probeRedfishUnauthenticated(ctx context.Context, host string) (Info, error) {
 	fpCh := make(chan string, 1)
 	client := httpClientCapture(fpCh, 8)
 
-	url := fmt.Sprintf("https://%s/redfish/v1/", creds.Host)
+	url := fmt.Sprintf("https://%s/redfish/v1/", host)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Info{}, err
 	}
-	req.SetBasicAuth(creds.Username, creds.Password)
+	// No BasicAuth - credentials are never sent over an unverified connection.
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
@@ -50,10 +52,10 @@ func probeRedfish(ctx context.Context, creds Credentials) (Info, error) {
 		} `json:"Oem"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&root); err != nil {
-		return Info{Protocol: ProtocolRedfish, Hostname: creds.Host, ReachableAt: time.Now()}, nil
+		return Info{Protocol: ProtocolRedfish, Hostname: host, ReachableAt: time.Now()}, nil
 	}
 
-	info := Info{Protocol: ProtocolRedfish, Hostname: creds.Host, ReachableAt: time.Now()}
+	info := Info{Protocol: ProtocolRedfish, Hostname: host, ReachableAt: time.Now()}
 	product := strings.ToLower(root.Product + root.Vendor)
 	switch {
 	case strings.Contains(product, "ilo") || len(root.Oem.Hpe.Manager) > 0:
@@ -75,20 +77,19 @@ func probeRedfish(ctx context.Context, creds Credentials) (Info, error) {
 	return info, nil
 }
 
-// probeILO4 attempts to connect to the iLO 4 legacy REST API.
-// iLO 4 uses /rest/v1/ instead of /redfish/v1/ and a "Type" field
-// starting with "ServiceRoot." to identify itself.
-func probeILO4(ctx context.Context, creds Credentials) (Info, error) {
-	// iLO 4 uses a self-signed cert; use capture client since it's legacy HW
+// probeILO4Unauthenticated attempts to connect to the iLO 4 legacy REST root
+// WITHOUT sending credentials. The iLO 4 service root (/rest/v1/) returns
+// its Type field without requiring authentication.
+func probeILO4Unauthenticated(ctx context.Context, host string) (Info, error) {
 	fpCh := make(chan string, 1)
 	client := httpClientCapture(fpCh, 8)
 
-	url := fmt.Sprintf("https://%s/rest/v1/", creds.Host)
+	url := fmt.Sprintf("https://%s/rest/v1/", host)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Info{}, err
 	}
-	req.SetBasicAuth(creds.Username, creds.Password)
+	// No BasicAuth - detection probe only, no credentials over unverified channel.
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
@@ -118,7 +119,7 @@ func probeILO4(ctx context.Context, creds Credentials) (Info, error) {
 		Protocol:    ProtocolILO4,
 		Vendor:      "HPE",
 		Model:       "iLO 4",
-		Hostname:    creds.Host,
+		Hostname:    host,
 		ReachableAt: time.Now(),
 	}
 	if len(root.Oem.Hp.Manager) > 0 {
