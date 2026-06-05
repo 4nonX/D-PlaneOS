@@ -79,11 +79,20 @@ func runInternal(ctx context.Context, timeout time.Duration, trusted bool, name 
 // library functions directly and therefore bypass the subprocess path where
 // fault injection normally fires. This ensures DPLANE_FAULT_INJECT works
 // identically for both the CGO and subprocess builds in CI.
+//
+// The "SIMULATED FAULT:" prefix is printed to stderr to match the subprocess
+// fault path output, allowing convergence test scripts to grep for it.
 func CheckFaultForCI(name string, args ...string) error {
 	if os.Getenv("DPLANE_FAULT_INJECT") == "" {
 		return nil
 	}
-	return checkForFault(name, args...)
+	err := checkForFault(name, args...)
+	if err == nil {
+		return nil
+	}
+	msg := "SIMULATED FAULT: " + err.Error()
+	log.Print(msg)
+	return fmt.Errorf("%s", msg)
 }
 
 // checkForFault parses DPLANE_FAULT_INJECT environment variable.
