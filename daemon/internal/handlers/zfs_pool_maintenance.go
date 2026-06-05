@@ -93,7 +93,7 @@ func poolDependencyCheck(db *sql.DB, poolName string) ([]string, error) {
 func (h *ZFSHandler) HandlePoolDestroy(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name  string `json:"name"`
-		Force bool   `json:"force"` // must be explicitly true to bypass dependency check
+		Force bool   `json:"force"` // reserved for future use; dependency check always runs
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
@@ -105,15 +105,17 @@ func (h *ZFSHandler) HandlePoolDestroy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Dependency check: refuse to destroy a pool that has active mounts or shares.
-	// force=true bypasses this - it is the caller's responsibility to have stopped
-	// all services first. The confirmRoute wrapper ensures the operator typed the
-	// pool name before the request even reaches here.
-	if !req.Force {
+	// Runs regardless of force=true. Pool destroy is irreversible; active services
+	// must be stopped before destruction even when the operator explicitly requests
+	// force. This matches ExportPool's behaviour and the documented guarantee that
+	// force does not silently bypass dependency validation. The confirmRoute wrapper
+	// already ensures the operator typed the pool name before reaching here.
+	{
 		deps, err := poolDependencyCheck(h.db, req.Name)
 		if err == nil && len(deps) > 0 {
 			respondJSON(w, http.StatusConflict, map[string]any{
 				"success":      false,
-				"error":        "pool has active dependencies; stop all shares and services first, or use force=true",
+				"error":        "pool has active dependencies; stop all shares and services first before destroying",
 				"dependencies": deps,
 			})
 			return
