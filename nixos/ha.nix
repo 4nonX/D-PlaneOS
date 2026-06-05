@@ -344,16 +344,16 @@ EOF
               # Set all ALUA-enabled iSCSI targets to Standby so initiators see a
               # clean path-state change instead of an abrupt loss.
               # Non-fatal: not all deployments use iSCSI ALUA.
-              for iqn in $(${pkgs.targetcli}/bin/targetcli /iscsi ls 2>/dev/null \
+              for iqn in $(${pkgs.targetcli-fb}/bin/targetcli /iscsi ls 2>/dev/null \
                            | grep -oE 'iqn\.[^ ]+' 2>/dev/null); do
-                ${pkgs.targetcli}/bin/targetcli "/iscsi/$iqn/tpg1" \
+                ${pkgs.targetcli-fb}/bin/targetcli "/iscsi/$iqn/tpg1" \
                   set attribute alua_support=1 2>/dev/null || true
-                ${pkgs.targetcli}/bin/targetcli \
+                ${pkgs.targetcli-fb}/bin/targetcli \
                   "/iscsi/$iqn/tpg1/alua/default_tg_pt_gp" \
                   set alua_access_state=2 2>/dev/null || true
                 logger -t dplaneos-ha "STONITH: set ALUA Standby on $iqn (direct path)"
               done
-              ${pkgs.targetcli}/bin/targetcli / saveconfig 2>/dev/null || true
+              ${pkgs.targetcli-fb}/bin/targetcli / saveconfig 2>/dev/null || true
 
               # Step 2 (mirrors BecomeStandby / exportAllPools):
               # Export each pool with the same 4-second per-pool deadline as
