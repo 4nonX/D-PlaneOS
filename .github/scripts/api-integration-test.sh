@@ -513,16 +513,23 @@ assert_json "Auth check after logout fails" "authenticated" "false"
 echo "::endgroup::"
 
 # --- SUMMARY ---
+# Print failures outside any ::group:: so they are always visible in the
+# GitHub Actions log, even when the Results group is collapsed.
+if [ "$FAIL" -gt 0 ]; then
+  echo ""
+  echo "=========================================="
+  echo "  FAILED TESTS:"
+  echo -e "$FAILURES"
+  echo "=========================================="
+fi
+
 echo "::group::Results"
 echo ""
 echo "=========================================="
 printf "  Results: %d passed   %d failed\n" "$PASS" "$FAIL"
 echo "=========================================="
+echo "::endgroup::"
 
 if [ "$FAIL" -gt 0 ]; then
-  echo "Failures:"
-  echo -e "$FAILURES"
-  echo "::endgroup::"
   exit 1
 fi
-echo "::endgroup::"
