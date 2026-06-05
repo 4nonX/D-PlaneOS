@@ -881,6 +881,20 @@ func (h *LDAPHandler) JoinDomain(w http.ResponseWriter, r *http.Request) {
 	jobID := jobs.Start("ad_join", func(j *jobs.Job) {
 		j.Log("Starting AD join for domain " + name + " (" + realm + ")")
 
+		// DNS SRV pre-validation: verify the DC is reachable before attempting
+		// kinit. A failed DNS lookup here gives a clear error ("DC not found in
+		// DNS") rather than a cryptic kinit timeout 30 seconds later.
+		for _, srvRecord := range []string{"_kerberos._tcp." + realm, "_ldap._tcp." + realm} {
+			hostArgs := []string{"-t", "SRV", srvRecord}
+			out, err := executeCommandWithTimeout(TimeoutFast, "host", hostArgs)
+			if err != nil || strings.Contains(strings.ToLower(out), "not found") || strings.Contains(strings.ToLower(out), "nxdomain") {
+				j.Fail(fmt.Sprintf("DNS SRV lookup failed for %s - cannot reach domain controllers for realm %s. "+
+					"Check that the NAS is using the AD DNS server and that the realm FQDN is correct.", srvRecord, realm))
+				return
+			}
+		}
+		j.Log("DNS SRV records found for " + realm)
+
 		principal := username + "@" + realm
 
 		// Step 1: kinit to get a TGT for the join operation.
@@ -997,6 +1011,82 @@ func (h *LDAPHandler) LeaveDomain(w http.ResponseWriter, r *http.Request) {
 	})
 
 	respondJSON(w, http.StatusAccepted, map[string]any{"job_id": jobID})
+}
+
+// ============================================================
+// GET /api/ldap/domains/:name/status
+// ============================================================
+// WinbindStatus returns live winbind health for a joined domain:
+// trust check (wbinfo -t), DC reachability (wbinfo --online-status),
+// and sample user/group lists to verify NSS resolution is working.
+func (h *LDAPHandler) WinbindStatus(w http.ResponseWriter, r *http.Request) {
+	name := strings.ToUpper(strings.TrimSpace(mux.Vars(r)["name"]))
+	if !domainNameRe.MatchString(name) {
+		respondErrorSimple(w, "Invalid domain name", http.StatusBadRequest)
+		return
+	}
+	var joined bool
+	if err := h.db.QueryRow(`SELECT domain_joined FROM ad_domains WHERE name=$1`, name).Scan(&joined); err != nil {
+		respondErrorSimple(w, "Domain not found", http.StatusNotFound)
+		return
+	}
+	if !joined {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"joined":  false,
+			"message": "Domain is registered but not joined. Use POST /api/ldap/domains/" + name + "/join first.",
+		})
+		return
+	}
+
+	result := map[string]any{"joined": true, "domain": name}
+
+	// wbinfo -p: ping winbind daemon
+	if pingOut, err := executeCommandWithTimeout(TimeoutFast, "wbinfo", []string{"-p"}); err == nil {
+		result["winbind_ping"] = strings.TrimSpace(pingOut)
+	} else {
+		result["winbind_ping_error"] = "winbind daemon not responding: " + err.Error()
+	}
+
+	// wbinfo -t: machine account trust check
+	if trustOut, err := executeCommandWithTimeout(30*time.Second, "wbinfo", []string{"-t"}); err == nil {
+		result["trust_check"] = strings.TrimSpace(trustOut)
+		result["trust_ok"] = true
+	} else {
+		result["trust_check_error"] = "Trust check failed (wbinfo -t): " + err.Error()
+		result["trust_ok"] = false
+	}
+
+	// wbinfo --online-status: DC reachability
+	if onlineOut, err := executeCommandWithTimeout(TimeoutFast, "wbinfo", []string{"--online-status"}); err == nil {
+		result["online_status"] = strings.TrimSpace(onlineOut)
+	} else {
+		result["online_status_error"] = err.Error()
+	}
+
+	// Sample users (first 10) - verifies NSS resolution is working
+	if usersOut, err := executeCommandWithTimeout(TimeoutFast, "wbinfo", []string{"-u"}); err == nil {
+		lines := strings.Split(strings.TrimSpace(usersOut), "\n")
+		if len(lines) > 10 {
+			lines = lines[:10]
+		}
+		result["sample_users"] = lines
+		result["user_count_note"] = "showing first 10 of " + fmt.Sprintf("%d", len(strings.Split(strings.TrimSpace(usersOut), "\n"))) + " users"
+	} else {
+		result["sample_users_error"] = "wbinfo -u failed: " + err.Error() + " (check winbind is running)"
+	}
+
+	// Sample groups (first 10)
+	if groupsOut, err := executeCommandWithTimeout(TimeoutFast, "wbinfo", []string{"-g"}); err == nil {
+		lines := strings.Split(strings.TrimSpace(groupsOut), "\n")
+		if len(lines) > 10 {
+			lines = lines[:10]
+		}
+		result["sample_groups"] = lines
+	} else {
+		result["sample_groups_error"] = "wbinfo -g failed: " + err.Error()
+	}
+
+	respondJSON(w, http.StatusOK, result)
 }
 
 // syncIDMAPToNixwriter reads all enabled ad_domains and updates the nixwriter

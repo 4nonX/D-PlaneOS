@@ -306,6 +306,17 @@ in {
     # smbd when securityMode = "ads". There is no separate services.winbind
     # NixOS module in nixpkgs 25.11 - do not reference it.
 
+    # ── NSS integration for AD user/group name resolution ─────────────────────
+    # Without this, tools like `ls -l`, `id`, `stat`, and file ACL display show
+    # numeric UIDs for AD users. `system.nssModules` ensures libnss_winbind.so
+    # is available; `system.nssDatabases` appends "winbind" to passwd and group
+    # in /etc/nsswitch.conf so NSS lookups resolve AD identities.
+    system.nssModules = lib.optional (cfg.securityMode == "ads") pkgs.samba;
+    system.nssDatabases = lib.mkIf (cfg.securityMode == "ads") {
+      passwd = lib.mkAfter [ "winbind" ];
+      group  = lib.mkAfter [ "winbind" ];
+    };
+
     # ── Kerberos ──────────────────────────────────────────────────────────────
     security.krb5 = lib.mkIf (cfg.securityMode == "ads" && cfg.realm != null) {
       enable = true;

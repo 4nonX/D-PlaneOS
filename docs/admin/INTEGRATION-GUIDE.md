@@ -53,27 +53,81 @@ There is no native SNMP MIB. For environments that require SNMP, use `snmp_expor
 
 ## Active Directory / Windows Domain
 
-**Current state:** LDAP authentication works. Winbind, NSS integration, and CTDB do not exist.
+DPlaneOS supports full Active Directory domain membership with winbind, Kerberos, and NSS integration. The implementation covers:
 
-### What works
+- Samba in ADS security mode with machine account
+- Kerberos TGT acquisition and background ticket renewal
+- Winbind for SID-to-UID/GID mapping (multi-forest with configurable IDMAP backends)
+- NSS integration so `ls -l`, `id`, `stat`, and SMB ACL display resolve AD names
+- Per-forest IDMAP range configuration (RID, AD, TDB, or autorid backends)
 
-- Users and groups can be sourced from an LDAP/Active Directory server
-- Authentication uses LDAP bind (password verification against AD)
-- Group memberships are cached locally with configurable TTL
-- SCRAM-SHA-512 is used for all local auth; LDAP users authenticate via LDAP bind
+### Joining a Domain
 
-### What does not work
+**Via UI:** Directory Services -> Active Directory -> Add Domain -> Join
 
-- **NSS integration**: Linux system tools (`ls -l`, `stat`, `id`) will show numeric UIDs for AD users rather than display names. There is no `/etc/nss_ldap.conf` or `libnss_ldap.so` wired in.
-- **SMB with AD-integrated ACLs**: Samba can be configured with LDAP backend but there is no winbind daemon, so Samba cannot resolve AD SIDs to local accounts for ACL enforcement.
-- **Kerberos**: No Kerberos keytab, no `kinit`, no ticket-based authentication.
-- **CTDB**: No distributed Samba state for HA SMB. SMB clients reconnect after failover; byte-range lock state is lost.
+1. Register the domain: provide the realm (FQDN, uppercase, e.g. `CORP.EXAMPLE.COM`), NetBIOS workgroup, and a domain controller address.
+2. Click Join. Provide an AD admin username and password. The join flow:
+   - Validates DNS SRV records (`_kerberos._tcp.REALM`, `_ldap._tcp.REALM`) to confirm the DC is reachable
+   - Runs `kinit <admin>@REALM` via stdin (password never appears in process args)
+   - Runs `net ads join -k` (Kerberos-authenticated)
+   - Updates the NixOS config to enable ADS security mode, configure IDMAP, and activate winbind + NSS
+   - Starts background Kerberos ticket renewal (every 15 minutes)
 
-### Recommended approach for AD environments
+**Via API:**
+```
+POST /api/ldap/domains
+{ "name": "CORP", "realm": "CORP.EXAMPLE.COM", "server": "dc1.corp.example.com",
+  "idmap_backend": "rid", "idmap_low": 10000, "idmap_high": 999999 }
 
-Use NFSv4 with sec=krb5 for Linux clients (requires a separate Kerberos realm setup outside DPlaneOS). For Windows clients accessing file shares, use local users with SMB authentication; map AD group membership to DPlaneOS roles via the LDAP group mapping feature.
+POST /api/ldap/domains/CORP/join
+{ "username": "Administrator", "password": "..." }
+```
 
-If AD-integrated SMB with proper ACLs is a hard requirement for your deployment, consider continuing on TrueNAS SCALE (which ships winbind and Samba with AD integration) until Winbind support is added to DPlaneOS.
+### Verifying the Join
+
+```
+GET /api/ldap/domains/CORP/status
+```
+
+Returns: winbind daemon ping, machine account trust check (`wbinfo -t`), DC online status, and sample AD users and groups. If trust_ok is true and sample_users is populated, NSS resolution is working.
+
+**On the NAS via SSH:**
+```bash
+wbinfo -t                    # machine account trust check
+wbinfo -u | head -10         # list AD users
+id CORP\\username             # verify UID/GID resolution
+getent passwd CORP\\username  # verify NSS lookup
+```
+
+### IDMAP Configuration
+
+Each AD forest needs an IDMAP backend and UID/GID range. The RID backend is the recommended default for single-forest setups (maps RIDs to UIDs predictably across reboots). For multi-forest or when RID-based mapping is not suitable, use the AD backend (requires RFC2307 attributes in AD) or autorid.
+
+| Backend | Use case |
+|---------|----------|
+| `rid` | Single forest, most deployments |
+| `ad` | Forest with RFC2307 Unix attributes in AD |
+| `autorid` | Multiple forests, non-overlapping ranges managed automatically |
+| `tdb` | Catch-all / fallback for unmapped SIDs |
+
+### SMB with AD ACLs
+
+Once the domain is joined and winbind is running, Samba shares use AD SIDs for file ACLs. Windows clients see domain users and groups in the ACL editor. NFSv4 clients on Linux see resolved usernames in `ls -l` output via the NSS winbind integration.
+
+### Known limitations
+
+- **CTDB**: In HA configurations, Samba state is not distributed. SMB clients disconnect and reconnect on failover. Byte-range lock state is lost. This is the same behavior as TrueNAS active-passive HA.
+- **Backup DC**: Only one domain controller is stored per domain. Add a secondary DC to your DNS SRV records for automatic failover at the DNS level.
+- **Home directory creation**: No automatic home directory creation on first login (`pam_mkhomedir`). Users need home directories created manually or via the Dataset UI.
+
+### Leaving a Domain
+
+```
+POST /api/ldap/domains/CORP/leave
+{ "username": "Administrator", "password": "..." }
+```
+
+Runs `net ads leave -k` and clears the join state. The NixOS config reverts Samba to `user` security mode on next rebuild.
 
 ---
 

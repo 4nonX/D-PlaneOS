@@ -125,7 +125,9 @@ in {
       pkgs.nginx
       pkgs.nfs-utils
       pkgs.smartmontools
-      pkgs.ipmitool
+      pkgs.ipmitool          # IPMI LAN+ for STONITH fencing and sensor monitoring
+      pkgs.dmidecode         # hardware identity (vendor, model, serial) on x86
+      pkgs.lm_sensors        # optional: local sensor fallback if BMC unavailable
       pkgs.pv
       pkgs.rclone
       pkgs.fuse3        # fusermount3 for rclone cold tier FUSE mounts

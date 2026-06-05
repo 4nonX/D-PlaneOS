@@ -427,6 +427,30 @@ var CommandWhitelist = map[string]Command{
 		AllowedArgs: []string{"-t"},
 		Description: "Test machine account trust",
 	},
+	"wbinfo_users": {
+		Name:        "wbinfo_users",
+		Path:        "wbinfo",
+		AllowedArgs: []string{"-u"},
+		Description: "List AD users visible to winbind",
+	},
+	"wbinfo_groups": {
+		Name:        "wbinfo_groups",
+		Path:        "wbinfo",
+		AllowedArgs: []string{"-g"},
+		Description: "List AD groups visible to winbind",
+	},
+	"wbinfo_online": {
+		Name:        "wbinfo_online",
+		Path:        "wbinfo",
+		AllowedArgs: []string{"--online-status"},
+		Description: "Check whether winbind can reach its domain controllers",
+	},
+	"wbinfo_ping": {
+		Name:        "wbinfo_ping",
+		Path:        "wbinfo",
+		AllowedArgs: []string{"-p"},
+		Description: "Ping the winbind daemon",
+	},
 	"timedatectl_show": {
 		Name:        "timedatectl_show",
 		Path:        "timedatectl",

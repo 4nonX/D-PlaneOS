@@ -1143,6 +1143,7 @@ func main() {
 	r.Handle("/api/ldap/domains/{name}", permRoute("system", "admin", ldapHandler.DeleteDomain)).Methods("DELETE")
 	r.Handle("/api/ldap/domains/{name}/join", permRoute("system", "admin", ldapHandler.JoinDomain)).Methods("POST")
 	r.Handle("/api/ldap/domains/{name}/leave", permRoute("system", "admin", ldapHandler.LeaveDomain)).Methods("POST")
+	r.Handle("/api/ldap/domains/{name}/status", permRoute("system", "read", ldapHandler.WinbindStatus)).Methods("GET")
 
 	// Transactional storage operation audit log (v8.2.0)
 	r.Handle("/api/storage/operations", permRoute("storage", "read", http.HandlerFunc(handlers.ListStorageOperations))).Methods("GET")
@@ -1313,8 +1314,19 @@ func main() {
 	r.Handle("/api/ha/timing", permRoute("system", "admin", haHandler.GetClusterTiming)).Methods("GET")
 	r.Handle("/api/ha/timing", middleware.RequireAAL2(permRoute("system", "admin", haHandler.SaveClusterTiming))).Methods("POST")
 
-	// Wire HA manager into the Prometheus exporter
+	// BMC / out-of-band hardware management (iLO, iDRAC, IPMI)
+	bmcHandler := handlers.NewBMCHandler(db)
+	r.Handle("/api/bmc/enroll", middleware.RequireAAL2(permRoute("system", "admin", bmcHandler.Enroll))).Methods("POST")
+	r.Handle("/api/bmc/info", permRoute("system", "read", bmcHandler.Info)).Methods("GET")
+	r.Handle("/api/bmc/health", permRoute("system", "read", bmcHandler.Health)).Methods("GET")
+	r.Handle("/api/bmc/events", permRoute("system", "read", bmcHandler.Events)).Methods("GET")
+	r.Handle("/api/bmc/power", permRoute("system", "read", bmcHandler.Power)).Methods("GET")
+	r.Handle("/api/bmc/power", middleware.RequireAAL2(permRoute("system", "admin", bmcHandler.Power))).Methods("POST")
+	r.Handle("/api/bmc/reset-cert", middleware.RequireAAL2(permRoute("system", "admin", bmcHandler.ResetCert))).Methods("POST")
+
+	// Wire HA manager and BMC DB into the Prometheus exporter
 	handlers.SetPrometheusHAManager(clusterMgr)
+	handlers.SetPrometheusBMCDB(db)
 
 	// WebSocket for real-time monitoring
 	wsHandler := handlers.NewWebSocketHandler(wsHub)

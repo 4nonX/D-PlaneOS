@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"bufio"
+	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"dplaned/internal/bmc"
 	"dplaned/internal/ha"
 )
 
@@ -172,6 +175,35 @@ func HandlePrometheusMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// ── BMC hardware sensors (iLO, iDRAC, IPMI) ────────────────────
+	// Best-effort: skip silently if BMC not configured or unreachable.
+	if prometheusBMCDB != nil {
+		if bmcHealth, err := fetchBMCHealthForMetrics(); err == nil {
+			writeMetric(b, "dplaneos_bmc_scrape_ok", nil, 1.0, "1 if BMC health data was successfully fetched this scrape")
+			for _, s := range bmcHealth.Sensors {
+				labels := map[string]string{"sensor": s.Name, "category": s.Category}
+				writeMetric(b, "dplaneos_bmc_sensor_value", labels, s.Value,
+					"BMC hardware sensor reading (temperature Celsius, fan RPM, power Watts, etc.)")
+				statusVal := 1.0
+				if s.Status == "warning" {
+					statusVal = 0.5
+				} else if s.Status == "critical" || s.Status == "unknown" {
+					statusVal = 0.0
+				}
+				writeMetric(b, "dplaneos_bmc_sensor_ok", labels, statusVal,
+					"BMC sensor health: 1=ok 0.5=warning 0=critical/unknown")
+			}
+			pwrVal := 0.0
+			if bmcHealth.PowerState == "on" {
+				pwrVal = 1.0
+			}
+			writeMetric(b, "dplaneos_bmc_chassis_power", nil, pwrVal,
+				"Chassis power state: 1=on 0=off/unknown")
+		} else {
+			writeMetric(b, "dplaneos_bmc_scrape_ok", nil, 0.0, "1 if BMC health data was successfully fetched this scrape")
+		}
+	}
+
 	// ── Build info ──────────────────────────────────────────────────
 	writeMetric(b, "dplaneos_build_info",
 		map[string]string{"version": DaemonVersion},
@@ -187,6 +219,42 @@ var prometheusHAMgr *ha.Manager
 // SetPrometheusHAManager wires the HA Manager into the Prometheus exporter.
 // Call once from main after the Manager is created.
 func SetPrometheusHAManager(mgr *ha.Manager) { prometheusHAMgr = mgr }
+
+// prometheusBMCDB is wired from main for BMC sensor metrics.
+var prometheusBMCDB *sql.DB
+
+// SetPrometheusBMCDB wires the database for BMC health scraping.
+func SetPrometheusBMCDB(db *sql.DB) { prometheusBMCDB = db }
+
+// fetchBMCHealthForMetrics loads BMC health for the Prometheus scrape.
+// Best-effort: returns an error if BMC is not configured or unreachable.
+func fetchBMCHealthForMetrics() (bmcHealthResult, error) {
+	creds, pin, err := bmc.LoadFromDB(prometheusBMCDB)
+	if err != nil {
+		return bmcHealthResult{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	h, err := bmc.GetHealth(ctx, creds, pin)
+	if err != nil {
+		return bmcHealthResult{}, err
+	}
+	var sensors []bmcSensor
+	for _, s := range h.Sensors {
+		sensors = append(sensors, bmcSensor{Name: s.Name, Category: s.Category, Value: s.Value, Status: s.Status})
+	}
+	return bmcHealthResult{PowerState: string(h.PowerState), Sensors: sensors}, nil
+}
+
+type bmcHealthResult struct {
+	PowerState string
+	Sensors    []bmcSensor
+}
+type bmcSensor struct {
+	Name, Category string
+	Value          float64
+	Status         string
+}
 
 // ─── Prometheus text format helpers ─────────────────────────────
 

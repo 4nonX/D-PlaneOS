@@ -36,9 +36,35 @@ This release addresses the operational maturity gaps identified by the sysadmin,
 
 - **AAL2 and session-expired middleware errors**: Now include `guide`, `code`, and `action` fields alongside `error`. Clients that only read the `error` field are unaffected.
 
-### Known gap - not closed in this release
+### Added (continued)
 
-See v14.0.0 entry. The Winbind/NSS/CTDB gap is documented in `INTEGRATION-GUIDE.md` with explicit guidance on when to use TrueNAS instead.
+- **Active Directory / Winbind NSS integration (closes v14.0.0 known gap)**:
+  - `nixos/modules/samba.nix`: adds `system.nssModules` and `system.nssDatabases` entries when `securityMode = "ads"`, so `ls -l`, `id`, `stat`, and SMB ACL display resolve AD user/group names instead of showing numeric UIDs. This was the only missing piece between "Samba joined to AD" and "AD users usable on the filesystem."
+  - `daemon/internal/handlers/ldap.go` `JoinDomain`: adds DNS SRV pre-validation (`_kerberos._tcp.REALM`, `_ldap._tcp.REALM`) before attempting `kinit`. Failed DC reachability now surfaces a clear error ("check that the NAS is using the AD DNS server") rather than a cryptic 30-second kinit timeout.
+  - `GET /api/ldap/domains/{name}/status`: new diagnostic endpoint returning winbind ping, machine account trust check (`wbinfo -t`), DC online status (`wbinfo --online-status`), and sample AD user/group lists. Used to verify the join is healthy and NSS resolution is working without SSH access.
+  - `daemon/internal/handlers/ad_join.go`: legacy `/api/directory/join` endpoint now calls `syncIDMAPToNixwriter` after successful join, so both the legacy and multi-domain join paths activate winbind.
+  - `daemon/internal/security/whitelist.go`: added `wbinfo_users`, `wbinfo_groups`, `wbinfo_online`, and `wbinfo_ping` whitelist entries.
+  - `INTEGRATION-GUIDE.md`: rewritten AD section reflects the full working implementation. CTDB remains the only noted limitation (SMB reconnect-on-failover, no byte-range lock continuity across HA failover - same as TrueNAS active-passive).
+
+- **Out-of-band hardware management: iLO, iDRAC, IPMI (`daemon/internal/bmc/`, migration 00009)**:
+  Unified BMC abstraction layer auto-detects the available protocol (Redfish for iLO 5+/iDRAC 9+, iLO 4 legacy REST, or generic IPMI via ipmitool) and dispatches through the best available path. TLS certificate pinning (TOFU) is used for all Redfish connections instead of `InsecureSkipVerify`: on first enrollment the BMC's SHA-256 certificate fingerprint is captured and stored; subsequent connections verify the fingerprint matches, detecting both MITM attacks and BMC firmware updates that regenerate the certificate.
+
+  New endpoints (all use `ha_fencing_config` credentials - same BMC as STONITH fencing):
+  - `POST /api/bmc/enroll` (AAL2) - TOFU enrollment: capture and store BMC TLS fingerprint
+  - `GET  /api/bmc/info` - detected BMC type, vendor, model, firmware version
+  - `GET  /api/bmc/health` - temperatures, fan speeds, power consumption, voltages
+  - `GET  /api/bmc/events?limit=N` - BMC system event log (Redfish or IPMI SEL)
+  - `GET  /api/bmc/power` - current chassis power state
+  - `POST /api/bmc/power` (AAL2) - power management (off, graceful_off, on, reset, graceful_reset)
+  - `POST /api/bmc/reset-cert` (AAL2) - clear pinned fingerprint for re-enrollment after BMC cert regeneration
+
+  BMC sensor metrics added to `/metrics`: `dplaneos_bmc_sensor_value{sensor,category}`, `dplaneos_bmc_sensor_ok{sensor,category}`, `dplaneos_bmc_chassis_power`, `dplaneos_bmc_scrape_ok`.
+
+  `nixos/module.nix`: added `pkgs.dmidecode` (hardware identity) and `pkgs.lm_sensors` (local sensor fallback). Migration 00009 adds `bmc_tls_fingerprint`, `bmc_tls_pinned_at`, and `bmc_protocol` columns to `ha_fencing_config`.
+
+### Known gaps - not closed in this release
+
+`flake.lock` is still absent from the repository. Run `nix flake lock && git add flake.lock` in a Nix environment to satisfy the reproducibility guarantee stated in the flake comment.
 
 `flake.lock` is still absent from the repository. Run `nix flake lock && git add flake.lock` in a Nix environment to satisfy the reproducibility guarantee stated in the flake comment.
 

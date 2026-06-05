@@ -99,6 +99,11 @@ func (h *LDAPHandler) JoinADDomain(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ad_join: persist domain join state for %s: %v", req.Domain, err)
 	}
 
+	// 5. Sync IDMAP config to nixwriter so next nixos-rebuild activates winbind
+	// and NSS resolution. Without this the samba.nix module stays in "user"
+	// security mode and winbind never starts.
+	syncIDMAPToNixwriter(h.db)
+
 	audit.LogAction("directory.join", r.Header.Get("X-User"), "Domain joined successfully: "+req.Domain, true, 0)
 	writeJSON(w, 200, ldapResp{Success: true, Data: "Successfully joined domain " + req.Domain})
 }

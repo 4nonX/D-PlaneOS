@@ -714,6 +714,9 @@ func (m *Manager) ensureSchema() error {
 	// Schema migrations: safe no-ops if columns already exist.
 	m.db.Exec(`ALTER TABLE ha_fencing_config ADD COLUMN IF NOT EXISTS jitter_max_ms INTEGER NOT NULL DEFAULT 3000`)
 	m.db.Exec(`ALTER TABLE ha_fencing_config ADD COLUMN IF NOT EXISTS disk_fault_tolerance_pct INTEGER NOT NULL DEFAULT 10`)
+	m.db.Exec(`ALTER TABLE ha_fencing_config ADD COLUMN IF NOT EXISTS bmc_tls_fingerprint TEXT NOT NULL DEFAULT ''`)
+	m.db.Exec(`ALTER TABLE ha_fencing_config ADD COLUMN IF NOT EXISTS bmc_tls_pinned_at TIMESTAMPTZ`)
+	m.db.Exec(`ALTER TABLE ha_fencing_config ADD COLUMN IF NOT EXISTS bmc_protocol TEXT NOT NULL DEFAULT 'auto'`)
 	m.db.Exec(`ALTER TABLE ha_witness_config ADD COLUMN IF NOT EXISTS witnesses_json TEXT NOT NULL DEFAULT '[]'`)
 	m.db.Exec(`ALTER TABLE ha_witness_config ADD COLUMN IF NOT EXISTS required_healthy INTEGER NOT NULL DEFAULT 1`)
 
