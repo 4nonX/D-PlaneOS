@@ -166,7 +166,7 @@ sudo crontab -e
 
 ### Pool and Dataset Constraints
 
-**Pool destroy dependency check:** A pool cannot be destroyed if any dataset within it is actively mounted, or if any NFS export or SMB share references a path within the pool. The operation returns a list of blocking dependencies. Remove or disable the shares first, then retry. The Force option on pool destroy still validates dependencies - it does not bypass them silently.
+**Pool destroy dependency check:** A pool cannot be destroyed (without force) if any dataset within it is actively mounted, or if any NFS export or SMB share references a path within the pool. The operation returns a list of blocking dependencies. Remove or disable the shares first, then retry. The Force option bypasses this check: if a share entry is corrupt and cannot be removed, force allows recovery. Force does not protect against connected clients seeing an abrupt loss - pool destroy is final regardless. The destroy confirmation (which requires typing the pool name) runs before force has any effect. Note: pool export with force behaves differently and still validates dependencies, because a forced export with open handles causes client-side data corruption whereas a forced destroy is terminal either way.
 
 **Snapshot clone detection:** If a snapshot has dependent clones, destroy is rejected with a message naming the clone. Promote or destroy the clone first.
 

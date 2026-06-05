@@ -93,7 +93,7 @@ func poolDependencyCheck(db *sql.DB, poolName string) ([]string, error) {
 func (h *ZFSHandler) HandlePoolDestroy(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name  string `json:"name"`
-		Force bool   `json:"force"` // reserved for future use; dependency check always runs
+		Force bool   `json:"force"` // when true, bypasses soft dependency check (see comment below)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
@@ -105,17 +105,21 @@ func (h *ZFSHandler) HandlePoolDestroy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Dependency check: refuse to destroy a pool that has active mounts or shares.
-	// Runs regardless of force=true. Pool destroy is irreversible; active services
-	// must be stopped before destruction even when the operator explicitly requests
-	// force. This matches ExportPool's behaviour and the documented guarantee that
-	// force does not silently bypass dependency validation. The confirmRoute wrapper
-	// already ensures the operator typed the pool name before reaching here.
-	{
+	// With force=false (default): block if any dependency is found.
+	// With force=true: bypass the soft dependency check. The caller is responsible
+	// for ensuring services are stopped. This is intentional: if a share entry is
+	// corrupt and cannot be removed, force allows recovery without being permanently
+	// blocked by a dependency that cannot be cleared. The confirmRoute wrapper
+	// already requires the operator to type the pool name before this executes.
+	// Contrast with ExportPool (reversible): force there still checks, because a
+	// forced export with open handles causes client-side data corruption. A forced
+	// destroy is final either way; clients lose access regardless.
+	if !req.Force {
 		deps, err := poolDependencyCheck(h.db, req.Name)
 		if err == nil && len(deps) > 0 {
 			respondJSON(w, http.StatusConflict, map[string]any{
 				"success":      false,
-				"error":        "pool has active dependencies; stop all shares and services first before destroying",
+				"error":        "pool has active dependencies; stop all shares and services first, or use force=true",
 				"dependencies": deps,
 			})
 			return
