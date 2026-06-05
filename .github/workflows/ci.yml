@@ -580,7 +580,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be  # v1.3.1
         with:
           tool-cache: true
           android: true
@@ -591,7 +591,7 @@ jobs:
           swap-storage: true
 
       - name: Reclaim disk space for Nix store
-        uses: wimpysworld/nothing-but-nix@main
+        uses: wimpysworld/nothing-but-nix@687c797a730352432950c707ab493fcc951818d7  # main
 
       - name: Install Nix
         uses: cachix/install-nix-action@v30
@@ -603,7 +603,7 @@ jobs:
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
 
       - name: Cache Nix store paths (magic-nix-cache)
-        uses: DeterminateSystems/magic-nix-cache-action@v8
+        uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b  # v8
 
       - name: Report available disk space
         run: df -h /
@@ -667,7 +667,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be  # v1.3.1
         with:
           tool-cache: true
           android: true
@@ -678,7 +678,7 @@ jobs:
           swap-storage: true
 
       - name: Reclaim disk space for Nix store
-        uses: wimpysworld/nothing-but-nix@main
+        uses: wimpysworld/nothing-but-nix@687c797a730352432950c707ab493fcc951818d7  # main
 
       - name: Install Nix
         uses: cachix/install-nix-action@v30
@@ -690,7 +690,7 @@ jobs:
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
 
       - name: Cache Nix store paths (magic-nix-cache)
-        uses: DeterminateSystems/magic-nix-cache-action@v8
+        uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b  # v8
 
       - name: Report available disk space
         run: df -h /
