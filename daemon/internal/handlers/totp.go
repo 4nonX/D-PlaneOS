@@ -398,9 +398,10 @@ func (h *TOTPHandler) HandleTOTPVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Upgrade pending session to full session
+	// Upgrade pending session to full active session at AAL2 (password + TOTP).
 	sessionID, _ := generateSessionID()
-	if _, err := h.db.Exec(`UPDATE sessions SET session_id = $1, status = 'active' WHERE session_id = $2`,
+	if _, err := h.db.Exec(
+		`UPDATE sessions SET session_id = $1, status = 'active', aal = 2 WHERE session_id = $2`,
 		sessionID, req.PendingToken); err != nil {
 		log.Printf("TOTP SESSION UPGRADE ERROR: %v", err)
 	}

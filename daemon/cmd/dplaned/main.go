@@ -986,7 +986,7 @@ func main() {
 	userGroupHandler := handlers.NewUserGroupHandler(db)
 	r.Handle("/api/rbac/users", permRoute("users", "read", userGroupHandler.HandleUsers)).Methods("GET")
 	r.Handle("/api/rbac/users", permRoute("users", "write", userGroupHandler.HandleUsers)).Methods("POST")
-	r.Handle("/api/users/{id}/reset-password", permRoute("users", "write", userGroupHandler.ResetUserPassword)).Methods("POST")
+	r.Handle("/api/users/{id}/reset-password", middleware.RequireAAL2(permRoute("users", "write", userGroupHandler.ResetUserPassword))).Methods("POST")
 	r.Handle("/api/rbac/groups", permRoute("users", "read", userGroupHandler.HandleGroups)).Methods("GET")
 	r.Handle("/api/rbac/groups", permRoute("users", "write", userGroupHandler.HandleGroups)).Methods("POST")
 
@@ -1261,7 +1261,7 @@ func main() {
 
 	// Pools lifecycle endpoints (used by PoolsPage wizard)
 	r.Handle("/api/zfs/pools/create", permRoute("storage", "write", http.HandlerFunc(handlers.HandlePoolCreate))).Methods("POST")
-	r.Handle("/api/zfs/pools/destroy", permRoute("storage", "admin", confirmRoute("pool_destroy", jsonField("name"), zfsHandler.HandlePoolDestroy))).Methods("POST")
+	r.Handle("/api/zfs/pools/destroy", middleware.RequireAAL2(permRoute("storage", "admin", confirmRoute("pool_destroy", jsonField("name"), zfsHandler.HandlePoolDestroy)))).Methods("POST")
 
 	// Trash / Recycle Bin (v2.0.0)
 	trashHandler := handlers.NewTrashHandler()
@@ -1288,7 +1288,7 @@ func main() {
 	r.Handle("/api/ha/peers/{id}/role", permRoute("system", "admin", haHandler.SetPeerRole)).Methods("POST")
 	r.Handle("/api/ha/replication/configure", permRoute("system", "admin", haHandler.ConfigureHAReplication)).Methods("POST")
 	r.Handle("/api/ha/replication/configure", permRoute("system", "admin", haHandler.GetReplicationConfig)).Methods("GET")
-	r.Handle("/api/ha/fencing/configure", permRoute("system", "admin", haHandler.ConfigureFencing)).Methods("POST")
+	r.Handle("/api/ha/fencing/configure", middleware.RequireAAL2(permRoute("system", "admin", haHandler.ConfigureFencing))).Methods("POST")
 	r.Handle("/api/ha/fencing/configure", permRoute("system", "admin", haHandler.GetFencingConfig)).Methods("GET")
 	r.Handle("/api/ha/witness/configure", permRoute("system", "admin", haHandler.ConfigureWitness)).Methods("POST")
 	r.Handle("/api/ha/witness/configure", permRoute("system", "admin", haHandler.GetWitnessConfig)).Methods("GET")
@@ -1301,6 +1301,7 @@ func main() {
 	r.Handle("/api/ha/sbd/configure", permRoute("system", "admin", haHandler.ConfigureSBD)).Methods("POST")
 	r.Handle("/api/ha/sbd/configure", permRoute("system", "admin", haHandler.GetSBDConfig)).Methods("GET")
 	r.Handle("/api/ha/clear_fault", permRoute("system", "admin", haHandler.ClearFault)).Methods("POST")
+	r.Handle("/api/ha/alua-standby", permRoute("system", "admin", haHandler.ALUAStandby)).Methods("POST")
 	r.Handle("/api/ha/standby", permRoute("system", "admin", haHandler.BecomeStandby)).Methods("POST")
 	r.Handle("/api/ha/cluster-secret/configure", permRoute("system", "admin", haHandler.GetClusterSecretConfig)).Methods("GET")
 	r.Handle("/api/ha/cluster-secret/configure", permRoute("system", "admin", haHandler.SetClusterSecretConfig)).Methods("POST")
@@ -1328,7 +1329,7 @@ func main() {
 	r.Handle("/api/iscsi/acls", permRoute("storage", "write", handlers.AddISCSIACL)).Methods("POST")
 	r.Handle("/api/iscsi/acls", permRoute("storage", "write", handlers.DeleteISCSIACL)).Methods("DELETE")
 	r.Handle("/api/iscsi/zvols", permRoute("storage", "read", handlers.GetISCSIZvolList)).Methods("GET")
-	r.Handle("/api/iscsi/targets/alua", permRoute("storage", "write", handlers.SetISCSIALUAState)).Methods("POST")
+	r.Handle("/api/iscsi/targets/alua", middleware.RequireAAL2(permRoute("storage", "write", handlers.SetISCSIALUAState))).Methods("POST")
 
 	// v8.0.0: NVMe-oF target (nvmet + ZFS zvol)
 	r.Handle("/api/nvmet/status", permRoute("storage", "read", handlers.GetNVMeTargetStatus)).Methods("GET")

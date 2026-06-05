@@ -562,6 +562,24 @@ func launchReplicationJob(s ReplicationSchedule) string {
 			return
 		}
 
+		// Post-receive integrity check: verify the snapshot exists on the remote.
+		// zfs send exits 0 even when the remote recv stream is truncated by a
+		// crash; confirming the snapshot is present catches that case.
+		snapPartsVerify := strings.SplitN(snapshot, "@", 2)
+		if len(snapPartsVerify) == 2 {
+			remoteSnap := remoteDataset + "@" + snapPartsVerify[1]
+			verifyArgs := append([]string{}, sshArgs...)
+			verifyArgs = append(verifyArgs, sshTarget,
+				"zfs", "list", "-H", "-t", "snapshot", "-o", "name", remoteSnap)
+			verifyOut, verifyErr := executeCommandWithTimeout(TimeoutMedium, "ssh", verifyArgs)
+			if verifyErr != nil || strings.TrimSpace(verifyOut) != remoteSnap {
+				j.Fail(fmt.Sprintf("Replication integrity check failed: snapshot %q not found on remote after send (partial transfer?)", remoteSnap))
+				updateScheduleStatus(s.ID, "failed", j.ID, "")
+				return
+			}
+			j.Log(fmt.Sprintf("Integrity check passed: %q confirmed on remote", remoteSnap))
+		}
+
 		j.Done(map[string]any{
 			"snapshot": snapshot,
 			"remote":   fmt.Sprintf("%s:%s", sshTarget, remoteDataset),

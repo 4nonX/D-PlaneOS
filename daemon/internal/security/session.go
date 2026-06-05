@@ -155,6 +155,10 @@ type SessionUser struct {
 	// The RBAC middleware rejects all requests except POST /api/auth/change-password
 	// until the user sets a new password.
 	MustChangePassword bool
+	// AAL is the Authentication Assurance Level for this session.
+	// 1 = password only (AAL1). 2 = password + TOTP verified (AAL2).
+	// Routes that require AAL2 are rejected with 403 if AAL < 2.
+	AAL int
 }
 
 // ValidateSessionAndGetUser validates a session token and returns the associated user
@@ -168,8 +172,9 @@ func ValidateSessionAndGetUser(sessionToken string) (*SessionUser, error) {
 
 	var user SessionUser
 	var sessionStatus string
+	var sessionAAL int
 	query := `
-		SELECT u.id, u.username, COALESCE(u.email, ''), COALESCE(s.status, 'active')
+		SELECT u.id, u.username, COALESCE(u.email, ''), COALESCE(s.status, 'active'), COALESCE(s.aal, 1)
 		FROM sessions s
 		JOIN users u ON s.username = u.username
 		WHERE s.session_id = $1
@@ -180,7 +185,7 @@ func ValidateSessionAndGetUser(sessionToken string) (*SessionUser, error) {
 	`
 
 	err := db.QueryRowContext(ctx, query, sessionToken, time.Now().Unix()).Scan(
-		&user.ID, &user.Username, &user.Email, &sessionStatus,
+		&user.ID, &user.Username, &user.Email, &sessionStatus, &sessionAAL,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -190,6 +195,10 @@ func ValidateSessionAndGetUser(sessionToken string) (*SessionUser, error) {
 	}
 
 	user.MustChangePassword = sessionStatus == "must_change_password"
+	user.AAL = sessionAAL
+	if user.AAL < 1 {
+		user.AAL = 1 // floor at AAL1; never serve a session with AAL 0
+	}
 	return &user, nil
 }
 

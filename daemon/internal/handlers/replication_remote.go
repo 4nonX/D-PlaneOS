@@ -438,6 +438,32 @@ func (h *ReplicationHandler) RestoreFromRemote(w http.ResponseWriter, r *http.Re
 			return
 		}
 
+		// Post-receive integrity checks.
+		// 1. Verify the expected snapshot exists on the local dataset. ZFS recv
+		//    exits 0 even on a partial transfer if the stream terminates cleanly,
+		//    so we confirm the snapshot the caller requested is actually present.
+		snapParts := strings.SplitN(req.RemoteSnapshot, "@", 2)
+		if len(snapParts) == 2 {
+			localSnap := req.LocalDataset + "@" + snapParts[1]
+			snapCheck, snapCheckErr := executeCommandWithTimeout(TimeoutFast, "zfs",
+				[]string{"list", "-H", "-t", "snapshot", "-o", "name", localSnap})
+			if snapCheckErr != nil || strings.TrimSpace(snapCheck) != localSnap {
+				j.Fail(fmt.Sprintf("Restore integrity check failed: expected snapshot %q not found after receive (partial transfer?)", localSnap))
+				return
+			}
+			j.Log(fmt.Sprintf("Integrity check passed: snapshot %q confirmed present", localSnap))
+
+			// 2. Check for a resume token. A resume token on the dataset means
+			//    the receive stream was interrupted and ZFS is holding partial
+			//    state for a future resume. This is not an error for the snapshot
+			//    that DID land, but we surface it so the operator knows.
+			tokenOut, _ := executeCommandWithTimeout(TimeoutFast, "zfs",
+				[]string{"get", "-H", "-o", "value", "receive_resume_token", req.LocalDataset})
+			if token := strings.TrimSpace(tokenOut); token != "" && token != "-" && token != "none" {
+				j.Log(fmt.Sprintf("WARN: resume token present on %s - a prior or concurrent receive was interrupted; run another restore to complete it", req.LocalDataset))
+			}
+		}
+
 		j.Done(map[string]any{
 			"remote_snapshot": req.RemoteSnapshot,
 			"local_dataset":   req.LocalDataset,

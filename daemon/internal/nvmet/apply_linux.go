@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -286,16 +287,22 @@ func applyANAGroupState(ssPath string, groupID int, state ANAState) error {
 		return fmt.Errorf("write ana_state: %w (is CONFIG_NVME_TARGET_ANA enabled?)", err)
 	}
 
-	// Read back to confirm the kernel accepted the state. configfs writes are
-	// synchronous but the kernel may normalise the value (e.g. "standby" → "14").
-	// A read-back mismatch indicates a kernel rejection we should surface early.
-	if written, err := os.ReadFile(stateFile); err == nil {
-		got := strings.TrimSpace(string(written))
-		if got != stateStr && got != "" {
-			// Not a hard error - the kernel may use a numeric representation.
-			// Log for diagnostics without aborting.
-			_ = got
-		}
+	// Read back to confirm the kernel accepted the write. An empty or unreadable
+	// read-back means the kernel silently rejected the state (e.g. CONFIG_NVME_TARGET_ANA
+	// not compiled in, or an invalid state string). A non-empty but different value
+	// is normal: the kernel normalises human names to numeric state codes
+	// (e.g. "standby" -> "14"). We log the normalisation but do not error.
+	written, readErr := os.ReadFile(stateFile)
+	if readErr != nil {
+		return fmt.Errorf("ana_state write could not be verified (read-back failed: %w)", readErr)
+	}
+	got := strings.TrimSpace(string(written))
+	if got == "" {
+		return fmt.Errorf("ana_state write rejected by kernel (empty read-back for state %q)", stateStr)
+	}
+	if got != stateStr {
+		// Kernel normalised the state string to a numeric code; not an error.
+		log.Printf("nvmet: ANA group %d: wrote %q, kernel reflects %q (numeric normalisation)", groupID, stateStr, got)
 	}
 
 	// AEN propagation barrier: wait for connected hosts to receive and process

@@ -289,15 +289,28 @@ EOF
         virtualRouterId = 51;
         virtualIps = [ { addr = cfg.virtualIP; } ];
         trackScripts = [ "check_dplaneos" ];
-        # notify_backup triggers the graceful standby transition: the daemon
-        # exports all ZFS pools within 4 seconds then yields. If it cannot
-        # export in time it force-reboots itself to prevent split-brain.
+        # notify_backup fires when this node loses the VRRP VIP (transitions
+        # MASTER -> BACKUP). The sequence is:
+        #   1. Set all ALUA-enabled iSCSI targets to Standby so initiators see
+        #      a clean path-state change before the VIP moves. Non-fatal: if
+        #      targetcli is unavailable the endpoint returns success with
+        #      skipped=true and the failover continues.
+        #   2. Export ZFS pools within 4 seconds then yield. If the export times
+        #      out the daemon force-reboots itself (no sync before reboot) to
+        #      prevent split-brain data corruption.
         # This mirrors TrueNAS's ZPOOL_EXPORT_TIMEOUT = 4s pattern.
         extraConfig = ''
           notify_backup "${pkgs.writeShellScript "vrrp-notify-backup" ''
+            TOKEN=$(cat /var/lib/dplaneos/internal-token 2>/dev/null || true)
+            # Step 1: move iSCSI ALUA paths to Standby before yielding the VIP.
             ${pkgs.curl}/bin/curl -sf -X POST \
               --unix-socket /run/dplaneos/dplaned.sock \
-              -H "X-Internal-Token: $(cat /var/lib/dplaneos/internal-token 2>/dev/null || true)" \
+              -H "X-Internal-Token: $TOKEN" \
+              http://localhost/api/ha/alua-standby || true
+            # Step 2: export ZFS pools (4s deadline) then yield.
+            ${pkgs.curl}/bin/curl -sf -X POST \
+              --unix-socket /run/dplaneos/dplaned.sock \
+              -H "X-Internal-Token: $TOKEN" \
               http://localhost/api/ha/standby || true
           ''}"
         '' + lib.optionalString (cfg.vrrpPassword != null) ''

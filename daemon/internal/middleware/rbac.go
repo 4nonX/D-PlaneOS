@@ -224,6 +224,36 @@ func RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// RequireAAL2 wraps a handler and rejects requests whose session has not been
+// upgraded to AAL2 (password + TOTP). Apply this to routes where the operation
+// is irreversible or has elevated blast radius: user deletion, password reset,
+// pool destroy, fencing configuration, and API token management.
+//
+// The response body contains action:"enable_totp" so the UI can prompt the user
+// to set up TOTP before retrying.
+func RequireAAL2(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessionToken := r.Header.Get("X-Session-ID")
+		if sessionToken == "" {
+			if cookie, err := r.Cookie("session_id"); err == nil {
+				sessionToken = cookie.Value
+			}
+		}
+		if sessionToken != "" {
+			if secUser, err := security.ValidateSessionAndGetUser(sessionToken); err == nil {
+				if secUser.AAL < 2 {
+					respondJSON(w, http.StatusForbidden, map[string]string{
+						"error":  "This operation requires two-factor authentication. Enable TOTP then log in again.",
+						"action": "enable_totp",
+					})
+					return
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // GetUserFromContext retrieves user from request context
 func GetUserFromContext(r *http.Request) (*User, bool) {
 	user, ok := r.Context().Value(UserContextKey).(*User)

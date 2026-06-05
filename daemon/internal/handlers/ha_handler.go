@@ -705,3 +705,60 @@ func (h *HAHandler) RegisterMaintenance(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// ALUAStandby sets all ALUA-enabled iSCSI targets to Standby access state.
+// This must be called BEFORE POST /api/ha/standby during a planned failover so
+// that initiators see a clean path-state transition (Optimized -> Standby) rather
+// than an abrupt path loss when the VIP moves.
+//
+// The sequence enforced by the Keepalived notify_backup script is:
+//   1. POST /api/ha/alua-standby  - mark all iSCSI paths Standby, wait for initiators
+//   2. POST /api/ha/standby       - export ZFS pools and yield the VIP
+//
+// POST /api/ha/alua-standby
+func (h *HAHandler) ALUAStandby(w http.ResponseWriter, r *http.Request) {
+	// Enumerate all iSCSI targets via targetcli.
+	out, err := executeCommandWithTimeout(TimeoutFast, "targetcli", []string{"/iscsi", "ls"})
+	if err != nil {
+		// targetcli unavailable - not fatal; log and return success so the
+		// failover sequence continues. Pool export is the hard safety boundary.
+		log.Printf("HA ALUA-STANDBY: targetcli unavailable (%v); skipping ALUA transition", err)
+		respondJSON(w, http.StatusOK, map[string]any{"success": true, "skipped": true, "reason": "targetcli unavailable"})
+		return
+	}
+
+	var set, failed []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "iqn.") {
+			continue
+		}
+		iqn := strings.Fields(line)[0]
+		tpgPath := fmt.Sprintf("/iscsi/%s/tpg1", iqn)
+		// Try to set ALUA Standby. Non-fatal: targets without ALUA support will
+		// return an error from targetcli which we log and skip.
+		if _, err := executeCommandWithTimeout(TimeoutFast, "targetcli",
+			[]string{tpgPath, "set", "attribute", "alua_support=1"}); err != nil {
+			// ALUA not enabled on this target; skip silently.
+			continue
+		}
+		aluaPath := fmt.Sprintf("%s/alua/default_tg_pt_gp", tpgPath)
+		if _, err := executeCommandWithTimeout(TimeoutFast, "targetcli",
+			[]string{aluaPath, "set", fmt.Sprintf("alua_access_state=%d", ALUAStandby)}); err != nil {
+			log.Printf("HA ALUA-STANDBY: failed to set Standby on %s: %v", iqn, err)
+			failed = append(failed, iqn)
+		} else {
+			set = append(set, iqn)
+		}
+	}
+
+	// Save targetcli config after bulk state change.
+	executeCommandWithTimeout(TimeoutFast, "targetcli", []string{"/", "saveconfig"}) //nolint:errcheck
+
+	log.Printf("HA ALUA-STANDBY: set Standby on %d target(s), %d failed", len(set), len(failed))
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success":  len(failed) == 0,
+		"set":      set,
+		"failed":   failed,
+	})
+}
+
