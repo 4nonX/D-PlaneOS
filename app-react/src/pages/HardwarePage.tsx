@@ -987,6 +987,10 @@ export function HardwarePage() {
     })
   }, [wsOn, qc])
 
+  // Declared here (before the diskReplacementAvailable effect below) so the
+  // effect closure captures the setter at component init without a hoisting error.
+  const [replacementSuggestion, setReplacementSuggestion] = useState<ReplacementSuggestion | null>(null)
+
   // WS: pool health changed → refetch pools + disks (pool_health on DiskInfo may change)
   useEffect(() => {
     return wsOn('poolHealthChange', () => {
@@ -1024,9 +1028,6 @@ export function HardwarePage() {
   const [replaceTarget, setReplaceTarget] = useState<DiskInfo | null>(null)
   const [suggestedNewDev, setSuggestedNewDev] = useState<string | null>(null)
   const [scheduleModalDevice, setScheduleModalDevice] = useState<string | null>(null)
-
-  // Pending replacement suggestion from WS (resolved after disk list refreshes)
-  const [replacementSuggestion, setReplacementSuggestion] = useState<ReplacementSuggestion | null>(null)
 
   const smartTestMutation = useMutation({
     mutationFn: (vars: { device: string; type: 'short' | 'long' }) =>

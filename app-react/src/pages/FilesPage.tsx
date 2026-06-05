@@ -1,18 +1,18 @@
-﻿/**
+/**
  * pages/FilesPage.tsx - File Explorer (Phase 4)
  *
  * Calls (matching daemon routes exactly):
- *   GET  /api/files/list?path=         → { success, path, files: FileEntry[] }
- *   POST /api/files/rename             → { old_path, new_name }
- *   POST /api/files/copy               → { source, destination }
- *   POST /api/files/mkdir              → { path }
- *   POST /api/files/delete             → { path }
- *   POST /api/files/chown              → { path, owner, group }
- *   POST /api/files/chmod              → { path, mode }
- *   POST /api/files/upload             → multipart (file, path, filename, fileSize)
+ *   GET  /api/files/list?path=         ? { success, path, files: FileEntry[] }
+ *   POST /api/files/rename             ? { old_path, new_name }
+ *   POST /api/files/copy               ? { source, destination }
+ *   POST /api/files/mkdir              ? { path }
+ *   POST /api/files/delete             ? { path }
+ *   POST /api/files/chown              ? { path, owner, group }
+ *   POST /api/files/chmod              ? { path, mode }
+ *   POST /api/files/upload             ? multipart (file, path, filename, fileSize)
  *   GET  /api/trash/list
- *   POST /api/trash/move               → { path }
- *   POST /api/trash/restore            → { name }
+ *   POST /api/trash/move               ? { path }
+ *   POST /api/trash/restore            ? { name }
  *   POST /api/trash/empty
  */
 
@@ -306,7 +306,7 @@ function ShareLinkModal({ entry, onClose }: { entry: FileEntry; onClose: () => v
         <button className="btn btn-ghost" onClick={onClose} disabled={mut.isPending}>Cancel</button>
         <button className="btn btn-primary" onClick={() => mut.mutate()} disabled={mut.isPending}>
           {mut.isPending
-            ? <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Spinner size={14} color="rgba(0,0,0,0.7)" /> Creating…</span>
+            ? <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Spinner size={14} color="rgba(0,0,0,0.7)" /> Creating�</span>
             : <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="add_link" size={15} /> Create Link</span>
           }
         </button>
@@ -319,7 +319,7 @@ function ModalFooter({ onClose, onConfirm, loading, label }: { onClose: () => vo
   return (
     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
       <button onClick={onClose} className="btn btn-ghost">Cancel</button>
-      <button onClick={onConfirm} disabled={loading} className="btn btn-primary">{loading ? 'Working…' : label}</button>
+      <button onClick={onConfirm} disabled={loading} className="btn btn-primary">{loading ? 'Working�' : label}</button>
     </div>
   )
 }
@@ -428,7 +428,7 @@ function TrashTab() {
         <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{items.length} item{items.length !== 1 ? 's' : ''} in trash</span>
         {items.length > 0 && (
           <button onClick={() => empty.mutate()} disabled={empty.isPending} className="btn btn-danger">
-            <Icon name="delete_forever" size={14} />{empty.isPending ? 'Emptying…' : 'Empty Trash'}
+            <Icon name="delete_forever" size={14} />{empty.isPending ? 'Emptying�' : 'Empty Trash'}
           </button>
         )}
       </div>
@@ -468,7 +468,7 @@ const BOOKMARKS = [
 ]
 
 // ---------------------------------------------------------------------------
-// TextEditorModal - inline text editor (≤ 2 MB files)
+// TextEditorModal - inline text editor (= 2 MB files)
 // ---------------------------------------------------------------------------
 
 interface ReadFileResponse { success: boolean; content?: string; error?: string; too_large?: boolean; size?: number }
@@ -524,12 +524,12 @@ function TextEditorModal({ entry, onClose, onSaved }: { entry: FileEntry; onClos
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
-            {dirty ? 'Unsaved changes · Ctrl+S to save' : 'No unsaved changes'}
+            {dirty ? 'Unsaved changes � Ctrl+S to save' : 'No unsaved changes'}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose} className="btn btn-ghost">Cancel</button>
             <button onClick={save} disabled={saving || !dirty} className="btn btn-primary">
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? 'Saving�' : 'Save'}
             </button>
           </div>
         </div>
@@ -561,13 +561,13 @@ function FileBrowser() {
     queryFn: ({ signal }) => api.get<FilesListResponse>(`/api/files/list?path=${encodeURIComponent(path)}`, signal),
   })
 
-  // ── Multi-select ─────────────────────────────────────────────────────────
+  // -- Multi-select ---------------------------------------------------------
   function toggleSelect(entryPath: string, e: React.MouseEvent) {
     if (!e.shiftKey && !e.ctrlKey && !e.metaKey) return // only on modifier click
     e.preventDefault()
     setSelected(prev => {
       const next = new Set(prev)
-      next.has(entryPath) ? next.delete(entryPath) : next.add(entryPath)
+      if (next.has(entryPath)) { next.delete(entryPath) } else { next.add(entryPath) }
       return next
     })
   }
@@ -577,7 +577,7 @@ function FileBrowser() {
   }
   function clearSelection() { setSelected(new Set()) }
 
-  // ── Download ─────────────────────────────────────────────────────────────
+  // -- Download -------------------------------------------------------------
   function downloadFile(entry: FileEntry) {
     const sid = getSessionId()
     const usr = getUsername()
@@ -602,7 +602,7 @@ function FileBrowser() {
       .catch(() => toast.error('Download failed'))
   }
 
-  // ── Drag-and-drop upload ──────────────────────────────────────────────────
+  // -- Drag-and-drop upload --------------------------------------------------
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(true)
@@ -615,7 +615,7 @@ function FileBrowser() {
     setDragOver(false)
     const droppedFiles = Array.from(e.dataTransfer.files)
     if (!droppedFiles.length) return
-    toast.success(`Uploading ${droppedFiles.length} file${droppedFiles.length > 1 ? 's' : ''}…`)
+    toast.success(`Uploading ${droppedFiles.length} file${droppedFiles.length > 1 ? 's' : ''}�`)
     for (const file of droppedFiles) {
       const CHUNK = 10 * 1024 * 1024
       const totalChunks = Math.ceil(file.size / CHUNK)
@@ -826,7 +826,7 @@ function FileBrowser() {
                   >
                     <td style={{ padding: '10px 10px' }}>
                       <input type="checkbox" checked={isSelected}
-                        onChange={() => setSelected(prev => { const n = new Set(prev); n.has(entry.path) ? n.delete(entry.path) : n.add(entry.path); return n })}
+                        onChange={() => setSelected(prev => { const n = new Set(prev); if (n.has(entry.path)) { n.delete(entry.path) } else { n.add(entry.path) }; return n })}
                         onClick={e => e.stopPropagation()}
                         style={{ cursor: 'pointer' }}
                       />

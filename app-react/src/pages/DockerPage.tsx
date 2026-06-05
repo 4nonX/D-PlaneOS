@@ -1376,7 +1376,7 @@ function ContainerExecModal({ target, onClose }: { target: ExecTarget; onClose: 
         if (msg.type === 'output') termRef.current?.write(msg.data ?? '')
         else if (msg.type === 'exit') { termRef.current?.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n'); setStatus('error') }
         else if (msg.type === 'error') { termRef.current?.write(`\r\n\x1b[31m${msg.data}\x1b[0m\r\n`); setStatus('error') }
-      } catch {}
+      } catch { /* malformed websocket message - discard */ }
     }
     ws.onclose = () => setStatus(s => s === 'connected' ? 'error' : s)
   }, [target.container])

@@ -160,7 +160,7 @@ export const useWsStore = create<WsState>((set) => {
     }
 
     ws.onmessage = (event) => {
-      let msg: { type: string; data?: unknown } | null = null
+      let msg: { type: string; data?: unknown }
       try {
         msg = JSON.parse(event.data as string) as { type: string; data?: unknown }
       } catch {

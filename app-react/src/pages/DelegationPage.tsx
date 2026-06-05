@@ -1,13 +1,13 @@
-﻿/**
+/**
  * pages/DelegationPage.tsx - ZFS Delegation
  *
  * Grant fine-grained ZFS permissions to non-root users via `zfs allow`.
  *
  * APIs (matching daemon routes exactly):
- *   GET  /api/zfs/delegation?dataset=X   → { success, dataset, delegations: string (raw zfs allow output) }
- *   POST /api/zfs/delegation              → { dataset, user, permissions } → { success }
- *   POST /api/zfs/delegation/revoke       → { dataset, user, permissions } → { success }
- *   GET  /api/zfs/datasets                → { success, data: ZFSDataset[] }
+ *   GET  /api/zfs/delegation?dataset=X   ? { success, dataset, delegations: string (raw zfs allow output) }
+ *   POST /api/zfs/delegation              ? { dataset, user, permissions } ? { success }
+ *   POST /api/zfs/delegation/revoke       ? { dataset, user, permissions } ? { success }
+ *   GET  /api/zfs/datasets                ? { success, data: ZFSDataset[] }
  *
  * Note: The daemon returns raw `zfs allow` text output per dataset.
  * This page maintains a client-side list of delegations that the user
@@ -95,7 +95,7 @@ function AddDelegationModal({ onClose, datasets, datasetsLoading, onAdded }: Add
   function togglePerm(p: Permission) {
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(p) ? next.delete(p) : next.add(p)
+      if (next.has(p)) { next.delete(p) } else { next.add(p) }
       return next
     })
   }
@@ -147,7 +147,7 @@ function AddDelegationModal({ onClose, datasets, datasetsLoading, onAdded }: Add
           <label className="form-label">Dataset <span style={{ color: 'var(--error)' }}>*</span></label>
           {datasetsLoading ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
-              <Spinner size={14} /> Loading datasets…
+              <Spinner size={14} /> Loading datasets�
             </div>
           ) : (
             <select
@@ -243,7 +243,7 @@ function AddDelegationModal({ onClose, datasets, datasetsLoading, onAdded }: Add
 
         {addMutation.isPending && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-            <Spinner size={14} /> Granting permissions…
+            <Spinner size={14} /> Granting permissions�
           </div>
         )}
         {addMutation.isError && <ErrorState error={addMutation.error} title="Grant failed" />}
@@ -259,7 +259,7 @@ function AddDelegationModal({ onClose, datasets, datasetsLoading, onAdded }: Add
           disabled={addMutation.isPending || !dataset || !principal.trim() || selected.size === 0}
         >
           {addMutation.isPending ? (
-            <><Spinner size={14} /> Saving…</>
+            <><Spinner size={14} /> Saving�</>
           ) : (
             <>
               <Icon name="lock_open" size={15} /> Save Delegation
@@ -302,7 +302,7 @@ function DatasetDelegationDetail({ dataset }: { dataset: string }) {
   if (isLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)', padding: '8px 0' }}>
-        <Spinner size={12} /> Loading…
+        <Spinner size={12} /> Loading�
       </div>
     )
   }
@@ -464,7 +464,7 @@ export function DelegationPage() {
           )}
         </div>
 
-        {datasetsQ.isLoading && <LoadingState message="Loading datasets…" />}
+        {datasetsQ.isLoading && <LoadingState message="Loading datasets�" />}
         {datasetsQ.isError && (
           <ErrorState error={datasetsQ.error} onRetry={() => datasetsQ.refetch()} />
         )}

@@ -263,7 +263,7 @@ function NixOSTab() {
 
   const validate = useMutation({
     mutationFn: () => api.post<NixOSValidate>('/api/nixos/validate', { flake_path: flakePath }),
-    onSuccess: result => { setValidateResult(result); result.valid ? toast.success('Config is valid') : toast.error('Validation failed') },
+    onSuccess: result => { setValidateResult(result); if (result.valid) { toast.success('Config is valid') } else { toast.error('Validation failed') } },
     onError: (e: Error) => toast.error(e.message),
   })
 

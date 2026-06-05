@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { fmtDateTime } from '@/lib/fmt'
@@ -557,7 +557,10 @@ function RepoSyncWizard({ type, onClose, onComplete }: { type: 'state'|'nixos'; 
   const [isTesting, setIsTesting] = useState(false)
 
   const tokenName = type === 'nixos' ? 'NixOS Base System Token' : 'Infrastructure State Token'
-  const repoName = type === 'nixos' ? `NixOS-Backup-${Math.floor(Math.random()*1000)}` : `System-State-${Math.floor(Math.random()*1000)}`
+  // Memoised so the default repo name doesn't change on every render
+  const repoName = useMemo(() =>
+    type === 'nixos' ? `NixOS-Backup-${Math.floor(Math.random()*1000)}` : `System-State-${Math.floor(Math.random()*1000)}`
+  , [type])
 
   const credsQ = useQuery({ queryKey:['git-sync','creds'], queryFn:()=>api.get<{success:boolean;credentials:Cred[]}>('/api/git-sync/credentials') })
 

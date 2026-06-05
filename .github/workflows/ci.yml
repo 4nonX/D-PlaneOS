@@ -68,6 +68,11 @@ jobs:
         working-directory: app-react
         run: npx tsc --noEmit
 
+      - name: Frontend lint (eslint)
+        if: hashFiles('app-react/package-lock.json') != ''
+        working-directory: app-react
+        run: npm run lint
+
       - name: Verify app/ bundle is up to date
         if: hashFiles('app-react/package-lock.json') != ''
         run: |
@@ -100,7 +105,8 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gcc libc6-dev postgresql-client gcc-aarch64-linux-gnu qemu-user-static libc6-arm64-cross
+          sudo apt-get install -y gcc libc6-dev postgresql-client gcc-aarch64-linux-gnu qemu-user-static libc6-arm64-cross \
+            zfsutils-linux libzfs-dev
 
       - name: Run Go Tests
         working-directory: daemon
@@ -108,12 +114,23 @@ jobs:
           DATABASE_DSN: postgres://dplaneos:dplaneos@localhost:5432/dplaneos?sslmode=disable
         run: go test -v -race ./...
 
+      - name: Vulnerability scan (govulncheck)
+        working-directory: daemon
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
       - name: Build binaries (amd64 & arm64)
         working-directory: daemon
         run: |
           mkdir -p ../build
+          # CGO_ENABLED=0: portable tarball build, ZFS via subprocess fallback.
+          # Used for the release tarballs and as the arm64 binary (no cross-CGO).
           CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=$(cat ../VERSION)" -o ../build/dplaned-linux-amd64 ./cmd/dplaned/
           GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=$(cat ../VERSION)" -o ../build/dplaned-linux-arm64 ./cmd/dplaned/
+          # CGO_ENABLED=1 -tags libzfs: matches the production Nix ISO build path.
+          # Uses libzfs C bindings directly instead of spawning ZFS subprocesses.
+          # All integration, storage, and HA test jobs run this binary so the
+          # tested code path matches what ships on the ISO.
+          CGO_ENABLED=1 go build -tags libzfs -ldflags="-s -w -X main.Version=$(cat ../VERSION)" -o ../build/dplaned-linux-amd64-cgo ./cmd/dplaned/
 
       - name: ARM64 Sanity Check (QEMU)
         run: |
@@ -166,7 +183,7 @@ jobs:
           sudo modprobe zfs
 
       - name: Positioning binary for scripts
-        run: cp build/dplaned-linux-amd64 ./dplaned-ci && chmod +x ./dplaned-ci
+        run: cp build/dplaned-linux-amd64-cgo ./dplaned-ci && chmod +x ./dplaned-ci
 
       - name: Run API Test Suite
         env:
@@ -213,7 +230,7 @@ jobs:
           sudo modprobe zfs
 
       - name: Positioning binary for scripts
-        run: cp build/dplaned-linux-amd64 ./dplaned-ci && chmod +x ./dplaned-ci
+        run: cp build/dplaned-linux-amd64-cgo ./dplaned-ci && chmod +x ./dplaned-ci
 
       - name: Run Convergence & Resilience Suite
         env:
@@ -260,7 +277,7 @@ jobs:
           sudo modprobe zfs
 
       - name: Positioning binary for scripts
-        run: cp build/dplaned-linux-amd64 ./dplaned-ci && chmod +x ./dplaned-ci
+        run: cp build/dplaned-linux-amd64-cgo ./dplaned-ci && chmod +x ./dplaned-ci
 
       - name: Run Storage Failure Suite
         env:
@@ -308,7 +325,7 @@ jobs:
           sudo modprobe zfs
 
       - name: Positioning binary for scripts
-        run: cp build/dplaned-linux-amd64 ./dplaned-ci && chmod +x ./dplaned-ci
+        run: cp build/dplaned-linux-amd64-cgo ./dplaned-ci && chmod +x ./dplaned-ci
 
       - name: Run Fleet/Install Suite
         env:
@@ -398,6 +415,67 @@ jobs:
             fi
           done
           echo "All required HA failover guards passed."
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # STAGE 4C: ARM64 API TESTS - Behavioral coverage for the arm64 daemon
+  # Closes the gap where arm64 was only sanity-checked with --version.
+  # Runs the same REST API suite against the arm64 CGO binary on a native
+  # arm64 runner. ZFS-specific tests are excluded (kernel module not
+  # available on the arm64 GitHub runner); all auth, session, SCRAM,
+  # HA config, and directory endpoints are exercised.
+  # ════════════════════════════════════════════════════════════════════════════
+  arm64-api:
+    name: ARM64 API Tests (native runner)
+    needs: [prepare, validate]
+    runs-on: ubuntu-22.04-arm
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: dplaneos
+          POSTGRES_USER: dplaneos
+          POSTGRES_PASSWORD: dplaneos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gcc libc6-dev postgresql-client python3-bcrypt curl ipmitool
+
+      - name: Build arm64 CGO daemon
+        working-directory: daemon
+        run: |
+          # Build the arm64 CGO daemon natively on the arm64 runner.
+          # No libzfs on this runner so we build without -tags libzfs;
+          # the subprocess ZFS fallback is used, matching the arm64 tarball.
+          # The goal here is behavioral coverage of the REST API surface,
+          # not libzfs integration (which is covered by the amd64 CGO tests).
+          CGO_ENABLED=1 go build -ldflags="-s -w -X main.Version=$(cat ../VERSION)" \
+            -o ../dplaned-ci ./cmd/dplaned/
+
+      - name: Run API Test Suite (arm64)
+        env:
+          CI_PASS: "CiAdmin1!Test"
+          DATABASE_DSN: "postgres://dplaneos:dplaneos@localhost:5432/dplaneos?sslmode=disable"
+          SKIP_ZFS_TESTS: "1"
+        run: |
+          chmod +x .github/scripts/api-integration-test.sh
+          bash .github/scripts/api-integration-test.sh
 
   ha-promotion-zfs:
     name: HA Promotion Mechanics (real ZFS)
@@ -679,6 +757,23 @@ jobs:
           echo "iso_name=${ISO_NAME}" >> $GITHUB_OUTPUT
           echo "iso_sha=${ISO_NAME}.sha256" >> $GITHUB_OUTPUT
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Sign ISO and generate SBOM
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          ISO="${{ steps.package.outputs.iso_name }}"
+          cosign sign-blob --yes "$ISO" --bundle "${ISO}.bundle"
+          syft scan "$ISO" -o spdx-json="${ISO}.sbom.json"
+          echo "iso_bundle=${ISO}.bundle" >> $GITHUB_OUTPUT
+          echo "iso_sbom=${ISO}.sbom.json" >> $GITHUB_OUTPUT
+        id: sign
+
       - name: Attach ISO to GitHub Release
         if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
@@ -687,6 +782,8 @@ jobs:
           files: |
             ${{ steps.package.outputs.iso_name }}
             ${{ steps.package.outputs.iso_sha }}
+            ${{ steps.sign.outputs.iso_bundle }}
+            ${{ steps.sign.outputs.iso_sbom }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -779,6 +876,23 @@ jobs:
           echo "iso_name=${ISO_NAME}" >> $GITHUB_OUTPUT
           echo "iso_sha=${ISO_NAME}.sha256" >> $GITHUB_OUTPUT
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Sign ISO and generate SBOM
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          ISO="${{ steps.package.outputs.iso_name }}"
+          cosign sign-blob --yes "$ISO" --bundle "${ISO}.bundle"
+          syft scan "$ISO" -o spdx-json="${ISO}.sbom.json"
+          echo "iso_bundle=${ISO}.bundle" >> $GITHUB_OUTPUT
+          echo "iso_sbom=${ISO}.sbom.json" >> $GITHUB_OUTPUT
+        id: sign
+
       - name: Attach arm64 ISO to GitHub Release
         if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
@@ -787,6 +901,8 @@ jobs:
           files: |
             ${{ steps.package.outputs.iso_name }}
             ${{ steps.package.outputs.iso_sha }}
+            ${{ steps.sign.outputs.iso_bundle }}
+            ${{ steps.sign.outputs.iso_sbom }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

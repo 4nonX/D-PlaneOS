@@ -295,7 +295,7 @@ export async function apiFetch<T>(
       const errBody = await res.json()
       if (errBody.error) message = errBody.error
       else if (errBody.message) message = errBody.message
-    } catch {}
+    } catch { /* response body not JSON - use default message */ }
     throw new ApiError(res.status, message)
   }
 
