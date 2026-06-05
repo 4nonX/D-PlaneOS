@@ -269,13 +269,59 @@
       # can be passed via specialArgs without triggering evaluation loops.
       # Each arch bakes its own NAS closure into the ISO for offline install.
 
+      # dplaneos-for-iso: identical to dplaneos but strips the large Intel-only
+      # extras (intel-media-driver ~100 MB, intel-compute-runtime ~300 MB) that
+      # push the x86_64 squashfs over the GitHub Actions disk limit.
+      # The running system (dplaneos) keeps them; users who need VA-API/OpenCL
+      # on an offline-installed system can add them via nixos-rebuild.
+      nixosConfigurations.dplaneos-for-iso = let
+        system = "x86_64-linux";
+        pkgs   = nixpkgs.legacyPackages.${system};
+      in nixpkgs.lib.nixosSystem {
+        inherit system pkgs;
+        specialArgs = { inherit self; };
+        modules = [
+          ./nixos/configuration-standalone.nix
+          self.nixosModules.dplaneos
+          disko.nixosModules.disko
+          ./nixos/disko.nix
+          impermanence.nixosModules.impermanence
+          ./nixos/impermanence.nix
+          ./nixos/ota-module.nix
+          ./nixos/dplane-generated.nix
+          applianceConfig
+          (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
+               f = mkFrontend { inherit pkgs; };
+           in {
+            services.dplaneos.daemonPackage   = d;
+            services.dplaneos.fenced.package  = d;
+            services.dplaneos.frontendPackage = f;
+          })
+          # Strip packages that bloat the squashfs but are not needed to install
+          # or run the core NAS stack. They can be fetched post-install via
+          # nixos-rebuild once the system is on the network.
+          #
+          # intel-media-driver  (~100 MB): VA-API hardware video transcoding.
+          #   Needed for Jellyfin/Plex hardware transcode; NOT needed for ZFS/SMB/NFS/iSCSI/HA.
+          # intel-compute-runtime (~300 MB): OpenCL GPU compute.
+          #   Needed for GPU compute workloads; NOT needed for GPU passthrough (VFIO) or NAS core.
+          #
+          # NOTE: hardware.cpu.intel.updateMicrocode is intentionally NOT stripped.
+          # CPU microcode updates (Spectre/Meltdown/Raptor Lake errata) are small and
+          # security-critical; they belong in the offline-installed system.
+          ({ lib, ... }: {
+            hardware.graphics.extraPackages = nixpkgs.lib.mkForce [];
+          })
+        ];
+      };
+
       nixosConfigurations.iso = let
         system = "x86_64-linux";
       in nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
           inherit self;
-          targetSystem = self.nixosConfigurations.dplaneos.config.system.build.toplevel;
+          targetSystem = self.nixosConfigurations.dplaneos-for-iso.config.system.build.toplevel;
         };
         modules = [
           ./nixos/installer.nix
