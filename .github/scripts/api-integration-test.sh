@@ -275,6 +275,9 @@ assert_array "List snapshots returns array" "snapshots"
 # Rollback
 api POST /api/zfs/snapshots/rollback "{\"snapshot\":\"testpool/api-test@ci-snap-1\",\"force\":true}" >/dev/null
 assert_json "Rollback snapshot" "success" "true"
+# force=true rollback unmounts the dataset during the operation; remount so
+# subsequent ACL and NFS tests can reach the mountpoint.
+sudo zfs mount testpool/api-test 2>/dev/null || true
 
 # Health & Iostat
 api GET /api/zfs/health >/dev/null
