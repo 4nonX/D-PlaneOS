@@ -230,7 +230,11 @@ jobs:
           sudo modprobe zfs
 
       - name: Positioning binary for scripts
-        run: cp build/dplaned-linux-amd64-cgo ./dplaned-ci && chmod +x ./dplaned-ci
+        # Convergence tests exercise fault injection (DPLANE_FAULT_INJECT) which
+        # works by intercepting subprocess calls. The CGO binary calls libzfs
+        # directly and naturally bypasses that mechanism. The reconciler logic
+        # under test is identical in both builds; use the subprocess binary here.
+        run: cp build/dplaned-linux-amd64 ./dplaned-ci && chmod +x ./dplaned-ci
 
       - name: Run Convergence & Resilience Suite
         env:
