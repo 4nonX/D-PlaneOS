@@ -65,6 +65,8 @@ Use this when a user is locked out or needs a forced credential rotation.
 
 The user's existing sessions are immediately revoked. On their next login they are blocked at the system level until they change the temporary password - only `/api/auth/change-password`, `/api/auth/logout`, and `/api/auth/session` are accessible until the flag is cleared. LDAP accounts cannot have their password reset here; direct users to their directory server.
 
+**AAL2 required:** Resetting another user's password requires the admin session to be authenticated at AAL2 (Authentication Assurance Level 2), meaning the admin must have verified TOTP during login. A password-only session (AAL1) is rejected with HTTP 403 and `action: "enable_totp"`. This prevents an account compromise from triggering unauthorized password resets.
+
 ### Removing Users
 
 Users cannot be deleted while they have active sessions. User ID 1 (the initial admin) cannot be deleted.
@@ -161,6 +163,14 @@ sudo crontab -e
 # Add:
 0 2 1 * * /usr/sbin/zpool scrub tank
 ```
+
+### Pool and Dataset Constraints
+
+**Pool destroy dependency check:** A pool cannot be destroyed if any dataset within it is actively mounted, or if any NFS export or SMB share references a path within the pool. The operation returns a list of blocking dependencies. Remove or disable the shares first, then retry. The Force option on pool destroy still validates dependencies - it does not bypass them silently.
+
+**Snapshot clone detection:** If a snapshot has dependent clones, destroy is rejected with a message naming the clone. Promote or destroy the clone first.
+
+**Quota guard:** Setting a refquota below the dataset's current referenced usage is rejected. The error message includes the current usage so you can choose an appropriate quota value.
 
 ## File Management
 

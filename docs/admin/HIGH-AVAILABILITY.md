@@ -359,6 +359,18 @@ When node A is repaired and reboots, it rejoins as a Patroni replica, streams mi
 patronictl -c /etc/dplaneos/patroni.yaml switchover dplaneos --primary node-b --candidate node-a
 ```
 
+### iSCSI ALUA and NVMe-oF ANA Path State Management
+
+For deployments with ALUA-enabled iSCSI targets or ANA-enabled NVMe-oF exports, the Keepalived `notify_backup` script performs path-state negotiation before pool export:
+
+1. Keepalived detects role change to BACKUP.
+2. `notify_backup` calls `POST /api/ha/alua-standby`, which sets all ALUA-enabled iSCSI targets to Standby access state. Non-fatal if targetcli is unavailable.
+3. `notify_backup` calls `POST /api/ha/standby` to export ZFS pools (4-second deadline, self-reboot on timeout).
+
+The sequence is critical: path state changes before pool export. This allows initiators to see a clean Standby state transition rather than an abrupt path loss when the VIP moves. Without this ordering, connected iSCSI clients experience I/O errors during failover.
+
+The NVMe-oF ANA write includes a 200ms propagation wait (configurable via `ANAPropagationDelay`) to allow kernel AEN notifications to reach connected hosts before the primary relinquishes control. This is a timing heuristic, not a protocol confirmation. iSCSI ALUA state changes are synchronous.
+
 ### Adding a Disk to the Active Pool
 
 Disk operations (pool expansion, resilvering) only execute on the primary. The standby reflects changes automatically through ZFS replication. Use the Storage UI or API as normal; the HA daemon ensures write operations only run when Patroni confirms local primary status.
@@ -404,6 +416,8 @@ If fencing succeeds:
 
 - `ExecutePromotion()` runs: clears `SubordinateMode`, brings ZFS pools off readonly, writes the promotion event to the audit log, persists new cluster state to the DB via `persistClusterState()`
 - `promotionCallback()` fires: triggers post-promotion reconciliation (see below)
+
+**Self-reboot mechanics (v14.0.0):** `ForceSelfReboot` now calls `syscall.Reboot(LINUX_REBOOT_CMD_RESTART)` directly via `golang.org/x/sys/unix`, with `runtime.LockOSThread()` to ensure the syscall runs on a dedicated OS thread. The previous implementation called `sync()` before `reboot -f`, which caused deadlock: when a ZFS pool export blocked in D-state (uninterruptible sleep on a hung SCSI bus), `sync` joined the same D-state queue and the function never reached the reboot call. The fix removes `sync` entirely. The kernel reboot syscall is the primary path; `exec.Command("reboot", "-f")` is a fallback only.
 
 ### Post-Promotion Reconciliation and Git Reachability
 

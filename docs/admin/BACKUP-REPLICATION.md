@@ -149,6 +149,66 @@ replication:
 
 `trigger_on_snapshot: true` means replication runs immediately after each automatic snapshot, rather than only on the configured interval.
 
+**Reliability features (v14.0.0):** Transient failures trigger automatic retry with exponential backoff (up to 3 attempts: immediate, +30 seconds, +120 seconds). Two schedules targeting the same source dataset and remote destination cannot run concurrently - the second is skipped with a "conflict" status to prevent ZFS stream corruption. Before each incremental send, the daemon verifies the base snapshot exists on the remote; if the chain is broken, it falls back to a full send with a log message. After every `zfs recv`, the daemon verifies the expected snapshot exists on the destination and fails the job explicitly if absent.
+
+---
+
+## Snapshot Retention Policies
+
+DPlaneOS automatically prunes old local snapshots based on per-bucket retention counts. Only snapshots matching the configured prefix are pruned; manually created snapshots are never touched. Retention runs after each replication cycle so local pruning happens after remote copies are confirmed current.
+
+**Configure via UI:** Data Protection -> Replication -> Retention tab -> Add Policy
+
+| Field | Description |
+|-------|-------------|
+| Dataset | Dataset to prune (e.g. `tank/data`) |
+| Prefix | Snapshot name prefix to match (e.g. `auto-`) |
+| Keep Hourly | Keep N most recent hourly snapshots (0 = unlimited) |
+| Keep Daily | Keep N most recent daily snapshots |
+| Keep Weekly | Keep N most recent weekly snapshots |
+| Keep Monthly | Keep N most recent monthly snapshots |
+| Keep Yearly | Keep N most recent yearly snapshots |
+
+Snapshots are sorted by creation time and assigned to time buckets. The N newest in each configured bucket are retained; the rest are destroyed. A snapshot matching multiple buckets is retained if any bucket's limit has not been reached.
+
+**Via API:**
+```
+GET  /api/replication/retention          # list policies
+POST /api/replication/retention          # create/update/delete
+```
+
+---
+
+## Restore from Remote (Disaster Recovery)
+
+If the local dataset is lost or corrupted, restore from a remote copy created by scheduled replication.
+
+**Prerequisites:**
+- The remote peer must be authorized (SSH key installed)
+- The remote dataset must exist and contain valid snapshots
+- Specify the full remote snapshot path (e.g. `backuppool/data@snap-2025-01-15`)
+
+**Via UI:** Data Protection -> Replication -> Restore tab
+
+1. Select the source peer
+2. Enter the remote snapshot path exactly as it appears on the remote (e.g. `backuppool/data@snap-2025-01-15`)
+3. Enter the local destination dataset (must not exist, or use Force)
+4. Check Force only if you want to overwrite an existing local dataset (destroys conflicting local snapshots)
+5. Click Start Restore
+
+The restore runs asynchronously with real-time progress and ETA. After receive completes, the daemon verifies the snapshot exists on the local dataset. A resume token warning is shown if a prior interrupted receive is detected.
+
+**Via API:**
+```
+POST /api/replication/restore
+{
+  "remote_id": "<peer-id>",
+  "remote_snapshot": "backuppool/data@snap-2025-01-15",
+  "local_dataset": "tank/recovered-data",
+  "force": false
+}
+```
+
 ---
 
 ## Cloud Sync (rclone)
