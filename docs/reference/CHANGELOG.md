@@ -66,8 +66,6 @@ This release addresses the operational maturity gaps identified by the sysadmin,
 
 `flake.lock` is still absent from the repository. Run `nix flake lock && git add flake.lock` in a Nix environment to satisfy the reproducibility guarantee stated in the flake comment.
 
-`flake.lock` is still absent from the repository. Run `nix flake lock && git add flake.lock` in a Nix environment to satisfy the reproducibility guarantee stated in the flake comment.
-
 ---
 
 ## v14.0.0 (2026-06-05) - "Vanguard"
