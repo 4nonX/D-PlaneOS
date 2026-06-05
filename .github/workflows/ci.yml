@@ -437,6 +437,34 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
+      - name: Pin flake.lock
+        run: |
+          # Generate (or refresh) flake.lock so every job in this CI run uses
+          # the same nixpkgs revision. Without a committed lock file, each job
+          # independently resolves nixpkgs HEAD and can get different versions.
+          nix flake lock
+          echo "Pinned nixpkgs: $(nix flake metadata --json . | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["locks"]["nodes"]["nixpkgs"]["locked"]["rev"])')"
+
+      - name: Commit flake.lock if new or changed
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if git diff --quiet flake.lock 2>/dev/null && git ls-files --error-unmatch flake.lock 2>/dev/null; then
+            echo "flake.lock unchanged - nothing to commit"
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add flake.lock
+            git commit -m "chore: pin flake.lock [skip ci]"
+            git push
+            echo "flake.lock committed and pushed"
+          fi
+
+      - name: Upload flake.lock artifact for ISO jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-lock
+          path: flake.lock
+
       - name: Evaluate HA NixOS modules
         run: nix flake check --no-build .
 
@@ -579,6 +607,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download pinned flake.lock from ha-vm-cluster
+        uses: actions/download-artifact@v4
+        with:
+          name: flake-lock
+
       - name: Free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be  # v1.3.1
         with:
@@ -665,6 +698,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download pinned flake.lock from ha-vm-cluster
+        uses: actions/download-artifact@v4
+        with:
+          name: flake-lock
 
       - name: Free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be  # v1.3.1
