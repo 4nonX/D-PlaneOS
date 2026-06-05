@@ -2,9 +2,7 @@ package gitops
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -1244,21 +1242,6 @@ func datasetAttachmentReason(db *sql.DB, datasetName, mountpoint string) string 
 	)
 }
 
-// isToolNotFound returns true when the error indicates an executable was not
-// found in PATH. Handles both exec.ErrNotFound and Windows-style path errors.
-func isToolNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, exec.ErrNotFound) {
-		return true
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "executable file not found") ||
-		strings.Contains(msg, "no such file or directory") ||
-		strings.Contains(msg, "file not found")
-}
-
 // blockedCheckShare evaluates whether removing a share should be BLOCKED.
 //
 // Rule: if smbstatus reports any active connection to this share name at the
@@ -1426,18 +1409,6 @@ func diffPool(desired DesiredPool, live LivePool) []string {
 	return changes
 }
 
-func stringSliceEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // diffDataset returns property changes between desired and live dataset.
 func diffDataset(desired DesiredDataset, live LiveDataset) []string {
 	var changes []string
@@ -1459,16 +1430,16 @@ func diffDataset(desired DesiredDataset, live LiveDataset) []string {
 		changes = append(changes, fmt.Sprintf("quota: %s → %s", live.Quota, desired.Quota))
 	}
 
-	if desired.Sync != "" && strings.ToLower(desired.Sync) != strings.ToLower(live.Sync) {
+	if desired.Sync != "" && !strings.EqualFold(desired.Sync, live.Sync) {
 		changes = append(changes, fmt.Sprintf("sync: %s → %s", live.Sync, desired.Sync))
 	}
-	if desired.Recordsize != "" && strings.ToLower(desired.Recordsize) != strings.ToLower(live.Recordsize) {
+	if desired.Recordsize != "" && !strings.EqualFold(desired.Recordsize, live.Recordsize) {
 		changes = append(changes, fmt.Sprintf("recordsize: %s → %s", live.Recordsize, desired.Recordsize))
 	}
-	if desired.Xattr != "" && strings.ToLower(desired.Xattr) != strings.ToLower(live.Xattr) {
+	if desired.Xattr != "" && !strings.EqualFold(desired.Xattr, live.Xattr) {
 		changes = append(changes, fmt.Sprintf("xattr: %s → %s", live.Xattr, desired.Xattr))
 	}
-	if desired.Secondarycache != "" && strings.ToLower(desired.Secondarycache) != strings.ToLower(live.Secondarycache) {
+	if desired.Secondarycache != "" && !strings.EqualFold(desired.Secondarycache, live.Secondarycache) {
 		changes = append(changes, fmt.Sprintf("secondarycache: %s → %s", live.Secondarycache, desired.Secondarycache))
 	}
 
@@ -1705,18 +1676,6 @@ func equalSlicesSorted(a, b []string) bool {
 	return true
 }
  
-func equalIntSlicesSorted(a, b []int) bool {
-	if len(a) != len(b) { return false }
-	ac := append([]int{}, a...)
-	bc := append([]int{}, b...)
-	sort.Ints(ac)
-	sort.Ints(bc)
-	for i := range ac {
-		if ac[i] != bc[i] { return false }
-	}
-	return true
-}
- 
 func equalSlices(a, b []string) bool {
 	if len(a) != len(b) { return false }
 	for i := range a {
@@ -1725,14 +1684,6 @@ func equalSlices(a, b []string) bool {
 	return true
 }
  
-func equalIntSlices(a, b []int) bool {
-	if len(a) != len(b) { return false }
-	for i := range a {
-		if a[i] != b[i] { return false }
-	}
-	return true
-}
-
 func diffIntSlices(live, desired []int) (added, removed []int) {
 	liveMap := make(map[int]bool)
 	for _, v := range live {
@@ -1801,49 +1752,6 @@ func HumaniseBytes(b uint64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
-}
-
-func diffLDAP(desired *DesiredLDAP, live *DesiredLDAP) []DiffItem {
-	if live == nil {
-		return []DiffItem{{
-			Kind: KindLDAP, Name: "LDAP Config", Action: ActionCreate,
-			DesiredLDAP: desired,
-			Changes:     []string{"Enable LDAP configuration"},
-		}}
-	}
-
-	var changes []string
-	if desired.Enabled != live.Enabled {
-		changes = append(changes, fmt.Sprintf("Enabled: %v -> %v", live.Enabled, desired.Enabled))
-	}
-	if desired.Server != live.Server {
-		changes = append(changes, fmt.Sprintf("Server: %s -> %s", live.Server, desired.Server))
-	}
-	if desired.Port != live.Port {
-		changes = append(changes, fmt.Sprintf("Port: %d -> %d", live.Port, desired.Port))
-	}
-	if desired.UseTLS != live.UseTLS {
-		changes = append(changes, fmt.Sprintf("UseTLS: %v -> %v", live.UseTLS, desired.UseTLS))
-	}
-	if desired.BindDN != live.BindDN {
-		changes = append(changes, fmt.Sprintf("BindDN: %s -> %s", live.BindDN, desired.BindDN))
-	}
-	if desired.BindPassword != "" && desired.BindPassword != live.BindPassword {
-		changes = append(changes, "BindPassword: (changed)")
-	}
-	if desired.BaseDN != live.BaseDN {
-		changes = append(changes, fmt.Sprintf("BaseDN: %s -> %s", live.BaseDN, desired.BaseDN))
-	}
-
-	if len(changes) == 0 {
-		return nil
-	}
-
-	return []DiffItem{{
-		Kind: KindLDAP, Name: "LDAP Config", Action: ActionModify,
-		DesiredLDAP: desired,
-		Changes:     changes,
-	}}
 }
 
 func diffACME(d, l DesiredACME) []string {

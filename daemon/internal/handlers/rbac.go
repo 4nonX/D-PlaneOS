@@ -24,7 +24,7 @@ func HandleListRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"roles": roles,
 		"count": len(roles),
 	})
@@ -143,7 +143,7 @@ func HandleListPermissions(w http.ResponseWriter, r *http.Request) {
 		grouped[perm.Category] = append(grouped[perm.Category], perm)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"permissions": permissions,
 		"grouped":     grouped,
 		"count":       len(permissions),
@@ -164,7 +164,7 @@ func HandleGetRolePermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"permissions": permissions,
 		"count":       len(permissions),
 	})
@@ -239,7 +239,7 @@ func HandleGetUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"roles": roles,
 		"count": len(roles),
 	})
@@ -266,7 +266,7 @@ func HandleGetUserPermissions(w http.ResponseWriter, r *http.Request) {
 		grouped[perm.Category] = append(grouped[perm.Category], perm)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"permissions": permissions,
 		"grouped":     grouped,
 		"count":       len(permissions),
@@ -368,7 +368,7 @@ func HandleGetMyPermissions(w http.ResponseWriter, r *http.Request) {
 		permMap[perm.Resource+":"+perm.Action] = true
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":     true,
 		"permissions": permissions,
 		"can":         permMap,
@@ -390,7 +390,7 @@ func HandleGetMyRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"roles": roles,
 		"count": len(roles),
 	})
@@ -418,7 +418,7 @@ func HandleCheckPermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"resource":  resource,
 		"action":    action,
 		"permitted": hasPermission,

@@ -1,4 +1,4 @@
-﻿package handlers
+package handlers
 
 import (
 	"encoding/json"
@@ -21,7 +21,7 @@ func ReloadSMBConfig(w http.ResponseWriter, r *http.Request) {
 
 	output, err := cmdutil.RunFast("systemctl", "reload", "smbd")
 
-	audit.LogActivity(user, "samba_reload", map[string]interface{}{
+	audit.LogActivity(user, "samba_reload", map[string]any{
 		"success": err == nil,
 	})
 
@@ -30,7 +30,7 @@ func ReloadSMBConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"output":  string(output),
 	})
@@ -48,11 +48,11 @@ func TestSMBConfig(w http.ResponseWriter, r *http.Request) {
 
 	output, err := cmdutil.RunFast("testparm", "-s")
 
-	audit.LogActivity(user, "samba_test", map[string]interface{}{
+	audit.LogActivity(user, "samba_test", map[string]any{
 		"success": err == nil,
 	})
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": err == nil,
 		"output":  string(output),
 	})
@@ -70,7 +70,7 @@ func ReloadNFSExports(w http.ResponseWriter, r *http.Request) {
 
 	output, err := cmdutil.RunFast("exportfs", "-ra")
 
-	audit.LogActivity(user, "nfs_reload", map[string]interface{}{
+	audit.LogActivity(user, "nfs_reload", map[string]any{
 		"success": err == nil,
 	})
 
@@ -79,7 +79,7 @@ func ReloadNFSExports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"output":  string(output),
 	})
@@ -91,7 +91,7 @@ func ListNFSExports(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// exportfs not installed or NFS not configured - return empty list, not 500
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"success": true,
 			"exports": []string{},
 			"output":  "",
@@ -100,7 +100,7 @@ func ListNFSExports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"output":  string(output),
 	})

@@ -19,6 +19,7 @@ import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { toast } from '@/hooks/useToast'
 import { Modal } from '@/components/ui/Modal'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,7 +119,7 @@ function ExportModal({ existing, onClose, onSaved }: {
 function ExportRow({ exp, onEdit, onDeleted }: {
   exp: NFSExport; onEdit: () => void; onDeleted: () => void
 }) {
-  const [confirming, setConfirming] = useState(false)
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/api/nfs/exports/${exp.id}`, {}),
@@ -150,17 +151,12 @@ function ExportRow({ exp, onEdit, onDeleted }: {
               <Icon name="edit" size={14} />
             </button>
           </Tooltip>
-          {!confirming
-            ? <button className="btn btn-danger" onClick={() => setConfirming(true)}><Icon name="delete" size={14} /></button>
-            : <>
-                <button className="btn btn-danger" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
-                  {deleteMutation.isPending ? '…' : 'Delete'}
-                </button>
-                <button className="btn btn-ghost" onClick={() => setConfirming(false)}>Cancel</button>
-              </>
-          }
+          <button className="btn btn-danger" onClick={async () => { if (await confirm({ title: `Delete export "${exp.path}"?`, message: 'This NFS export will be removed.', danger: true, confirmLabel: 'Delete' })) { deleteMutation.mutate() } }} disabled={deleteMutation.isPending}>
+            <Icon name="delete" size={14} />
+          </button>
         </div>
       </div>
+      <ConfirmDialog />
     </div>
   )
 }

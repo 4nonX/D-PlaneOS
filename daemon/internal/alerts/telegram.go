@@ -77,7 +77,7 @@ func SendAlert(alert TelegramAlert) error {
 func sendTelegramMessage(text string) error {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", globalConfig.BotToken)
 	
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"chat_id":    globalConfig.ChatID,
 		"text":       text,
 		"parse_mode": "Markdown",

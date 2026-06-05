@@ -1084,7 +1084,7 @@ func validateZpoolCreate(args []string) error {
 // Format: add <pool> [mirror|raidz|...] <devices...>
 func validateZpoolAdd(args []string) error {
 	if len(args) < 3 || args[0] != "add" {
-		return fmt.Errorf("zpool add requires: add pool [type] device...")
+		return fmt.Errorf("zpool add requires: add pool [type] device")
 	}
 	if err := ValidatePoolName(args[1]); err != nil {
 		return err
@@ -1406,7 +1406,7 @@ func validateZpoolDetach(args []string) error {
 // Format: add <pool> special [mirror] <disks...>
 func validateZpoolAddSpecial(args []string) error {
 	if len(args) < 4 || args[0] != "add" || args[2] != "special" {
-		return fmt.Errorf("zpool add special requires: add pool special [mirror] disks...")
+		return fmt.Errorf("zpool add special requires: add pool special [mirror] disks")
 	}
 	if err := ValidatePoolName(args[1]); err != nil {
 		return err

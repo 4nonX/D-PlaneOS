@@ -30,6 +30,7 @@ interface NVMeExport {
   namespace_id?: number
   allow_any_host?: boolean
   host_nqns?: string[]
+  ana_enabled?: boolean
 }
 
 export function NVMeOFPage() {
@@ -58,6 +59,7 @@ export function NVMeOFPage() {
   const [listenPort, setListenPort] = useState('4420')
   const [allowAny, setAllowAny] = useState(false)
   const [hostNqnsText, setHostNqnsText] = useState('')
+  const [anaEnabled, setAnaEnabled] = useState(false)
   const [editingNqn, setEditingNqn] = useState<string | null>(null)
 
   const save = useMutation({
@@ -74,6 +76,8 @@ export function NVMeOFPage() {
         listen_port: parseInt(listenPort, 10) || 4420,
         allow_any_host: allowAny,
         host_nqns: allowAny ? [] : host_nqns,
+        ana_enabled: anaEnabled,
+        ana_groups: anaEnabled ? [{ group_id: 1, namespace_id: 1, state: 'optimized' }] : [],
       }
       const url = editingNqn ? '/api/nvmet/targets' : '/api/nvmet/targets'
       return editingNqn ? api.put(url, body) : api.post(url, body)
@@ -111,6 +115,7 @@ export function NVMeOFPage() {
     setListenPort(String(t.listen_port || 4420))
     setAllowAny(!!t.allow_any_host)
     setHostNqnsText((t.host_nqns || []).join('\n'))
+    setAnaEnabled(!!t.ana_enabled)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -122,6 +127,7 @@ export function NVMeOFPage() {
     setListenPort('4420')
     setAllowAny(false)
     setHostNqnsText('')
+    setAnaEnabled(false)
   }
 
   return (
@@ -212,6 +218,10 @@ export function NVMeOFPage() {
           <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <input type="checkbox" checked={allowAny} onChange={e => setAllowAny(e.target.checked)} />
             <span className="field-label" style={{ margin: 0 }}>Allow any host NQN (insecure on untrusted networks)</span>
+          </label>
+          <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <input type="checkbox" checked={anaEnabled} onChange={e => setAnaEnabled(e.target.checked)} />
+            <span className="field-label" style={{ margin: 0 }}>Enable ANA (Asymmetric Namespace Access) for multi-path HA</span>
           </label>
           {!allowAny && (
             <label className="field">

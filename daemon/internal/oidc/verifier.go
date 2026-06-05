@@ -221,7 +221,7 @@ func validateClaims(rc rawClaims, cfg Config, expectedNonce string, now time.Tim
 		if rc.Nonce == "" {
 			return ErrNonceMissing
 		}
-		if subtleStringEqual(rc.Nonce, expectedNonce) == false {
+		if !subtleStringEqual(rc.Nonce, expectedNonce) {
 			return ErrNonceMismatch
 		}
 	}

@@ -80,14 +80,12 @@ func configPath(filename string) string {
 	return ConfigDir + "/" + filename
 }
 
-const scheduleFile_deprecated = "" // replaced by configPath("snapshot-schedules.json")
-
 func (h *SnapshotScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	data, err := os.ReadFile(configPath("snapshot-schedules.json"))
 	if err != nil {
 		// No schedules yet - return empty array
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "schedules": []SnapshotSchedule{}})
+		json.NewEncoder(w).Encode(map[string]any{"success": true, "schedules": []SnapshotSchedule{}})
 		return
 	}
 
@@ -98,7 +96,7 @@ func (h *SnapshotScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.R
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "schedules": schedules})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "schedules": schedules})
 }
 
 func (h *SnapshotScheduleHandler) SaveSchedules(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +139,7 @@ func (h *SnapshotScheduleHandler) SaveSchedules(w http.ResponseWriter, r *http.R
 
 	audit.LogAction("snapshot_schedule", user, "Updated snapshot schedules", true, 0)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }
 
 func (h *SnapshotScheduleHandler) regenerateCron(schedules []SnapshotSchedule) {
@@ -179,7 +177,7 @@ func (h *SnapshotScheduleHandler) regenerateCron(schedules []SnapshotSchedule) {
 		// Use the cron-hook internal endpoint. 
 		// We wrap it in a shell script that can also do the standalone pruning if needed.
 		// Use json.Marshal to ensure the payload is safe for insertion into a shell string
-		payloadObj := map[string]interface{}{
+		payloadObj := map[string]any{
 			"dataset":        s.Dataset,
 			"prefix":         prefix,
 			"retention":      s.Retention,
@@ -252,7 +250,7 @@ func (h *SnapshotScheduleHandler) RunNow(w http.ResponseWriter, r *http.Request)
 	go TriggerPostSnapshotReplication(req.Dataset)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "snapshot": req.Dataset + "@" + snapName})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "snapshot": req.Dataset + "@" + snapName})
 }
 
 // RunCronHook is called by the cron job instead of running `zfs snapshot` directly.
@@ -302,7 +300,7 @@ func (h *SnapshotScheduleHandler) RunCronHook(w http.ResponseWriter, r *http.Req
 	go TriggerPostSnapshotReplication(req.Dataset)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "snapshot": fullName})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "snapshot": fullName})
 }
 
 // pruneOldSnapshots destroys snapshots beyond the retention count for a dataset+prefix.
@@ -313,17 +311,16 @@ func pruneOldSnapshots(dataset, prefix string, retention int) {
 		return
 	}
 	var matching []string
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
 		// Only consider snapshots with our prefix
-		atIdx := strings.Index(line, "@")
-		if atIdx < 0 {
+		_, snapPart, ok := strings.Cut(line, "@")
+		if !ok {
 			continue
 		}
-		snapPart := line[atIdx+1:]
 		if strings.HasPrefix(snapPart, prefix+"-") {
 			matching = append(matching, line)
 		}
@@ -360,7 +357,7 @@ func (h *ACLHandler) GetACL(w http.ResponseWriter, r *http.Request) {
 	output, err := cmdutil.RunFast("getfacl", "-p", path)
 	if err != nil {
 		log.Printf("ACL: GetACL failed for %s: %v, output: %s", path, err, string(output))
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("getfacl failed: %v, output: %s", err, string(output)),
 		})
@@ -371,7 +368,7 @@ func (h *ACLHandler) GetACL(w http.ResponseWriter, r *http.Request) {
 	statOut, _ := cmdutil.RunFast("stat", "-c", "%U %G %a %F", path)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"path":    path,
 		"acl":     string(output),
@@ -489,7 +486,7 @@ func (h *ACLHandler) SetACL(w http.ResponseWriter, r *http.Request) {
 
 	audit.LogAction("acl_"+action, user, fmt.Sprintf("ACL %s on %s: %s", action, req.Path, req.Entry), true, duration)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }
 
 // ============================================================
@@ -503,7 +500,7 @@ func NewMetricsHandler() *MetricsHandler { return &MetricsHandler{} }
 const metricsDir = config.MetricsDir
 
 func (h *MetricsHandler) GetCurrentMetrics(w http.ResponseWriter, r *http.Request) {
-	metrics := map[string]interface{}{}
+	metrics := map[string]any{}
 
 	// CPU usage
 	if data, err := os.ReadFile("/proc/stat"); err == nil {
@@ -549,7 +546,7 @@ func (h *MetricsHandler) GetCurrentMetrics(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "metrics": metrics, "timestamp": time.Now().Unix()})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "metrics": metrics, "timestamp": time.Now().Unix()})
 }
 
 func (h *MetricsHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
@@ -562,14 +559,14 @@ func (h *MetricsHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "history": []interface{}{}, "period": period})
+		json.NewEncoder(w).Encode(map[string]any{"success": true, "history": []any{}, "period": period})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	var history []interface{}
+	var history []any
 	json.Unmarshal(data, &history)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"period":  period,
 		"history": history,
@@ -580,7 +577,7 @@ func (h *MetricsHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
 func (h *MetricsHandler) CollectAndStore() {
 	os.MkdirAll(metricsDir, 0755)
 
-	point := map[string]interface{}{"ts": time.Now().Unix()}
+	point := map[string]any{"ts": time.Now().Unix()}
 
 	// CPU
 	if data, err := os.ReadFile("/proc/loadavg"); err == nil {
@@ -594,7 +591,7 @@ func (h *MetricsHandler) CollectAndStore() {
 
 	// Memory
 	if data, err := os.ReadFile("/proc/meminfo"); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if strings.HasPrefix(line, "MemTotal:") {
 				point["mem_total"] = strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(line), " kB"), "MemTotal:"))
 			} else if strings.HasPrefix(line, "MemAvailable:") {
@@ -616,9 +613,9 @@ func (h *MetricsHandler) CollectAndStore() {
 	}
 }
 
-func (h *MetricsHandler) appendToHistory(period string, point map[string]interface{}, maxPoints int) {
+func (h *MetricsHandler) appendToHistory(period string, point map[string]any, maxPoints int) {
 	filename := filepath.Join(metricsDir, period+".json")
-	var history []map[string]interface{}
+	var history []map[string]any
 
 	if data, err := os.ReadFile(filename); err == nil {
 		json.Unmarshal(data, &history)
@@ -667,7 +664,7 @@ func (h *FirewallHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	rules := parseUFWRules(rawOutput)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success":   true,
 		"status":    status,
 		"rules":     rules,     // always a []map - never a raw string
@@ -684,27 +681,27 @@ func (h *FirewallHandler) GetStatusNixOS(w http.ResponseWriter, r *http.Request)
 	var raw strings.Builder
 	raw.WriteString("Status: active\n\n     To                         Action      From\n     --                         ------      ----\n")
 
-	rules := []map[string]interface{}{}
+	rules := []map[string]any{}
 	id := 1
 	for _, p := range tcp {
 		portStr := fmt.Sprintf("%d/tcp", p)
-		raw.WriteString(fmt.Sprintf("[%2d] %-25s ALLOW IN    Anywhere\n", id, portStr))
-		rules = append(rules, map[string]interface{}{
+		fmt.Fprintf(&raw, "[%2d] %-25s ALLOW IN    Anywhere\n", id, portStr)
+		rules = append(rules, map[string]any{
 			"id": id, "action": "allow", "port": fmt.Sprintf("%d", p), "proto": "tcp", "from": "Anywhere",
 		})
 		id++
 	}
 	for _, p := range udp {
 		portStr := fmt.Sprintf("%d/udp", p)
-		raw.WriteString(fmt.Sprintf("[%2d] %-25s ALLOW IN    Anywhere\n", id, portStr))
-		rules = append(rules, map[string]interface{}{
+		fmt.Fprintf(&raw, "[%2d] %-25s ALLOW IN    Anywhere\n", id, portStr)
+		rules = append(rules, map[string]any{
 			"id": id, "action": "allow", "port": fmt.Sprintf("%d", p), "proto": "udp", "from": "Anywhere",
 		})
 		id++
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success":   true,
 		"status":    "active",
 		"rules":     rules,
@@ -713,10 +710,10 @@ func (h *FirewallHandler) GetStatusNixOS(w http.ResponseWriter, r *http.Request)
 }
 
 // parseUFWRules converts `ufw status numbered` output into a slice of rule maps.
-func parseUFWRules(output string) []map[string]interface{} {
-	rules := []map[string]interface{}{}
+func parseUFWRules(output string) []map[string]any {
+	rules := []map[string]any{}
 	ruleRe := regexp.MustCompile(`^\[\s*(\d+)\]\s+(\S+)\s+(ALLOW|DENY|REJECT|LIMIT)\s+(IN|OUT|FWD)?\s*(.*)`)
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		m := ruleRe.FindStringSubmatch(strings.TrimSpace(line))
 		if m == nil {
 			continue
@@ -728,12 +725,12 @@ func parseUFWRules(output string) []map[string]interface{} {
 
 		proto := "tcp"
 		port := portProto
-		if idx := strings.Index(portProto, "/"); idx >= 0 {
-			port = portProto[:idx]
-			proto = portProto[idx+1:]
+		if a, b, ok := strings.Cut(portProto, "/"); ok {
+			port = a
+			proto = b
 		}
 
-		rules = append(rules, map[string]interface{}{
+		rules = append(rules, map[string]any{
 			"id":     num,
 			"action": action,
 			"port":   port,
@@ -828,7 +825,7 @@ func (h *FirewallHandler) SetRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "output": string(output)})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "output": string(output)})
 }
 
 // ============================================================
@@ -847,14 +844,13 @@ func (h *CertHandler) ListCerts(w http.ResponseWriter, r *http.Request) {
 	entries, err := os.ReadDir(configPath("ssl"))
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "certs": []interface{}{}})
+		json.NewEncoder(w).Encode(map[string]any{"success": true, "certs": []any{}})
 		return
 	}
 
 	var certs []map[string]string
 	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".crt") {
-			name := strings.TrimSuffix(e.Name(), ".crt")
+		if name, ok := strings.CutSuffix(e.Name(), ".crt"); ok {
 			certFile := filepath.Join(configPath("ssl"), e.Name())
 			// Get cert info
 			out, _ := cmdutil.RunFast("openssl", "x509", "-in", certFile, "-noout", "-subject", "-enddate", "-issuer")
@@ -871,7 +867,7 @@ func (h *CertHandler) ListCerts(w http.ResponseWriter, r *http.Request) {
 	// Also check nginx current cert
 	nginxCert := ""
 	if data, err := os.ReadFile("/etc/nginx/sites-enabled/dplaneos"); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if strings.Contains(line, "ssl_certificate ") && !strings.Contains(line, "ssl_certificate_key") {
 				nginxCert = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(line), "ssl_certificate "), ";"))
 			}
@@ -879,7 +875,7 @@ func (h *CertHandler) ListCerts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "certs": certs, "active_cert": nginxCert})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "certs": certs, "active_cert": nginxCert})
 }
 
 // DeleteCert removes an SSL certificate and its key
@@ -920,8 +916,8 @@ func (h *CertHandler) DeleteCert(w http.ResponseWriter, r *http.Request) {
 	_ = os.Remove(certFile)
 	_ = os.Remove(keyFile)
 
-	audit.LogActivity(user, "cert_delete", map[string]interface{}{"name": req.Name})
-	respondOK(w, map[string]interface{}{"success": true, "message": "Certificate deleted"})
+	audit.LogActivity(user, "cert_delete", map[string]any{"name": req.Name})
+	respondOK(w, map[string]any{"success": true, "message": "Certificate deleted"})
 }
 
 func (h *CertHandler) GenerateSelfSigned(w http.ResponseWriter, r *http.Request) {
@@ -955,19 +951,21 @@ func (h *CertHandler) GenerateSelfSigned(w http.ResponseWriter, r *http.Request)
 	certFile := filepath.Join(configPath("ssl"), req.Name+".crt")
 
 	// Build SAN extension
-	sanExt := fmt.Sprintf("subjectAltName=DNS:%s", req.CN)
+	var sanBuf strings.Builder
+	fmt.Fprintf(&sanBuf, "subjectAltName=DNS:%s", req.CN)
 	if req.SANs != "" {
-		for _, san := range strings.Split(req.SANs, ",") {
+		for san := range strings.SplitSeq(req.SANs, ",") {
 			san = strings.TrimSpace(san)
 			if san != "" {
 				if strings.Contains(san, ".") && !strings.Contains(san, ":") {
-					sanExt += ",DNS:" + san
+					fmt.Fprintf(&sanBuf, ",DNS:%s", san)
 				} else {
-					sanExt += ",IP:" + san
+					fmt.Fprintf(&sanBuf, ",IP:%s", san)
 				}
 			}
 		}
 	}
+	sanExt := sanBuf.String()
 
 	start := time.Now()
 	output, err := cmdutil.RunMedium("openssl", "req", "-x509", "-newkey", "rsa:2048",
@@ -986,7 +984,7 @@ func (h *CertHandler) GenerateSelfSigned(w http.ResponseWriter, r *http.Request)
 	os.Chmod(keyFile, 0600)
 	audit.LogAction("cert_generate", user, fmt.Sprintf("Generated self-signed cert: %s (%d days)", req.Name, req.Days), true, duration)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "cert": certFile, "key": keyFile})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "cert": certFile, "key": keyFile})
 }
 
 // ActivateCert updates Nginx to use the specified certificate
@@ -1051,7 +1049,7 @@ func (h *CertHandler) ActivateCert(w http.ResponseWriter, r *http.Request) {
 
 	audit.LogAction("cert_activate", user, fmt.Sprintf("Activated cert: %s", req.Name), true, 0)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }
 
 // ImportCert allows uploading an existing certificate and private key.
@@ -1095,7 +1093,7 @@ func (h *CertHandler) ImportCert(w http.ResponseWriter, r *http.Request) {
 
 	audit.LogAction("cert_import", user, "Imported certificate: "+req.Name, true, 0)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }
 
 // LegoUser satisfies the lego.User interface
@@ -1162,7 +1160,7 @@ func (h *CertHandler) RequestACME(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "jobId": jobId})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "jobId": jobId})
 }
 
 // obtainCertificate is the shared logic for initial issuance and renewal.
@@ -1252,7 +1250,7 @@ func (h *CertHandler) obtainCertificate(domain, name, email string, staging bool
 	}
 
 	audit.LogAction("cert_acme", user, fmt.Sprintf("Obtained ACME cert for %s (name: %s)", domain, name), true, 0)
-	j.Done(map[string]interface{}{"name": name, "domain": domain})
+	j.Done(map[string]any{"name": name, "domain": domain})
 }
 
 // ensureACMEProxy injects the /.well-known/acme-challenge/ block into Nginx on non-NixOS.
@@ -1375,11 +1373,11 @@ func (h *CertHandler) RenewAllHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		j.Log(fmt.Sprintf("Renewal check complete. %d renewals attempt.", renewCount))
-		j.Done(map[string]interface{}{"renewed": renewCount})
+		j.Done(map[string]any{"renewed": renewCount})
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "jobId": jobId})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "jobId": jobId})
 }
 
 // VerifyACMEProxy checks if /.well-known/acme-challenge/ is correctly proxied to port 8080.
@@ -1438,7 +1436,7 @@ func (h *CertHandler) VerifyACMEProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "Proxy verified successfully"})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "message": "Proxy verified successfully"})
 }
 
 // ============================================================
@@ -1499,7 +1497,7 @@ func (h *TrashHandler) MoveToTrash(w http.ResponseWriter, r *http.Request) {
 
 	audit.LogAction("trash", user, fmt.Sprintf("Moved to trash: %s", req.Path), true, duration)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "trash_path": trashPath})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "trash_path": trashPath})
 }
 
 func (h *TrashHandler) ListTrash(w http.ResponseWriter, r *http.Request) {
@@ -1508,17 +1506,17 @@ func (h *TrashHandler) ListTrash(w http.ResponseWriter, r *http.Request) {
 	entries, err := os.ReadDir(trashBase)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "items": []interface{}{}})
+		json.NewEncoder(w).Encode(map[string]any{"success": true, "items": []any{}})
 		return
 	}
 
-	var items []map[string]interface{}
+	var items []map[string]any
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".meta") {
 			continue
 		}
 		info, _ := e.Info()
-		item := map[string]interface{}{
+		item := map[string]any{
 			"name":       e.Name(),
 			"size":       info.Size(),
 			"trashed_at": info.ModTime().Format(time.RFC3339),
@@ -1532,7 +1530,7 @@ func (h *TrashHandler) ListTrash(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "items": items})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "items": items})
 }
 
 func (h *TrashHandler) RestoreFromTrash(w http.ResponseWriter, r *http.Request) {
@@ -1585,7 +1583,7 @@ func (h *TrashHandler) RestoreFromTrash(w http.ResponseWriter, r *http.Request) 
 	os.Remove(metaPath)
 	audit.LogAction("trash_restore", user, fmt.Sprintf("Restored %s to %s", req.Name, originalPath), true, 0)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "restored_to": originalPath})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "restored_to": originalPath})
 }
 
 func (h *TrashHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
@@ -1604,7 +1602,7 @@ func (h *TrashHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
 	os.MkdirAll(trashBase, 0755)
 	audit.LogAction("trash_empty", user, "Trash emptied", true, duration)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }
 
 // ============================================================
@@ -1624,7 +1622,7 @@ func (h *PowerMgmtHandler) GetDiskStatus(w http.ResponseWriter, r *http.Request)
 	}
 
 	var disks []map[string]string
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
 		if line == "" {
 			continue
 		}
@@ -1667,7 +1665,7 @@ func (h *PowerMgmtHandler) GetDiskStatus(w http.ResponseWriter, r *http.Request)
 
 		// Get current spindown setting
 		sdOut, _ := cmdutil.RunFast("hdparm", "-B", fields[0])
-		for _, l := range strings.Split(string(sdOut), "\n") {
+		for l := range strings.SplitSeq(string(sdOut), "\n") {
 			if strings.Contains(l, "APM_level") {
 				parts := strings.Split(l, "=")
 				if len(parts) == 2 {
@@ -1686,7 +1684,7 @@ func (h *PowerMgmtHandler) GetDiskStatus(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success":  true,
 		"disks":    disks,
 		"spindown": spindownConf,
@@ -1741,7 +1739,7 @@ func (h *PowerMgmtHandler) SetSpindown(w http.ResponseWriter, r *http.Request) {
 
 	audit.LogAction("power_spindown", user, fmt.Sprintf("Set spindown %d on %s", req.Timeout, req.Device), true, duration)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "output": string(output)})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "output": string(output)})
 }
 
 func (h *PowerMgmtHandler) SpindownNow(w http.ResponseWriter, r *http.Request) {
@@ -1770,7 +1768,7 @@ func (h *PowerMgmtHandler) SpindownNow(w http.ResponseWriter, r *http.Request) {
 
 	audit.LogAction("power_spindown_now", user, fmt.Sprintf("Spindown %s", req.Device), true, 0)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }
 
 // SyncFirewallToNix reads current ufw rules, extracts simple allow rules,
@@ -1783,7 +1781,7 @@ func (h *FirewallHandler) SyncFirewallToNix(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if NixWriter == nil || !NixWriter.IsNixOS() {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"message": "Not on NixOS - sync is a no-op",
 		})
@@ -1809,7 +1807,7 @@ func (h *FirewallHandler) SyncFirewallToNix(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := NixWriter.SetFirewallPorts(req.TCPPorts, req.UDPPorts); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   "Failed to write Nix firewall fragment: " + err.Error(),
 		})
@@ -1817,7 +1815,7 @@ func (h *FirewallHandler) SyncFirewallToNix(w http.ResponseWriter, r *http.Reque
 	}
 
 	log.Printf("[nixwriter] firewall synced: tcp=%v udp=%v", req.TCPPorts, req.UDPPorts)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":   true,
 		"tcp_ports": req.TCPPorts,
 		"udp_ports": req.UDPPorts,

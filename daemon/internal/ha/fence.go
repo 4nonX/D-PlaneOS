@@ -17,11 +17,12 @@ import (
 )
 
 type FencingConfig struct {
-	Enable          bool   `json:"enable"`
-	BMCIP           string `json:"bmc_ip"`
-	BMCUser         string `json:"bmc_user"`
-	BMCPasswordFile string `json:"bmc_password_file"`
-	JitterMaxMs     int    `json:"jitter_max_ms"` // max random pre-fire delay in ms; default 3000
+	Enable                 bool   `json:"enable"`
+	BMCIP                  string `json:"bmc_ip"`
+	BMCUser                string `json:"bmc_user"`
+	BMCPasswordFile        string `json:"bmc_password_file"`
+	JitterMaxMs            int    `json:"jitter_max_ms"`            // max random pre-fire delay in ms; default 3000
+	DiskFaultTolerancePct  int    `json:"disk_fault_tolerance_pct"` // % of pool disks that may fail SCSI-3 PR without aborting; default 10
 }
 
 // GetFencingConfig reads the Fencing HA config from the PostgreSQL database.
@@ -31,11 +32,13 @@ func GetFencingConfig(db *sql.DB) (FencingConfig, error) {
 	var enable sql.NullBool
 
 	var jitterMaxMs sql.NullInt64
+	var diskTolPct sql.NullInt64
 	err := db.QueryRow(`
-		SELECT enable, bmc_ip, bmc_user, bmc_password_file, jitter_max_ms
+		SELECT enable, bmc_ip, bmc_user, bmc_password_file, jitter_max_ms,
+		       COALESCE(disk_fault_tolerance_pct, 10)
 		FROM ha_fencing_config
 		LIMIT 1
-	`).Scan(&enable, &bmcIP, &bmcUser, &bmcPassFile, &jitterMaxMs)
+	`).Scan(&enable, &bmcIP, &bmcUser, &bmcPassFile, &jitterMaxMs, &diskTolPct)
 
 	if err == sql.ErrNoRows {
 		return cfg, nil
@@ -48,6 +51,7 @@ func GetFencingConfig(db *sql.DB) (FencingConfig, error) {
 	cfg.BMCUser = bmcUser.String
 	cfg.BMCPasswordFile = bmcPassFile.String
 	cfg.JitterMaxMs = int(jitterMaxMs.Int64)
+	cfg.DiskFaultTolerancePct = max(0, min(50, int(diskTolPct.Int64)))
 	return cfg, nil
 }
 
@@ -59,17 +63,31 @@ func SaveFencingConfig(db *sql.DB, cfg FencingConfig) error {
 	if cfg.JitterMaxMs > 30000 {
 		cfg.JitterMaxMs = 30000 // cap at 30s - beyond this the fencing window is unreasonably large
 	}
+	tol := max(0, min(50, cfg.DiskFaultTolerancePct))
 	_, err := db.Exec(`
-		INSERT INTO ha_fencing_config (id, enable, bmc_ip, bmc_user, bmc_password_file, jitter_max_ms)
-		VALUES (1, $1, $2, $3, $4, $5)
+		INSERT INTO ha_fencing_config (id, enable, bmc_ip, bmc_user, bmc_password_file, jitter_max_ms, disk_fault_tolerance_pct)
+		VALUES (1, $1, $2, $3, $4, $5, $6)
 		ON CONFLICT(id) DO UPDATE SET
-			enable            = excluded.enable,
-			bmc_ip            = excluded.bmc_ip,
-			bmc_user          = excluded.bmc_user,
-			bmc_password_file = excluded.bmc_password_file,
-			jitter_max_ms     = excluded.jitter_max_ms
-	`, cfg.Enable, cfg.BMCIP, cfg.BMCUser, cfg.BMCPasswordFile, cfg.JitterMaxMs)
-	return err
+			enable                   = excluded.enable,
+			bmc_ip                   = excluded.bmc_ip,
+			bmc_user                 = excluded.bmc_user,
+			bmc_password_file        = excluded.bmc_password_file,
+			jitter_max_ms            = excluded.jitter_max_ms,
+			disk_fault_tolerance_pct = excluded.disk_fault_tolerance_pct
+	`, cfg.Enable, cfg.BMCIP, cfg.BMCUser, cfg.BMCPasswordFile, cfg.JitterMaxMs, tol)
+	if err != nil {
+		return err
+	}
+	// Write the tolerance file for dplane-fenced which has no DB access.
+	// Use atomic temp-file + rename to prevent a partial write racing with pool
+	// export. If /var/lib/dplaneos/ is on a ZFS dataset being exported, the write
+	// may fail - dplane-fenced falls back to its in-memory default (10%).
+	_ = os.MkdirAll("/var/lib/dplaneos", 0750)
+	tmp := "/var/lib/dplaneos/fence-tolerance.tmp"
+	if werr := os.WriteFile(tmp, fmt.Appendf(nil, "%d\n", tol), 0640); werr == nil {
+		_ = os.Rename(tmp, "/var/lib/dplaneos/fence-tolerance")
+	}
+	return nil
 }
 
 // stonithJitter returns a cryptographically random delay in [0, maxMs) milliseconds.
@@ -126,7 +144,7 @@ func ExecuteFencing(nodeID string, cfg FencingConfig) error {
 
 	args := []string{"-I", "lanplus", "-H", cfg.BMCIP, "-U", cfg.BMCUser, "-E", "chassis", "power", "off"}
 	if err := security.ValidateCommand("ipmitool_power_off", args); err != nil {
-		errStr := fmt.Sprintf("Security validation rejected fencing command: %v", err)
+		errStr := fmt.Sprintf("security validation rejected fencing command: %v", err)
 		audit.LogAction("ha_fence", "system", errStr, false, 0)
 		return fmt.Errorf("%s", errStr)
 	}
@@ -156,7 +174,7 @@ statusLoop:
 		case <-ticker.C:
 			statusArgs := []string{"-I", "lanplus", "-H", cfg.BMCIP, "-U", cfg.BMCUser, "-E", "chassis", "power", "status"}
 			if err := security.ValidateCommand("ipmitool_power_status", statusArgs); err != nil {
-				return fmt.Errorf("Security validation rejected status command: %v", err)
+				return fmt.Errorf("security validation rejected status command: %v", err)
 			}
 
 			// Per-poll 10s timeout: a single slow BMC response must not consume

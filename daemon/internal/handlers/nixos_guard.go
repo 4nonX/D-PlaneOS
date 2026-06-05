@@ -34,7 +34,7 @@ func (h *NixOSGuardHandler) BackupConfig(w http.ResponseWriter, r *http.Request)
 	var repoID sql.NullInt64
 	err := h.db.QueryRow(`SELECT nixos_repo_id FROM gitops_config WHERE id=1`).Scan(&repoID)
 	if err != nil || !repoID.Valid {
-		respondJSON(w, 400, map[string]interface{}{
+		respondJSON(w, 400, map[string]any{
 			"success": false,
 			"error":   "NixOS backup repository not configured. Set it up in Infrastructure Sync.",
 		})
@@ -46,12 +46,12 @@ func (h *NixOSGuardHandler) BackupConfig(w http.ResponseWriter, r *http.Request)
 	// Get repo details (URL/Branch) to initialize if needed
 	var repoURL, branch string
 	if err := h.db.QueryRow(`SELECT repo_url, branch FROM git_sync_repos WHERE id=$1`, repoID.Int64).Scan(&repoURL, &branch); err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to fetch repo config"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to fetch repo config"})
 		return
 	}
 
 	if err := gitops.EnsureRepoRootDir(nixDir, repoURL, branch, nil); err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to initialize Git in /etc/nixos: " + err.Error()})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to initialize Git in /etc/nixos: " + err.Error()})
 		return
 	}
 
@@ -66,11 +66,11 @@ func (h *NixOSGuardHandler) BackupConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := gitops.CommitAndPush(nixDir, env, "feat: NixOS configuration backup via DPlaneOS", name, email, branch); err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, 500, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
-	respondJSON(w, 200, map[string]interface{}{"success": true, "message": "NixOS configuration successfully backed up"})
+	respondJSON(w, 200, map[string]any{"success": true, "message": "NixOS configuration successfully backed up"})
 }
 
 // IsNixOS checks if we're running on NixOS
@@ -84,7 +84,7 @@ func IsNixOS() bool {
 func (h *NixOSGuardHandler) DetectNixOS(w http.ResponseWriter, r *http.Request) {
 	nixos := IsNixOS()
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"success": true,
 		"is_nixos": nixos,
 	}
@@ -116,7 +116,7 @@ func (h *NixOSGuardHandler) DetectNixOS(w http.ResponseWriter, r *http.Request) 
 // GET /api/nixos/status
 func (h *NixOSGuardHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	if !IsNixOS() {
-		respondOK(w, map[string]interface{}{"success": true, "is_nixos": false})
+		respondOK(w, map[string]any{"success": true, "is_nixos": false})
 		return
 	}
 
@@ -150,7 +150,7 @@ func (h *NixOSGuardHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"is_nixos":    true,
 		"is_dirty":    dirty,
@@ -190,7 +190,7 @@ func checkDivergence(physical, intent []int, shadow *[]int) bool {
 // GET /api/nixos/diff-intent
 func (h *NixOSGuardHandler) DiffIntent(w http.ResponseWriter, r *http.Request) {
 	if !IsNixOS() {
-		respondOK(w, map[string]interface{}{"success": true, "changes": []interface{}{}})
+		respondOK(w, map[string]any{"success": true, "changes": []any{}})
 		return
 	}
 
@@ -200,7 +200,7 @@ func (h *NixOSGuardHandler) DiffIntent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"changes": changes,
 		"count":   len(changes),
@@ -217,7 +217,7 @@ func (h *NixOSGuardHandler) Reconcile(w http.ResponseWriter, r *http.Request) {
 
 	// Enforce global reconciliation lock (Safety Phase 12.1)
 	if !gitops.TryLock() {
-		respondJSON(w, 423, map[string]interface{}{
+		respondJSON(w, 423, map[string]any{
 			"success": false,
 			"error":   "A reconciliation is already in progress. Please wait for the current operation to finish.",
 		})
@@ -255,12 +255,12 @@ func (h *NixOSGuardHandler) Reconcile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		j.Log("System successfully reconciled with declarative intent.")
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"output": string(output),
 		})
 	})
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"job_id":  jobID,
 		"message": "Reconciliation started in background",
@@ -315,7 +315,7 @@ func (h *NixOSGuardHandler) ValidateConfig(w http.ResponseWriter, r *http.Reques
 	duration := time.Since(start)
 
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":     false,
 			"valid":       false,
 			"error":       fmt.Sprintf("Configuration invalid: %v", err),
@@ -325,7 +325,7 @@ func (h *NixOSGuardHandler) ValidateConfig(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"valid":       true,
 		"message":     "Configuration is valid and can be applied",
@@ -346,9 +346,9 @@ func (h *NixOSGuardHandler) ListGenerations(w http.ResponseWriter, r *http.Reque
 		"--list-generations", "--profile", "/nix/var/nix/profiles/system",
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":     true,
-			"generations": []interface{}{},
+			"generations": []any{},
 			"error":       "Could not list generations",
 		})
 		return
@@ -378,7 +378,7 @@ func (h *NixOSGuardHandler) ListGenerations(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"generations": generations,
 		"count":       len(generations),
@@ -433,7 +433,7 @@ func (h *NixOSGuardHandler) RollbackGeneration(w http.ResponseWriter, r *http.Re
 	duration := time.Since(start)
 
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":     false,
 			"error":       fmt.Sprintf("Rollback failed: %v", err),
 			"output":      output,
@@ -442,7 +442,7 @@ func (h *NixOSGuardHandler) RollbackGeneration(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"message":     "System rolled back successfully",
 		"generation":  req.Generation,
@@ -488,7 +488,7 @@ func (h *NixOSGuardHandler) ListPreUpgradeSnapshots(w http.ResponseWriter, r *ht
 		log.Printf("WARN: pre-upgrade snapshots rows: %v", err)
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":   true,
 		"snapshots": snaps,
 		"count":     len(snaps),

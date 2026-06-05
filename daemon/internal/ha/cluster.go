@@ -110,7 +110,7 @@ type Manager struct {
 	wg     sync.WaitGroup
 
 	replProgressMu     sync.Mutex
-	replProgressReport func(map[string]interface{})
+	replProgressReport func(map[string]any)
 
 	// promotionCallback is called on the goroutine that executed STONITH,
 	// immediately after ExecutePromotion completes. Set once at startup via
@@ -814,20 +814,20 @@ func (m *Manager) GetReplicationConfig() *ReplicationConfig {
 }
 
 // SetReplicationProgressReporter wires HA ZFS send/recv progress to the WebSocket hub (optional).
-func (m *Manager) SetReplicationProgressReporter(f func(map[string]interface{})) {
+func (m *Manager) SetReplicationProgressReporter(f func(map[string]any)) {
 	m.replProgressMu.Lock()
 	m.replProgressReport = f
 	m.replProgressMu.Unlock()
 }
 
-func (m *Manager) reportReplicationProgress(payload map[string]interface{}) {
+func (m *Manager) reportReplicationProgress(payload map[string]any) {
 	m.replProgressMu.Lock()
 	f := m.replProgressReport
 	m.replProgressMu.Unlock()
 	if f == nil {
 		return
 	}
-	cp := make(map[string]interface{}, len(payload))
+	cp := make(map[string]any, len(payload))
 	for k, v := range payload {
 		cp[k] = v
 	}
@@ -1009,7 +1009,7 @@ func (m *Manager) persistClusterState() {
 	subordinateMode := m.subordinateMode
 	m.mu.RUnlock()
 
-	var lastFailoverParam interface{}
+	var lastFailoverParam any
 	if !lastFailoverAt.IsZero() {
 		lastFailoverParam = lastFailoverAt
 	}

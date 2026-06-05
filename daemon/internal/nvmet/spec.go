@@ -2,11 +2,8 @@
 package nvmet
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -18,6 +15,27 @@ const (
 	ConfigfsRoot = "/sys/kernel/config"
 )
 
+// ANAState is the Asymmetric Namespace Access state for a namespace group.
+// See NVMe Base Specification §8.20 and Linux nvmet configfs docs.
+type ANAState string
+
+const (
+	ANAOptimized    ANAState = "optimized"     // Active/Optimized  - primary path
+	ANANonOptimized ANAState = "non-optimized" // Active/Non-Optimized - secondary path
+	ANAStandby      ANAState = "standby"       // path is available but idle (HA standby node)
+	ANAInaccessible ANAState = "inaccessible"  // path is unavailable
+)
+
+// ANAGroup maps a namespace to an ANA group with a specified access state.
+// When ANAEnabled is true on an Export, each namespace is placed into a group
+// so multi-path NVMe hosts can route I/O to the optimal controller.
+// On the primary HA node set State = ANAOptimized; on the standby set State = ANAStandby.
+type ANAGroup struct {
+	GroupID     int      `json:"group_id"`     // 1-based ANA group identifier
+	NamespaceID int      `json:"namespace_id"` // matches Export.NamespaceID
+	State       ANAState `json:"state"`        // ANA access state for this group
+}
+
 // Export describes one NVMe subsystem backed by a ZFS zvol, exported over NVMe/TCP.
 type Export struct {
 	SubsystemNQN string   `json:"subsystem_nqn"`
@@ -28,6 +46,11 @@ type Export struct {
 	NamespaceID  int      `json:"namespace_id,omitempty"`
 	AllowAnyHost bool     `json:"allow_any_host,omitempty"`
 	HostNQNs     []string `json:"host_nqns,omitempty"`
+	// ANA (Asymmetric Namespace Access) enables multi-path I/O path optimization.
+	// When true, each namespace is placed in an ANA group so NVMe/multipath hosts
+	// can prefer the optimized path and gracefully fall back on failover.
+	ANAEnabled bool       `json:"ana_enabled,omitempty"`
+	ANAGroups  []ANAGroup `json:"ana_groups,omitempty"`
 }
 
 var nqnRegex = regexp.MustCompile(`^nqn\.[0-9]{4}-[0-9]{2}\.[a-z0-9][a-z0-9\-\.]*[a-z0-9]:[a-zA-Z0-9_\-.:]+$`)
@@ -103,24 +126,3 @@ func ZvolDevicePath(dataset string) string {
 	return "/dev/zvol/" + strings.TrimSpace(dataset)
 }
 
-func slug(s string) string {
-	h := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(h[:4])
-}
-
-func subsysDirName(nqn string) string {
-	return "dplane-ss-" + slug(nqn)
-}
-
-func portDirName(transport, addr string, port int) string {
-	key := fmt.Sprintf("%s|%s|%d", transport, addr, port)
-	return "dplane-p-" + slug(key)
-}
-
-func hostDirName(hostNQN string) string {
-	return "dplane-h-" + slug(hostNQN)
-}
-
-func nvmetRoot() string {
-	return filepath.Join(ConfigfsRoot, "nvmet")
-}

@@ -322,7 +322,7 @@ func (h *StackHandler) ServiceAction(w http.ResponseWriter, r *http.Request) {
 		[]string{req.Stack, req.Service}, err == nil, duration, err)
 
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"output":  string(out),
 			"error":   err.Error(),
@@ -330,7 +330,7 @@ func (h *StackHandler) ServiceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"output":  string(out),
 		"message": fmt.Sprintf("Service '%s' %sed", req.Service, req.Action),

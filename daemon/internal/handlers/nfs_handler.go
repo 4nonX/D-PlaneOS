@@ -59,7 +59,7 @@ func validateNFSPath(path string) error {
 		return fmt.Errorf("path must be absolute (start with /)")
 	}
 	if unsafePath.MatchString(path) {
-		return fmt.Errorf("path must not contain ..")
+		return fmt.Errorf("path must not contain path traversal sequences")
 	}
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("path does not exist: %s", path)
@@ -72,7 +72,7 @@ func validateNFSPath(path string) error {
 var validClient = regexp.MustCompile(`^[\w.*/:@-]+$`)
 
 func validateNFSClients(clients string) error {
-	for _, c := range strings.Fields(clients) {
+	for c := range strings.FieldsSeq(clients) {
 		if !validClient.MatchString(c) {
 			return fmt.Errorf("invalid client spec: %q", c)
 		}
@@ -84,7 +84,7 @@ func validateNFSClients(clients string) error {
 var validOption = regexp.MustCompile(`^[a-zA-Z0-9_=,@.-]+$`)
 
 func validateNFSOptions(opts string) error {
-	for _, o := range strings.Split(opts, ",") {
+	for o := range strings.SplitSeq(opts, ",") {
 		o = strings.TrimSpace(o)
 		if o == "" {
 			continue
@@ -114,8 +114,8 @@ func (h *NFSHandler) writeExportsFile() error {
 			continue
 		}
 		// Format: /path client1(opts) client2(opts) ...
-		for _, client := range strings.Fields(clients) {
-			sb.WriteString(fmt.Sprintf("%s\t%s(%s)\n", path, client, options))
+		for client := range strings.FieldsSeq(clients) {
+			fmt.Fprintf(&sb, "%s\t%s(%s)\n", path, client, options)
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -133,10 +133,10 @@ func reloadExports(user string) error {
 	_, err := cmdutil.RunFast("exportfs", "-ra")
 	if err != nil {
 		log.Printf("exportfs -ra failed: %v", err)
-		audit.LogActivity(user, "nfs_reload", map[string]interface{}{"success": false, "error": err.Error()})
+		audit.LogActivity(user, "nfs_reload", map[string]any{"success": false, "error": err.Error()})
 		return err
 	}
-	audit.LogActivity(user, "nfs_reload", map[string]interface{}{"success": true})
+	audit.LogActivity(user, "nfs_reload", map[string]any{"success": true})
 	return nil
 }
 
@@ -145,7 +145,7 @@ func reloadExports(user string) error {
 // GetNFSStatus GET /api/nfs/status
 func (h *NFSHandler) GetNFSStatus(w http.ResponseWriter, r *http.Request) {
 	if !nfsInstalled() {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":   true,
 			"installed": false,
 			"message":   "NFS server not installed. Run: sudo apt install nfs-kernel-server",
@@ -159,7 +159,7 @@ func (h *NFSHandler) GetNFSStatus(w http.ResponseWriter, r *http.Request) {
 	var count int
 	h.db.QueryRow(`SELECT COUNT(*) FROM nfs_exports WHERE enabled = 1`).Scan(&count)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":      true,
 		"installed":    true,
 		"active":       active,
@@ -170,9 +170,9 @@ func (h *NFSHandler) GetNFSStatus(w http.ResponseWriter, r *http.Request) {
 // ListNFSExports GET /api/nfs/exports
 func (h *NFSHandler) ListNFSExports(w http.ResponseWriter, r *http.Request) {
 	if !nfsInstalled() {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
-			"exports": []interface{}{},
+			"exports": []any{},
 			"note":    "NFS server not installed. Run: sudo apt install nfs-kernel-server",
 		})
 		return
@@ -203,7 +203,7 @@ func (h *NFSHandler) ListNFSExports(w http.ResponseWriter, r *http.Request) {
 		exports = []NFSExport{}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"exports": exports,
 	})
@@ -264,9 +264,9 @@ func (h *NFSHandler) CreateNFSExport(w http.ResponseWriter, r *http.Request) {
 
 	user := r.Header.Get("X-User")
 	reloadExports(user)
-	audit.LogActivity(user, "nfs_export_create", map[string]interface{}{"path": req.Path, "clients": req.Clients})
+	audit.LogActivity(user, "nfs_export_create", map[string]any{"path": req.Path, "clients": req.Clients})
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"id":      id,
 		"message": "Export created and applied",
@@ -328,7 +328,7 @@ func (h *NFSHandler) UpdateNFSExport(w http.ResponseWriter, r *http.Request) {
 
 	// Build update dynamically
 	sets := []string{"updated_at = NOW()"}
-	args := []interface{}{}
+	args := []any{}
 	if req.Path != "" {
 		sets = append(sets, fmt.Sprintf("path = $%d", len(args)+1))
 		args = append(args, req.Path)
@@ -362,9 +362,9 @@ func (h *NFSHandler) UpdateNFSExport(w http.ResponseWriter, r *http.Request) {
 	}
 	user := r.Header.Get("X-User")
 	reloadExports(user)
-	audit.LogActivity(user, "nfs_export_update", map[string]interface{}{"id": id})
+	audit.LogActivity(user, "nfs_export_update", map[string]any{"id": id})
 
-	respondOK(w, map[string]interface{}{"success": true, "message": "Export updated and applied"})
+	respondOK(w, map[string]any{"success": true, "message": "Export updated and applied"})
 	gitops.CommitAll(h.db)
 }
 
@@ -399,9 +399,9 @@ func (h *NFSHandler) DeleteNFSExport(w http.ResponseWriter, r *http.Request) {
 	}
 	user := r.Header.Get("X-User")
 	reloadExports(user)
-	audit.LogActivity(user, "nfs_export_delete", map[string]interface{}{"id": id, "path": path})
+	audit.LogActivity(user, "nfs_export_delete", map[string]any{"id": id, "path": path})
 
-	respondOK(w, map[string]interface{}{"success": true, "message": "Export deleted and applied"})
+	respondOK(w, map[string]any{"success": true, "message": "Export deleted and applied"})
 	gitops.CommitAll(h.db)
 }
 
@@ -420,6 +420,6 @@ func (h *NFSHandler) ReloadNFSExportsHandler(w http.ResponseWriter, r *http.Requ
 		respondErrorSimple(w, "exportfs -ra failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "message": "NFS exports reloaded"})
+	respondOK(w, map[string]any{"success": true, "message": "NFS exports reloaded"})
 }
 

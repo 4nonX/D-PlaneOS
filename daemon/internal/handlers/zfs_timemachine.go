@@ -44,16 +44,16 @@ func (h *ZFSTimeMachineHandler) ListSnapshotVersions(w http.ResponseWriter, r *h
 		"-r", dataset,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":  true,
-			"versions": []interface{}{},
+			"versions": []any{},
 		})
 		return
 	}
 
 	snapshots := parseSnapshotList(output)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"dataset":  dataset,
 		"versions": snapshots,
@@ -120,7 +120,7 @@ func (h *ZFSTimeMachineHandler) BrowseSnapshot(w http.ResponseWriter, r *http.Re
 
 	// If it's a file, return file info
 	if !info.IsDir() {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"type":    "file",
 			"entry": SnapshotEntry{
@@ -170,7 +170,7 @@ func (h *ZFSTimeMachineHandler) BrowseSnapshot(w http.ResponseWriter, r *http.Re
 		})
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"type":     "directory",
 		"snapshot": snapshotParam,
@@ -271,7 +271,7 @@ func (h *ZFSTimeMachineHandler) RestoreFile(w http.ResponseWriter, r *http.Reque
 	// Copy file
 	start := time.Now()
 	if err := copyFile(snapshotFile, liveFile); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Restore failed: %v", err),
 		})
@@ -282,7 +282,7 @@ func (h *ZFSTimeMachineHandler) RestoreFile(w http.ResponseWriter, r *http.Reque
 	// Preserve original permissions
 	os.Chmod(liveFile, srcInfo.Mode())
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"source":      snapshotFile,
 		"destination": liveFile,

@@ -28,7 +28,7 @@ func ListStorageOperations(w http.ResponseWriter, r *http.Request) {
 		records = []storageops.Record{}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"operations": records})
+	json.NewEncoder(w).Encode(map[string]any{"operations": records})
 }
 
 // ClearStorageOperation serves DELETE /api/storage/operations/{id}.
@@ -46,5 +46,5 @@ func ClearStorageOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "id": id})
+	json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": id})
 }

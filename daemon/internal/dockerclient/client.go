@@ -65,7 +65,7 @@ func (c *Client) get(ctx context.Context, path string, query url.Values) (*http.
 	return c.http.Do(req)
 }
 
-func (c *Client) postJSON(ctx context.Context, path string, query url.Values, body interface{}) (*http.Response, error) {
+func (c *Client) postJSON(ctx context.Context, path string, query url.Values, body any) (*http.Response, error) {
 	u := "http://docker/" + apiVersion + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
@@ -95,7 +95,7 @@ func (c *Client) post(ctx context.Context, path string, query url.Values) (*http
 	return c.http.Do(req)
 }
 
-func decodeJSON(resp *http.Response, v interface{}) error {
+func decodeJSON(resp *http.Response, v any) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
@@ -212,7 +212,7 @@ type ContainerDetail struct {
 			MaximumRetryCount int    `json:"MaximumRetryCount"`
 		} `json:"RestartPolicy"`
 		Binds        []string               `json:"Binds"`
-		PortBindings map[string]interface{} `json:"PortBindings"`
+		PortBindings map[string]any `json:"PortBindings"`
 	} `json:"HostConfig"`
 	NetworkSettings struct {
 		IPAddress string `json:"IPAddress"`
@@ -460,12 +460,12 @@ func (c *Client) RemoveImage(ctx context.Context, imageID string, force bool) er
 // ─────────────────────────────────────────────
 
 // Info returns Docker system information.
-func (c *Client) Info(ctx context.Context) (map[string]interface{}, error) {
+func (c *Client) Info(ctx context.Context) (map[string]any, error) {
 	resp, err := c.get(ctx, "/info", nil)
 	if err != nil {
 		return nil, fmt.Errorf("docker info: %w", err)
 	}
-	var info map[string]interface{}
+	var info map[string]any
 	if err := decodeJSON(resp, &info); err != nil {
 		return nil, fmt.Errorf("docker info decode: %w", err)
 	}
@@ -635,7 +635,7 @@ func (c *Client) PruneAll(ctx context.Context) (containers, images, volumes int,
 	resp, e = c.post(ctx, "/images/prune", q)
 	if e == nil {
 		var r struct {
-			ImagesDeleted  []interface{} `json:"ImagesDeleted"`
+			ImagesDeleted  []any `json:"ImagesDeleted"`
 			SpaceReclaimed int64         `json:"SpaceReclaimed"`
 		}
 		if decodeJSON(resp, &r) == nil {

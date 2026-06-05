@@ -215,7 +215,7 @@ func (h *SupportBundleHandler) GenerateBundle(w http.ResponseWriter, r *http.Req
 	sections = append(sections, collectAuditTail(h.db))
 
 	// ── Bundle metadata ──────────────────────────────────────────────────
-	meta := map[string]interface{}{
+	meta := map[string]any{
 		"generated_at":    time.Now().UTC().Format(time.RFC3339),
 		"hostname":        hostname,
 		"dplaneos_version": h.version,

@@ -20,7 +20,7 @@ type fencedRequest struct {
 type fencedResponse struct {
 	OK    bool        `json:"ok"`
 	Error string      `json:"error,omitempty"`
-	Data  interface{} `json:"data,omitempty"`
+	Data  any `json:"data,omitempty"`
 }
 
 // fencedCall sends one command to dplane-fenced and returns the response.
@@ -62,7 +62,7 @@ func FencedRelease() error {
 
 // FencedStatus returns the current reservation state from dplane-fenced.
 // Returns an error if the socket is unreachable (e.g. fenced not running).
-func FencedStatus() (map[string]interface{}, error) {
+func FencedStatus() (map[string]any, error) {
 	resp, err := fencedCall(fencedRequest{Cmd: "STATUS"})
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func FencedStatus() (map[string]interface{}, error) {
 	if !resp.OK {
 		return nil, fmt.Errorf("fenced STATUS failed: %s", resp.Error)
 	}
-	if m, ok := resp.Data.(map[string]interface{}); ok {
+	if m, ok := resp.Data.(map[string]any); ok {
 		return m, nil
 	}
 	return nil, fmt.Errorf("unexpected STATUS response type")

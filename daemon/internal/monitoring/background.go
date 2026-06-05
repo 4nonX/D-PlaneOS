@@ -28,7 +28,7 @@ type alertState struct {
 // BackgroundMonitor runs periodic checks and sends alerts with debouncing.
 type BackgroundMonitor struct {
 	interval      time.Duration
-	alertCallback func(eventType string, data interface{}, level string)
+	alertCallback func(eventType string, data any, level string)
 	stopChan      chan bool
 	wg            sync.WaitGroup
 
@@ -56,13 +56,10 @@ const (
 
 	// A threshold must be exceeded for this long before we alert (prevents flapping)
 	hysteresisWindow = 30 * time.Second
-
-	// After a condition clears, suppress re-alert for this duration
-	clearanceCooldown = 2 * time.Minute
 )
 
 // NewBackgroundMonitor creates a new background monitor
-func NewBackgroundMonitor(interval time.Duration, alertCallback func(string, interface{}, string)) *BackgroundMonitor {
+func NewBackgroundMonitor(interval time.Duration, alertCallback func(string, any, string)) *BackgroundMonitor {
 	return &BackgroundMonitor{
 		interval:      interval,
 		alertCallback: alertCallback,
@@ -106,7 +103,7 @@ func (m *BackgroundMonitor) run() {
 // maybeAlert fires the alertCallback only if debounce conditions are met.
 // key should be unique per event type, e.g. "inotify_warning".
 // level: "info", "warning", "critical", "clear"
-func (m *BackgroundMonitor) maybeAlert(key string, level string, data interface{}) {
+func (m *BackgroundMonitor) maybeAlert(key string, level string, data any) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -249,14 +246,14 @@ func (m *BackgroundMonitor) CheckMountStatus() {
 		m.mountMu.Unlock()
 
 		if !healthy {
-			m.maybeAlert(alertKey, "critical", map[string]interface{}{
+			m.maybeAlert(alertKey, "critical", map[string]any{
 				"pool":       poolName,
 				"mountpoint": mountPoint,
 				"error":      "mountpoint not writable",
 			})
 		} else if seen && !prevHealthy && healthy {
 			// Pool recovered - clear the firing alert.
-			m.maybeAlert(alertKey, "clear", map[string]interface{}{
+			m.maybeAlert(alertKey, "clear", map[string]any{
 				"pool":       poolName,
 				"mountpoint": mountPoint,
 			})
@@ -321,7 +318,7 @@ func (m *BackgroundMonitor) checkDiskTemperatures() {
 
 	for _, r := range readings {
 		alertKey := "disk_temp_" + r.DevName
-		data := map[string]interface{}{
+		data := map[string]any{
 			"device": r.DevName,
 			"temp_c": r.TempC,
 		}
@@ -503,7 +500,7 @@ func (m *BackgroundMonitor) checkZFSProgress() {
 		// Broadcast incremental progress to all connected UI clients.
 		// Higher-level 'maybeAlert' is not used here because we WANT frequent
 		// updates (every 30s) while the operation is active.
-		m.alertCallback(eventType, map[string]interface{}{
+		m.alertCallback(eventType, map[string]any{
 			"pool":         p.Name,
 			"percent_done": parsed.PercentDone,
 			"eta":          parsed.ETA,

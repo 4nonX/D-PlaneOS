@@ -41,7 +41,7 @@ func WipeDisk(w http.ResponseWriter, r *http.Request) {
 	// string grep) so it correctly handles by-id paths and bare /dev/sdX paths.
 	if membership, merr := libzfs.PoolIsMember(req.Device); merr == nil && membership.InPool {
 		storageops.Fail(registryDB, opID, "disk is a member of pool "+membership.PoolName)
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   "Safety check failed: Disk is a member of pool " + membership.PoolName + ". Remove or detach it first.",
 		})
@@ -52,7 +52,7 @@ func WipeDisk(w http.ResponseWriter, r *http.Request) {
 	wipeOut, wipeErr := executeCommandWithTimeout(TimeoutMedium, "wipefs", []string{"-a", req.Device})
 	if wipeErr != nil {
 		storageops.Fail(registryDB, opID, fmt.Sprintf("wipefs: %v", wipeErr))
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("wipefs failed: %v", wipeErr),
 			"output":  wipeOut,
@@ -64,7 +64,7 @@ func WipeDisk(w http.ResponseWriter, r *http.Request) {
 	labelOut, _ := executeCommandWithTimeout(TimeoutMedium, "zpool", []string{"labelclear", "-f", req.Device})
 
 	storageops.Commit(registryDB, opID)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"device":  req.Device,
 		"message": "Disk signatures and ZFS labels cleared successfully.",

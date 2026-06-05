@@ -151,6 +151,10 @@ type SessionUser struct {
 	// token that has resource-level allowlist rules. The middleware enforces
 	// these before the request reaches any handler.
 	AllowedResources string // JSON array of TokenResourceRule; "" or "[]" = unrestricted
+	// MustChangePassword is true when the session status is 'must_change_password'.
+	// The RBAC middleware rejects all requests except POST /api/auth/change-password
+	// until the user sets a new password.
+	MustChangePassword bool
 }
 
 // ValidateSessionAndGetUser validates a session token and returns the associated user
@@ -163,19 +167,20 @@ func ValidateSessionAndGetUser(sessionToken string) (*SessionUser, error) {
 	defer cancel()
 
 	var user SessionUser
+	var sessionStatus string
 	query := `
-		SELECT u.id, u.username, COALESCE(u.email, '')
+		SELECT u.id, u.username, COALESCE(u.email, ''), COALESCE(s.status, 'active')
 		FROM sessions s
 		JOIN users u ON s.username = u.username
 		WHERE s.session_id = $1
 		AND (s.expires_at IS NULL OR s.expires_at > $2)
 		AND u.active = 1
-		AND COALESCE(s.status, 'active') = 'active'
+		AND COALESCE(s.status, 'active') IN ('active', 'must_change_password')
 		LIMIT 1
 	`
 
 	err := db.QueryRowContext(ctx, query, sessionToken, time.Now().Unix()).Scan(
-		&user.ID, &user.Username, &user.Email,
+		&user.ID, &user.Username, &user.Email, &sessionStatus,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -184,6 +189,7 @@ func ValidateSessionAndGetUser(sessionToken string) (*SessionUser, error) {
 		return nil, fmt.Errorf("session validation failed: %w", err)
 	}
 
+	user.MustChangePassword = sessionStatus == "must_change_password"
 	return &user, nil
 }
 

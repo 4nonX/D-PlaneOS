@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { toast } from '@/hooks/useToast'
 import { Modal } from '@/components/ui/Modal'
 import { useRouter } from '@tanstack/react-router'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -287,6 +288,7 @@ function VLANsTab() {
   const qc = useQueryClient()
   const [parent, setParent] = useState('')
   const [vlanId, setVlanId] = useState('')
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const netQ = useQuery({
     queryKey: ['network', 'info'],
@@ -371,7 +373,7 @@ function VLANsTab() {
                 <td>{v.index}</td>
                 <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{v.flags}</td>
                 <td>
-                  <button onClick={() => deleteVLAN.mutate(v.name)} disabled={deleteVLAN.isPending} className="btn btn-xs btn-danger">
+                  <button onClick={async () => { if (await confirm({ title: `Delete VLAN "${v.name}"?`, danger: true, confirmLabel: 'Delete' })) { deleteVLAN.mutate(v.name) } }} disabled={deleteVLAN.isPending} className="btn btn-xs btn-danger">
                     <Icon name="delete" size={12} />Remove
                   </button>
                 </td>
@@ -383,6 +385,7 @@ function VLANsTab() {
           </tbody>
         </table>
       </div>
+      <ConfirmDialog />
     </>
   )
 }
@@ -397,6 +400,7 @@ function BondingTab() {
   const [bondName,   setBondName]   = useState('bond0')
   const [mode,       setMode]       = useState('active-backup')
   const [slavesStr,  setSlavesStr]  = useState('')
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const netQ = useQuery({
     queryKey: ['network', 'info'],
@@ -483,7 +487,7 @@ function BondingTab() {
                     {b.mtu ? ` · MTU ${b.mtu}` : ''}
                   </div>
                 </div>
-                <button onClick={() => deleteBond.mutate(b.name)} disabled={deleteBond.isPending} className="btn btn-sm btn-danger">
+                <button onClick={async () => { if (await confirm({ title: `Delete bond "${b.name}"?`, danger: true, confirmLabel: 'Delete' })) { deleteBond.mutate(b.name) } }} disabled={deleteBond.isPending} className="btn btn-sm btn-danger">
                   <Icon name="delete" size={13} />Delete
                 </button>
               </div>
@@ -491,6 +495,7 @@ function BondingTab() {
           </div>
         </>
       )}
+      <ConfirmDialog />
     </>
   )
 }

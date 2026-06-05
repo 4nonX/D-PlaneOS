@@ -25,7 +25,7 @@ func ListEnclosures(w http.ResponseWriter, r *http.Request) {
 		encs = []hardware.Enclosure{}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"enclosures": encs})
+	json.NewEncoder(w).Encode(map[string]any{"enclosures": encs})
 }
 
 // SetEnclosureLocate serves PUT /api/enclosure/{id}/slot/{index}/locate.
@@ -54,7 +54,7 @@ func SetEnclosureLocate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "locate": req.Locate})
+	json.NewEncoder(w).Encode(map[string]any{"ok": true, "locate": req.Locate})
 }
 
 // GetEnclosureSESStatus serves GET /api/enclosure/{id}/ses-status.
@@ -84,7 +84,7 @@ func GetEnclosureSESStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"enclosure_id": encID,
 		"device":       sgDev,
 		"elements":     elements,

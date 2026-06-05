@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { toast } from '@/hooks/useToast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -331,6 +332,7 @@ function MappingsTab() {
   const qc = useQueryClient()
   const [ldapGroup, setLdapGroup] = useState('')
   const [localRole, setLocalRole] = useState('user')
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const mappingsQ = useQuery({
     queryKey: ['ldap', 'mappings'],
@@ -380,7 +382,7 @@ function MappingsTab() {
             </div>
             <Icon name="arrow_forward" size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
             <span className="badge badge-primary" style={{ minWidth: 80, textAlign: 'center' }}>{m.local_role}</span>
-            <button onClick={() => remove.mutate(m.id ?? m.ldap_group)} className="btn btn-icon-ghost" style={{ color: 'var(--error)' }}>
+            <button onClick={async () => { if (await confirm({ title: 'Remove group mapping?', message: 'This LDAP group will no longer map to a local role.', danger: true, confirmLabel: 'Remove' })) { remove.mutate(m.id ?? m.ldap_group) } }} className="btn btn-icon-ghost" style={{ color: 'var(--error)' }}>
               <Icon name="delete" size={18} />
             </button>
           </div>
@@ -391,12 +393,14 @@ function MappingsTab() {
           </div>
         )}
       </div>
+      <ConfirmDialog />
     </>
   )
 }
 
 function SyncLogTab() {
   const qc = useQueryClient()
+  const { confirm, ConfirmDialog } = useConfirm()
   const logQ = useQuery({
     queryKey: ['ldap', 'sync-log'],
     queryFn: ({ signal }) => api.get<{ success: boolean; entries: string[] }>('/api/ldap/sync-log', signal),
@@ -425,7 +429,7 @@ function SyncLogTab() {
             {cb.failures !== undefined && <span style={{ marginLeft: 12, fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>{cb.failures} failure{cb.failures !== 1 ? 's' : ''} detected</span>}
           </div>
           {cb.state !== 'closed' && (
-            <button onClick={() => resetCB.mutate()} disabled={resetCB.isPending} className="btn btn-ghost">
+            <button onClick={async () => { if (await confirm({ title: 'Reset directory cache?', message: 'The cache will be cleared and rebuilt from the directory server. Users may experience brief authentication delays.', danger: false, confirmLabel: 'Reset Cache' })) { resetCB.mutate() } }} disabled={resetCB.isPending} className="btn btn-ghost">
               <Icon name="restart_alt" size={16} />Reset Breaker
             </button>
           )}
@@ -441,6 +445,7 @@ function SyncLogTab() {
           {logQ.isLoading ? 'Loading logs...' : (logQ.data?.entries?.join('\n') || '(no sync log entries found)')}
         </pre>
       </div>
+      <ConfirmDialog />
     </>
   )
 }

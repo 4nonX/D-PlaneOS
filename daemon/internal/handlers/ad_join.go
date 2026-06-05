@@ -60,7 +60,7 @@ func (h *LDAPHandler) JoinADDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmdEntry, _ := security.CommandWhitelist["net_ads_join"]
+	cmdEntry := security.CommandWhitelist["net_ads_join"]
 	cmd := exec.CommandContext(r.Context(), cmdEntry.Path, args...)
 	cmd.Env = append(os.Environ(), "PASSWD="+string(req.Password))
 	
@@ -131,7 +131,7 @@ func (h *LDAPHandler) GetDirectoryStatus(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"provider_type":     providerType,
 		"domain_joined":     joined,
 		"domain_joined_at":  joinedAt,

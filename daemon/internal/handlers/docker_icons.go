@@ -1,4 +1,4 @@
-﻿package handlers
+package handlers
 
 // docker_icons.go - Custom icon assets + image-name → Material Symbol mapping
 //
@@ -97,7 +97,7 @@ func HandleCustomIconList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "icons": []string{}})
+			json.NewEncoder(w).Encode(map[string]any{"success": true, "icons": []string{}})
 			return
 		}
 		respondErrorSimple(w, "cannot read icons directory", http.StatusInternalServerError)
@@ -119,7 +119,7 @@ func HandleCustomIconList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "icons": names})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "icons": names})
 }
 
 // HandleDockerIconMap returns the built-in image-name → Material Symbol mapping.
@@ -128,7 +128,7 @@ func HandleCustomIconList(w http.ResponseWriter, r *http.Request) {
 func HandleDockerIconMap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"map":     builtinIconMap,
 	})

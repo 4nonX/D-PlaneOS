@@ -34,7 +34,7 @@ func (h *DockerHandler) InspectContainer(w http.ResponseWriter, r *http.Request)
 	detail, err := h.docker.Inspect(ctx, containerID)
 	if err != nil {
 		audit.LogCommand(audit.LevelWarn, user, "docker_inspect", []string{containerID}, false, 0, err)
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
@@ -53,9 +53,9 @@ func (h *DockerHandler) InspectContainer(w http.ResponseWriter, r *http.Request)
 		if raw == nil {
 			continue
 		}
-		if arr, ok := raw.([]interface{}); ok {
+		if arr, ok := raw.([]any); ok {
 			for _, item := range arr {
-				if m, ok := item.(map[string]interface{}); ok {
+				if m, ok := item.(map[string]any); ok {
 					hp, _ := m["HostPort"].(string)
 					ports = append(ports, portEntry{hp, containerPort, protocol})
 				}
@@ -111,7 +111,7 @@ func (h *DockerHandler) InspectContainer(w http.ResponseWriter, r *http.Request)
 	name := strings.TrimPrefix(detail.Name, "/")
 	icon := detail.Config.Labels["dplaneos.icon"]
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":        true,
 		"id":             detail.ID,
 		"name":           name,
@@ -169,7 +169,7 @@ func (h *DockerHandler) ReconfigureContainer(w http.ResponseWriter, r *http.Requ
 	// 1. Inspect to get current full config
 	detail, err := h.docker.Inspect(ctx, containerID)
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": fmt.Sprintf("inspect: %v", err)})
+		respondOK(w, map[string]any{"success": false, "error": fmt.Sprintf("inspect: %v", err)})
 		return
 	}
 	name := strings.TrimPrefix(detail.Name, "/")
@@ -243,35 +243,35 @@ func (h *DockerHandler) ReconfigureContainer(w http.ResponseWriter, r *http.Requ
 	wasRunning := detail.State.Running
 	if wasRunning {
 		if err := h.docker.Stop(ctx, containerID, 10); err != nil {
-			respondOK(w, map[string]interface{}{"success": false, "error": fmt.Sprintf("stop: %v", err)})
+			respondOK(w, map[string]any{"success": false, "error": fmt.Sprintf("stop: %v", err)})
 			return
 		}
 	}
 
 	// 7. Remove
 	if err := h.docker.Remove(ctx, containerID, true, false); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": fmt.Sprintf("remove: %v", err)})
+		respondOK(w, map[string]any{"success": false, "error": fmt.Sprintf("remove: %v", err)})
 		return
 	}
 
 	// 8. Recreate with new config
 	newID, err := h.docker.Create(ctx, name, createCfg)
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": fmt.Sprintf("create: %v", err)})
+		respondOK(w, map[string]any{"success": false, "error": fmt.Sprintf("create: %v", err)})
 		return
 	}
 
 	// 9. Start if was running
 	if wasRunning {
 		if err := h.docker.Start(ctx, newID); err != nil {
-			respondOK(w, map[string]interface{}{"success": false, "error": fmt.Sprintf("start: %v", err)})
+			respondOK(w, map[string]any{"success": false, "error": fmt.Sprintf("start: %v", err)})
 			return
 		}
 	}
 
 	audit.LogCommand(audit.LevelInfo, user, "docker_reconfigure", []string{name}, true, 0, nil)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"id":      newID,
 		"name":    name,

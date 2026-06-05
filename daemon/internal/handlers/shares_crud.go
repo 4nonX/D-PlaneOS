@@ -59,7 +59,7 @@ func (h *ShareCRUDHandler) listShares(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var shares []map[string]interface{}
+	var shares []map[string]any
 	for rows.Next() {
 		var id, browsable, readOnly, guestOk, enabled int
 		var name, path, comment, validUsers, writeList, createMask, dirMask, createdAt string
@@ -67,7 +67,7 @@ func (h *ShareCRUDHandler) listShares(w http.ResponseWriter, r *http.Request) {
 			log.Printf("WARN: smb_shares list scan: %v", err)
 			continue
 		}
-		shares = append(shares, map[string]interface{}{
+		shares = append(shares, map[string]any{
 			"id":             id,
 			"name":           name,
 			"path":           path,
@@ -88,10 +88,10 @@ func (h *ShareCRUDHandler) listShares(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WARN: smb_shares list rows: %v", err)
 	}
 	if shares == nil {
-		shares = []map[string]interface{}{}
+		shares = []map[string]any{}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"shares":  shares,
 	})
@@ -113,9 +113,9 @@ func (h *ShareCRUDHandler) getShare(w http.ResponseWriter, id string) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
-		"share": map[string]interface{}{
+		"share": map[string]any{
 			"id":             shareID,
 			"name":           name,
 			"path":           path,
@@ -233,7 +233,7 @@ func (h *ShareCRUDHandler) createShare(w http.ResponseWriter, req shareActionReq
 	// Regenerate smb.conf
 	h.regenerateSMBConf()
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"id":      id,
 		"message": fmt.Sprintf("Share %s created", req.Name),
@@ -336,7 +336,7 @@ func (h *ShareCRUDHandler) updateShare(w http.ResponseWriter, req shareActionReq
 
 	h.regenerateSMBConf()
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Share updated",
 	})
@@ -367,7 +367,7 @@ func (h *ShareCRUDHandler) deleteShare(w http.ResponseWriter, req shareActionReq
 	}
 	h.regenerateSMBConf()
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Share deleted",
 	})
@@ -403,7 +403,7 @@ func (h *ShareCRUDHandler) deleteShareByName(w http.ResponseWriter, r *http.Requ
 	}
 
 	h.regenerateSMBConf()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Share deleted",
 	})
@@ -428,7 +428,7 @@ func (h *ShareCRUDHandler) GetSharesByPath(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	defer smbRows.Close()
-	var smbShares []map[string]interface{}
+	var smbShares []map[string]any
 	for smbRows.Next() {
 		var name, comment string
 		var enabled int
@@ -436,14 +436,14 @@ func (h *ShareCRUDHandler) GetSharesByPath(w http.ResponseWriter, r *http.Reques
 			log.Printf("WARN: smb_shares by-path scan: %v", err)
 			continue
 		}
-		smbShares = append(smbShares, map[string]interface{}{
+		smbShares = append(smbShares, map[string]any{
 			"name":    name,
 			"comment": comment,
 			"enabled": enabled == 1,
 		})
 	}
 	if smbShares == nil {
-		smbShares = []map[string]interface{}{}
+		smbShares = []map[string]any{}
 	}
 
 	// 2. Get NFS exports
@@ -453,7 +453,7 @@ func (h *ShareCRUDHandler) GetSharesByPath(w http.ResponseWriter, r *http.Reques
 		nfsRows = nil
 	}
 
-	var nfsExports []map[string]interface{}
+	var nfsExports []map[string]any
 	if nfsRows != nil {
 		defer nfsRows.Close()
 		for nfsRows.Next() {
@@ -463,7 +463,7 @@ func (h *ShareCRUDHandler) GetSharesByPath(w http.ResponseWriter, r *http.Reques
 				log.Printf("WARN: nfs_exports by-path scan: %v", err)
 				continue
 			}
-			nfsExports = append(nfsExports, map[string]interface{}{
+			nfsExports = append(nfsExports, map[string]any{
 				"id":      id,
 				"clients": clients,
 				"options": options,
@@ -472,10 +472,10 @@ func (h *ShareCRUDHandler) GetSharesByPath(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	if nfsExports == nil {
-		nfsExports = []map[string]interface{}{}
+		nfsExports = []map[string]any{}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"path":    path,
 		"smb":     smbShares,
@@ -641,7 +641,7 @@ func (h *ShareCRUDHandler) GetSMBSettings(w http.ResponseWriter, r *http.Request
 	h.db.QueryRow(`SELECT COALESCE(value,'0') FROM settings WHERE key='smb_shadow_copy'`).Scan(&shadowCopy)
 	h.db.QueryRow(`SELECT COALESCE(value,'0') FROM settings WHERE key='smb_recycle_bin'`).Scan(&recycleBin)
 	_, avahiErr := os.Stat(avahiTimeMachinePath)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":        true,
 		"time_machine":   timeMachine == 1,
 		"shadow_copy":    shadowCopy == 1,
@@ -699,7 +699,7 @@ func (h *ShareCRUDHandler) UpdateSMBSettings(w http.ResponseWriter, r *http.Requ
 	}
 
 	h.regenerateSMBConf()
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 const avahiTimeMachinePath = "/etc/avahi/services/dplaneos-timemachine.service"
@@ -760,7 +760,7 @@ func (h *ShareCRUDHandler) ListSMBSessions(w http.ResponseWriter, r *http.Reques
 	procOut, err := cmdutil.RunFast("smbstatus", "-p", "-n")
 	if err != nil {
 		// smbstatus unavailable or Samba not running - return empty list
-		respondOK(w, map[string]interface{}{"success": true, "sessions": []SMBSessionInfo{}})
+		respondOK(w, map[string]any{"success": true, "sessions": []SMBSessionInfo{}})
 		return
 	}
 
@@ -835,7 +835,7 @@ func (h *ShareCRUDHandler) ListSMBSessions(w http.ResponseWriter, r *http.Reques
 	for _, s := range sessions {
 		result = append(result, *s)
 	}
-	respondOK(w, map[string]interface{}{"success": true, "sessions": result})
+	respondOK(w, map[string]any{"success": true, "sessions": result})
 }
 
 // DisconnectSMBSession terminates an SMB session by PID.
@@ -859,5 +859,5 @@ func (h *ShareCRUDHandler) DisconnectSMBSession(w http.ResponseWriter, r *http.R
 		respondErrorSimple(w, "failed to disconnect session: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }

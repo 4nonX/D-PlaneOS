@@ -117,7 +117,7 @@ func (h *StackHandler) DeployStack(w http.ResponseWriter, r *http.Request) {
 
 	// Ensure stacks base directory exists
 	if err := os.MkdirAll(defaultStacksDir, 0750); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to create stacks directory: %v", err),
 		})
@@ -126,7 +126,7 @@ func (h *StackHandler) DeployStack(w http.ResponseWriter, r *http.Request) {
 
 	// Create stack directory
 	if err := os.MkdirAll(dir, 0750); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to create stack directory: %v", err),
 		})
@@ -136,7 +136,7 @@ func (h *StackHandler) DeployStack(w http.ResponseWriter, r *http.Request) {
 	// Write docker-compose.yml
 	composePath := filepath.Join(dir, "docker-compose.yml")
 	if err := os.WriteFile(composePath, []byte(yaml), 0640); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to write compose file: %v", err),
 		})
@@ -147,7 +147,7 @@ func (h *StackHandler) DeployStack(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.Env) != "" {
 		envPath := filepath.Join(dir, ".env")
 		if err := os.WriteFile(envPath, []byte(req.Env), 0640); err != nil {
-			respondOK(w, map[string]interface{}{
+			respondOK(w, map[string]any{
 				"success": false,
 				"error":   fmt.Sprintf("Failed to write .env file: %v", err),
 			})
@@ -164,7 +164,7 @@ func (h *StackHandler) DeployStack(w http.ResponseWriter, r *http.Request) {
 		[]string{req.Name}, composeErr == nil, duration, composeErr)
 
 	if composeErr != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":     false,
 			"error":       fmt.Sprintf("Compose up failed: %v", composeErr),
 			"output":      string(output),
@@ -174,7 +174,7 @@ func (h *StackHandler) DeployStack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"message":     fmt.Sprintf("Stack '%s' deployed successfully", req.Name),
 		"stack":       req.Name,
@@ -196,7 +196,7 @@ type StackInfo struct {
 	Name         string                   `json:"name"`
 	Path         string                   `json:"path"`
 	Status       string                   `json:"status"`   // "running", "partial", "stopped", "unknown"
-	Services     []map[string]interface{} `json:"services"` // compose ps output
+	Services     []map[string]any `json:"services"` // compose ps output
 	FileSize     int64                    `json:"file_size"`
 	CreatedAt    string                   `json:"created_at"`
 	UpdatedAt    string                   `json:"updated_at"`
@@ -206,9 +206,9 @@ type StackInfo struct {
 func (h *StackHandler) ListStacks(w http.ResponseWriter, r *http.Request) {
 	// Ensure directory exists
 	if err := os.MkdirAll(defaultStacksDir, 0750); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
-			"stacks":  []interface{}{},
+			"stacks":  []any{},
 			"count":   0,
 		})
 		return
@@ -216,9 +216,9 @@ func (h *StackHandler) ListStacks(w http.ResponseWriter, r *http.Request) {
 
 	entries, err := os.ReadDir(defaultStacksDir)
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
-			"stacks":  []interface{}{},
+			"stacks":  []any{},
 			"count":   0,
 		})
 		return
@@ -263,7 +263,7 @@ func (h *StackHandler) ListStacks(w http.ResponseWriter, r *http.Request) {
 
 		if composeErr != nil {
 			stack.Status = "stopped"
-			stack.Services = []map[string]interface{}{}
+			stack.Services = []map[string]any{}
 		} else {
 			services := parseComposePS(output)
 			stack.Services = services
@@ -297,7 +297,7 @@ func (h *StackHandler) ListStacks(w http.ResponseWriter, r *http.Request) {
 	// Sort alphabetically
 	sort.Slice(stacks, func(i, j int) bool { return stacks[i].Name < stacks[j].Name })
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":    true,
 		"stacks":     stacks,
 		"count":      len(stacks),
@@ -324,7 +324,7 @@ func (h *StackHandler) GetStackYAML(w http.ResponseWriter, r *http.Request) {
 		if os.IsNotExist(err) {
 			respondErrorSimple(w, fmt.Sprintf("Stack '%s' not found", name), http.StatusNotFound)
 		} else {
-			respondOK(w, map[string]interface{}{
+			respondOK(w, map[string]any{
 				"success": false,
 				"error":   fmt.Sprintf("Failed to read compose file: %v", err),
 			})
@@ -332,7 +332,7 @@ func (h *StackHandler) GetStackYAML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"name":    name,
 		"yaml":    string(data),
@@ -386,7 +386,7 @@ func (h *StackHandler) UpdateStackYAML(w http.ResponseWriter, r *http.Request) {
 
 	// Write updated YAML
 	if err := os.WriteFile(composePath, []byte(yaml), 0640); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to write compose file: %v", err),
 		})
@@ -397,7 +397,7 @@ func (h *StackHandler) UpdateStackYAML(w http.ResponseWriter, r *http.Request) {
 	envPath := filepath.Join(dir, ".env")
 	if req.Env != "" {
 		if err := os.WriteFile(envPath, []byte(req.Env), 0640); err != nil {
-			respondOK(w, map[string]interface{}{
+			respondOK(w, map[string]any{
 				"success": false,
 				"error":   fmt.Sprintf("Failed to write .env file: %v", err),
 			})
@@ -406,7 +406,7 @@ func (h *StackHandler) UpdateStackYAML(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := getUserFromRequest(r)
-	result := map[string]interface{}{
+	result := map[string]any{
 		"success": true,
 		"name":    req.Name,
 		"message": "YAML updated",
@@ -476,7 +476,7 @@ func (h *StackHandler) DeleteStack(w http.ResponseWriter, r *http.Request) {
 
 	// Remove the stack directory
 	if err := os.RemoveAll(dir); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Compose down succeeded but failed to remove directory: %v", err),
 		})
@@ -487,7 +487,7 @@ func (h *StackHandler) DeleteStack(w http.ResponseWriter, r *http.Request) {
 	audit.LogCommand(audit.LevelInfo, user, "stack_delete",
 		[]string{name}, true, duration, nil)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"message":     fmt.Sprintf("Stack '%s' removed", name),
 		"duration_ms": duration.Milliseconds(),
@@ -562,7 +562,7 @@ func (h *StackHandler) StackAction(w http.ResponseWriter, r *http.Request) {
 		[]string{req.Name}, composeErr == nil, duration, composeErr)
 
 	if composeErr != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":     false,
 			"error":       composeErr.Error(),
 			"output":      string(output),
@@ -571,7 +571,7 @@ func (h *StackHandler) StackAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"message":     fmt.Sprintf("Stack '%s' %sed", req.Name, req.Action),
 		"output":      string(output),
@@ -586,25 +586,25 @@ func (h *StackHandler) StackAction(w http.ResponseWriter, r *http.Request) {
 //  Helpers
 // ─────────────────────────────────────────────────────────────
 
-func parseComposePS(output []byte) []map[string]interface{} {
-	var services []map[string]interface{}
+func parseComposePS(output []byte) []map[string]any {
+	var services []map[string]any
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	for _, line := range lines {
 		if line == "" {
 			continue
 		}
-		var s map[string]interface{}
+		var s map[string]any
 		if err := json.Unmarshal([]byte(line), &s); err == nil {
 			services = append(services, s)
 		}
 	}
 	if services == nil {
-		return []map[string]interface{}{}
+		return []map[string]any{}
 	}
 	return services
 }
 
-func computeStackStatus(services []map[string]interface{}) string {
+func computeStackStatus(services []map[string]any) string {
 	if len(services) == 0 {
 		return "stopped"
 	}
@@ -682,7 +682,7 @@ func (h *StackHandler) ConvertDockerRun(w http.ResponseWriter, r *http.Request) 
 	// Parse into compose YAML
 	yaml, name := parseDockerRun(cmd)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"yaml":    yaml,
 		"name":    name,

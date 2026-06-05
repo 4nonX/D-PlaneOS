@@ -277,11 +277,7 @@ func (ph *PoolHeartbeat) IsHealthy() bool {
 	}
 
 	maxAge := ph.checkInterval * 2
-	if time.Since(ph.lastSuccess) > maxAge {
-		return false
-	}
-
-	return true
+	return time.Since(ph.lastSuccess) <= maxAge
 }
 
 type PoolInfo struct {

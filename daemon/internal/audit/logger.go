@@ -29,7 +29,7 @@ type AuditLog struct {
 	Duration    int64                  `json:"duration_ms"`
 	SourceIP    string                 `json:"source_ip,omitempty"`
 	SessionID   string                 `json:"session_id,omitempty"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 type Logger struct {
@@ -177,8 +177,8 @@ func LogAction(action, user, message string, success bool, duration time.Duratio
 
 // LogActivity is a convenience function for file/replication audit logging.
 // Used by files.go and replication.go.
-// Call pattern: audit.LogActivity(user, "directory_create", map[string]interface{}{...})
-func LogActivity(user, action string, details map[string]interface{}) {
+// Call pattern: audit.LogActivity(user, "directory_create", map[string]any{...})
+func LogActivity(user, action string, details map[string]any) {
 	msg := fmt.Sprintf("%v", details)
 	Log(AuditLog{
 		Level:   LevelInfo,

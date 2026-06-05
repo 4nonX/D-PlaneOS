@@ -50,7 +50,7 @@ func MintSSETicket(w http.ResponseWriter, r *http.Request) {
 	sseTickets[ticket] = sseTicketEntry{user: user, expiry: now.Add(sseTicketTTL)}
 	sseTicketMu.Unlock()
 
-	respondOK(w, map[string]interface{}{"ticket": ticket})
+	respondOK(w, map[string]any{"ticket": ticket})
 }
 
 // ConsumeSSETicket validates and atomically consumes a one-time SSE ticket.

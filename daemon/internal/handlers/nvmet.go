@@ -44,7 +44,7 @@ func GetNVMeTargetStatus(w http.ResponseWriter, r *http.Request) {
 	_, _ = executeCommandWithTimeout(TimeoutSlow, "modprobe", []string{"nvmet-tcp"})
 	root := "/sys/kernel/config/nvmet"
 	_, err := executeCommandWithTimeout(TimeoutFast, "test", []string{"-d", root})
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":    true,
 		"ready":      err == nil,
 		"nvmet_root": root,
@@ -62,7 +62,7 @@ func ListNVMeTargets(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []nvmet.Export{}
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"targets": list,
 		"count":   len(list),
@@ -107,7 +107,7 @@ func CreateNVMeTarget(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":       true,
 		"message":       "NVMe-oF target created",
 		"subsystem_nqn": req.SubsystemNQN,
@@ -147,7 +147,7 @@ func UpdateNVMeTarget(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "NVMe-oF target updated",
 	})
@@ -185,7 +185,7 @@ func DeleteNVMeTarget(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "NVMe-oF target removed",
 	})

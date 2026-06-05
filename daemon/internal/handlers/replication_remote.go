@@ -168,7 +168,7 @@ func (h *ReplicationHandler) ReplicateToRemote(w http.ResponseWriter, r *http.Re
 					j.Fail(fmt.Sprintf("Resume failed: %v\nOutput: %s", err, output))
 					return
 				}
-				j.Done(map[string]interface{}{"resumed": true, "output": output})
+				j.Done(map[string]any{"resumed": true, "output": output})
 				return
 			}
 		}
@@ -198,10 +198,10 @@ func (h *ReplicationHandler) ReplicateToRemote(w http.ResponseWriter, r *http.Re
 			return
 		}
 
-		j.Done(map[string]interface{}{"snapshot": req.Snapshot, "remote": remoteDataset, "output": output})
+		j.Done(map[string]any{"snapshot": req.Snapshot, "remote": remoteDataset, "output": output})
 	})
 
-	respondOK(w, map[string]interface{}{"success": true, "job_id": jobID})
+	respondOK(w, map[string]any{"success": true, "job_id": jobID})
 }
 
 // isValidResumeToken checks that a ZFS resume token contains only safe characters.
@@ -343,5 +343,157 @@ func getResumeToken(sshArgs []string, sshTarget, remoteDataset string) string {
 		return ""
 	}
 	return token
+}
+
+// RestoreFromRemote pulls a snapshot from a remote peer into a local dataset.
+// This is the disaster-recovery path: remote has the backup, local needs to receive it.
+// The operation is: ssh remote zfs send <snapshot> | zfs recv [-F] <local_dataset>
+//
+// POST /api/replication/restore
+// Request: { "remote_id": "...", "remote_snapshot": "backuppool/data@snap-2025", "local_dataset": "tank/data", "force": false }
+func (h *ReplicationHandler) RestoreFromRemote(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RemoteID       string `json:"remote_id"`
+		RemoteSnapshot string `json:"remote_snapshot"` // full path on remote e.g. backuppool/data@snap-2025
+		LocalDataset   string `json:"local_dataset"`   // where to receive, e.g. tank/data-restore
+		Force          bool   `json:"force"`           // -F: destroy newer snapshots on local to force receive
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if !isValidSnapshotName(req.RemoteSnapshot) {
+		respondErrorSimple(w, "Invalid remote snapshot name", http.StatusBadRequest)
+		return
+	}
+	if !isValidDataset(req.LocalDataset) {
+		respondErrorSimple(w, "Invalid local dataset name", http.StatusBadRequest)
+		return
+	}
+
+	remote, err := ResolveRemoteByID(req.RemoteID)
+	if err != nil {
+		respondErrorSimple(w, "Peer not found: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !remote.KeyInstalled {
+		respondErrorSimple(w, "Peer not authorized - click Authorize in the Peers tab first", http.StatusBadRequest)
+		return
+	}
+
+	jobID := jobs.Start("replication_restore", func(j *jobs.Job) {
+		knownHostsArgs, cleanup, khErr := buildKnownHostsArgs(remote)
+		defer cleanup()
+		if khErr != nil {
+			j.Fail("Failed to prepare SSH known_hosts: " + khErr.Error())
+			return
+		}
+
+		sshArgs := append([]string{"-i", replKeyPath}, knownHostsArgs...)
+		sshArgs = append(sshArgs,
+			"-o", "ConnectTimeout=10",
+			"-o", "ServerAliveInterval=30",
+			"-o", "ServerAliveCountMax=3",
+			"-p", fmt.Sprintf("%d", remote.Port),
+		)
+		sshTarget := fmt.Sprintf("%s@%s", remote.User, remote.Host)
+
+		// Verify the snapshot exists on the remote before starting.
+		checkArgs := append([]string{}, sshArgs...)
+		checkArgs = append(checkArgs, sshTarget,
+			"zfs", "list", "-H", "-t", "snapshot", "-o", "name", req.RemoteSnapshot)
+		if _, checkErr := executeCommandWithTimeout(TimeoutMedium, "ssh", checkArgs); checkErr != nil {
+			j.Fail(fmt.Sprintf("Snapshot %q not found on remote %s: %v", req.RemoteSnapshot, remote.Name, checkErr))
+			return
+		}
+
+		// Build remote send command: ssh remote zfs send [-R] <snapshot>
+		remoteSendCmd := []string{"send", "-P", "-R", req.RemoteSnapshot}
+
+		// Build local recv args
+		recvArgs := []string{"recv", "-s"}
+		if req.Force {
+			recvArgs = append(recvArgs, "-F")
+		}
+		recvArgs = append(recvArgs, req.LocalDataset)
+
+		j.Log(fmt.Sprintf("Restoring %s:%s -> local:%s", remote.Name, req.RemoteSnapshot, req.LocalDataset))
+
+		// Execute the reverse pipeline: ssh remote zfs send | local zfs recv
+		// We reuse execPipedZFSSend but invert the flow:
+		// ssh <args> remote "zfs send <snapshot>" | zfs recv <local>
+		// This is done by constructing a special "send" that is actually ssh sending.
+		//
+		// For the restore path we use a simpler direct approach: run ssh as the
+		// "sender" and local zfs recv as the "receiver". We cannot reuse
+		// execPipedZFSSend directly since it always does local-send | ssh-recv.
+		// Instead we implement the same pipe pattern inline.
+		sshSendArgs := append([]string{}, sshArgs...)
+		sshSendArgs = append(sshSendArgs, sshTarget, "zfs")
+		sshSendArgs = append(sshSendArgs, remoteSendCmd...)
+
+		_, restoreErr := execPipedRestore(j, sshSendArgs, recvArgs)
+		if restoreErr != nil {
+			j.Fail(fmt.Sprintf("Restore failed: %v", restoreErr))
+			return
+		}
+
+		j.Done(map[string]any{
+			"remote_snapshot": req.RemoteSnapshot,
+			"local_dataset":   req.LocalDataset,
+			"peer":            remote.Name,
+		})
+		DispatchAlert("info", "replication.restore_complete", req.LocalDataset,
+			fmt.Sprintf("Restore of %s from %s completed successfully", req.RemoteSnapshot, remote.Name))
+	})
+
+	respondOK(w, map[string]any{"success": true, "job_id": jobID})
+}
+
+// execPipedRestore executes: ssh <sshArgs> [remote zfs send] | zfs recv <recvArgs>
+// This is the inverse of execPipedZFSSend: the remote is the sender, local is the receiver.
+func execPipedRestore(j *jobs.Job, sshArgs []string, recvArgs []string) (string, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sender := exec.CommandContext(ctx, "ssh", sshArgs...)
+	senderOut, err := sender.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("ssh stdout pipe: %w", err)
+	}
+	senderErr, err := sender.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("ssh stderr pipe: %w", err)
+	}
+
+	receiver := exec.CommandContext(ctx, "zfs", recvArgs...)
+	receiver.Stdin = senderOut
+	var recvOut, recvErr bytes.Buffer
+	receiver.Stdout = &recvOut
+	receiver.Stderr = &recvErr
+
+	if err := sender.Start(); err != nil {
+		return "", fmt.Errorf("start ssh: %w", err)
+	}
+
+	go func() {
+		scanner := bufio.NewScanner(senderErr)
+		var st zfs.SendProgressState
+		for scanner.Scan() {
+			if up, ok := zfs.FeedSendProgressLine(scanner.Text(), &st, 500*time.Millisecond); ok {
+				j.Progress(up)
+			}
+		}
+	}()
+
+	if err := receiver.Start(); err != nil {
+		sender.Wait() //nolint
+		return "", fmt.Errorf("start zfs recv: %w", err)
+	}
+	sender.Wait() //nolint
+	if err := receiver.Wait(); err != nil {
+		return recvErr.String(), fmt.Errorf("zfs recv failed: %w\n%s", err, recvErr.String())
+	}
+	return recvOut.String(), nil
 }
 

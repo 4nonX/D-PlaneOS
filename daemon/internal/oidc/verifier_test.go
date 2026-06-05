@@ -48,7 +48,7 @@ func newTestSigner(t *testing.T, kid string) testSigner {
 }
 
 // sign serializes the given claims into a compact JWS signed with the test key.
-func (ts testSigner) sign(t *testing.T, alg jose.SignatureAlgorithm, claims map[string]interface{}) string {
+func (ts testSigner) sign(t *testing.T, alg jose.SignatureAlgorithm, claims map[string]any) string {
 	t.Helper()
 	signer, err := jose.NewSigner(
 		jose.SigningKey{Algorithm: alg, Key: ts.priv},
@@ -82,8 +82,8 @@ func baseConfig() Config {
 	}
 }
 
-func baseClaims(now time.Time) map[string]interface{} {
-	return map[string]interface{}{
+func baseClaims(now time.Time) map[string]any {
+	return map[string]any{
 		"iss":   "https://idp.example.com",
 		"sub":   "abc-123",
 		"aud":   "dplaneos",
@@ -116,26 +116,26 @@ func TestVerifyIDToken_Rejections(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		mutate  func(c map[string]interface{})
+		mutate  func(c map[string]any)
 		nonce   string
 		cfg     func(Config) Config
 		wantErr error
 	}{
 		{
 			name:    "issuer mismatch",
-			mutate:  func(c map[string]interface{}) { c["iss"] = "https://evil.example.com" },
+			mutate:  func(c map[string]any) { c["iss"] = "https://evil.example.com" },
 			nonce:   "the-nonce",
 			wantErr: ErrIssuerMismatch,
 		},
 		{
 			name:    "audience mismatch",
-			mutate:  func(c map[string]interface{}) { c["aud"] = "someone-else" },
+			mutate:  func(c map[string]any) { c["aud"] = "someone-else" },
 			nonce:   "the-nonce",
 			wantErr: ErrAudienceMismatch,
 		},
 		{
 			name: "azp mismatch with multiple aud",
-			mutate: func(c map[string]interface{}) {
+			mutate: func(c map[string]any) {
 				c["aud"] = []string{"dplaneos", "other"}
 				c["azp"] = "other"
 			},
@@ -144,31 +144,31 @@ func TestVerifyIDToken_Rejections(t *testing.T) {
 		},
 		{
 			name:    "expired",
-			mutate:  func(c map[string]interface{}) { c["exp"] = now.Add(-10 * time.Minute).Unix() },
+			mutate:  func(c map[string]any) { c["exp"] = now.Add(-10 * time.Minute).Unix() },
 			nonce:   "the-nonce",
 			wantErr: ErrExpired,
 		},
 		{
 			name:    "issued in future",
-			mutate:  func(c map[string]interface{}) { c["iat"] = now.Add(10 * time.Minute).Unix() },
+			mutate:  func(c map[string]any) { c["iat"] = now.Add(10 * time.Minute).Unix() },
 			nonce:   "the-nonce",
 			wantErr: ErrIssuedInFuture,
 		},
 		{
 			name:    "missing subject",
-			mutate:  func(c map[string]interface{}) { delete(c, "sub") },
+			mutate:  func(c map[string]any) { delete(c, "sub") },
 			nonce:   "the-nonce",
 			wantErr: ErrMissingSubject,
 		},
 		{
 			name:    "nonce mismatch",
-			mutate:  func(c map[string]interface{}) {},
+			mutate:  func(c map[string]any) {},
 			nonce:   "wrong-nonce",
 			wantErr: ErrNonceMismatch,
 		},
 		{
 			name:    "nonce missing",
-			mutate:  func(c map[string]interface{}) { delete(c, "nonce") },
+			mutate:  func(c map[string]any) { delete(c, "nonce") },
 			nonce:   "the-nonce",
 			wantErr: ErrNonceMissing,
 		},

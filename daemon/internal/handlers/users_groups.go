@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"dplaned/internal/gitops"
 	"dplaned/internal/middleware"
+	"dplaned/internal/scram"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -52,9 +53,9 @@ func (h *UserGroupHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 			respondErrorSimple(w, "User not found", http.StatusNotFound)
 			return
 		}
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success": true,
-			"user": map[string]interface{}{
+			"user": map[string]any{
 				"id":         id,
 				"username":   username,
 				"email":      email,
@@ -73,7 +74,7 @@ func (h *UserGroupHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var users []map[string]interface{}
+	var users []map[string]any
 	for rows.Next() {
 		var id, active int
 		var username, email, role, createdAt string
@@ -81,7 +82,7 @@ func (h *UserGroupHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 			log.Printf("USER LIST SCAN ERROR: %v", err)
 			continue
 		}
-		users = append(users, map[string]interface{}{
+		users = append(users, map[string]any{
 			"id":         id,
 			"username":   username,
 			"email":      email,
@@ -96,10 +97,10 @@ func (h *UserGroupHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if users == nil {
-		users = []map[string]interface{}{}
+		users = []map[string]any{}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"users":   users,
 	})
@@ -222,8 +223,13 @@ func (h *UserGroupHandler) createUser(w http.ResponseWriter, req userActionReque
 		return
 	}
 
-	// Hash password
+	// Hash password with bcrypt and derive SCRAM-SHA-512 keys.
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	scramKeys, err := scram.Derive(req.Password)
 	if err != nil {
 		respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
 		return
@@ -236,8 +242,12 @@ func (h *UserGroupHandler) createUser(w http.ResponseWriter, req userActionReque
 
 	var id int64
 	err = h.db.QueryRow(
-		`INSERT INTO users (username, password_hash, email, role, active) VALUES ($1, $2, $3, $4, 1) RETURNING id`,
-		req.Username, string(hash), req.Email, role,
+		`INSERT INTO users (username, password_hash, scram_salt, scram_iterations, scram_stored_key, scram_server_key, email, role, active)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1) RETURNING id`,
+		req.Username, string(hash),
+		scram.EncodeBase64(scramKeys.Salt), scramKeys.Iterations,
+		scram.EncodeBase64(scramKeys.StoredKey), scram.EncodeBase64(scramKeys.ServerKey),
+		req.Email, role,
 	).Scan(&id)
 	if err != nil {
 		respondErrorSimple(w, "Failed to create user", http.StatusInternalServerError)
@@ -245,7 +255,7 @@ func (h *UserGroupHandler) createUser(w http.ResponseWriter, req userActionReque
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"id":      id,
 		"message": fmt.Sprintf("User %s created", req.Username),
@@ -316,7 +326,19 @@ func (h *UserGroupHandler) updateUser(w http.ResponseWriter, req userActionReque
 			respondErrorSimple(w, "Failed to hash password", http.StatusInternalServerError)
 			return
 		}
-		_, err = h.db.Exec(`UPDATE users SET password_hash = $1 WHERE id = $2`, string(hash), req.ID)
+		scramKeys, err := scram.Derive(req.Password)
+		if err != nil {
+			respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+		_, err = h.db.Exec(
+			`UPDATE users SET password_hash = $1, scram_salt = $2, scram_iterations = $3,
+			 scram_stored_key = $4, scram_server_key = $5 WHERE id = $6`,
+			string(hash),
+			scram.EncodeBase64(scramKeys.Salt), scramKeys.Iterations,
+			scram.EncodeBase64(scramKeys.StoredKey), scram.EncodeBase64(scramKeys.ServerKey),
+			req.ID,
+		)
 		if err != nil {
 			respondErrorSimple(w, "Failed to update password", http.StatusInternalServerError)
 			log.Printf("USER UPDATE PASSWORD ERROR: %v", err)
@@ -324,7 +346,7 @@ func (h *UserGroupHandler) updateUser(w http.ResponseWriter, req userActionReque
 		}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "User updated",
 	})
@@ -400,7 +422,7 @@ func (h *UserGroupHandler) deleteUser(w http.ResponseWriter, req userActionReque
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "User deleted",
 	})
@@ -450,8 +472,20 @@ func (h *UserGroupHandler) ResetUserPassword(w http.ResponseWriter, r *http.Requ
 		respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
 		return
 	}
+	scramKeys, err := scram.Derive(body.TempPassword)
+	if err != nil {
+		respondErrorSimple(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
 
-	_, err = h.db.Exec(`UPDATE users SET password_hash = $1, must_change_password = 1 WHERE id = $2`, string(hash), id)
+	_, err = h.db.Exec(
+		`UPDATE users SET password_hash = $1, scram_salt = $2, scram_iterations = $3,
+		 scram_stored_key = $4, scram_server_key = $5, must_change_password = 1 WHERE id = $6`,
+		string(hash),
+		scram.EncodeBase64(scramKeys.Salt), scramKeys.Iterations,
+		scram.EncodeBase64(scramKeys.StoredKey), scram.EncodeBase64(scramKeys.ServerKey),
+		id,
+	)
 	if err != nil {
 		respondErrorSimple(w, "Failed to reset password", http.StatusInternalServerError)
 		return
@@ -462,7 +496,7 @@ func (h *UserGroupHandler) ResetUserPassword(w http.ResponseWriter, r *http.Requ
 		log.Printf("RESET PASSWORD: failed to revoke sessions for %s: %v", username, err)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Password reset for %s - user must set a new password on next login", username),
 	})
@@ -502,9 +536,9 @@ func (h *UserGroupHandler) listGroups(w http.ResponseWriter, r *http.Request) {
 			memberCount = 0
 		}
 
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success": true,
-			"group": map[string]interface{}{
+			"group": map[string]any{
 				"id":           id,
 				"name":         name,
 				"description":  desc,
@@ -523,7 +557,7 @@ func (h *UserGroupHandler) listGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var groups []map[string]interface{}
+	var groups []map[string]any
 	for rows.Next() {
 		var id, gid int
 		var name, desc, createdAt string
@@ -539,7 +573,7 @@ func (h *UserGroupHandler) listGroups(w http.ResponseWriter, r *http.Request) {
 			memberCount = 0
 		}
 
-		groups = append(groups, map[string]interface{}{
+		groups = append(groups, map[string]any{
 			"id":           id,
 			"name":         name,
 			"description":  desc,
@@ -554,10 +588,10 @@ func (h *UserGroupHandler) listGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if groups == nil {
-		groups = []map[string]interface{}{}
+		groups = []map[string]any{}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"groups":  groups,
 	})
@@ -625,7 +659,7 @@ func (h *UserGroupHandler) groupAction(w http.ResponseWriter, r *http.Request) {
 			respondErrorSimple(w, "Failed to create group (name may already exist)", http.StatusConflict)
 			return
 		}
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success": true, "id": id, "message": "Group created",
 		})
 
@@ -685,7 +719,7 @@ func (h *UserGroupHandler) groupAction(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success": true, "message": "Group updated",
 		})
 
@@ -715,7 +749,7 @@ func (h *UserGroupHandler) groupAction(w http.ResponseWriter, r *http.Request) {
 			log.Printf("GROUP DELETE ERROR: %v", err)
 			return
 		}
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success": true, "message": "Group deleted",
 		})
 

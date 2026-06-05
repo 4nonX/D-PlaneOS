@@ -33,7 +33,7 @@ type CommandResponse struct {
 	Output   string      `json:"output,omitempty"`
 	Error    string      `json:"error,omitempty"`
 	Duration int64       `json:"duration_ms"`
-	Data     interface{} `json:"data,omitempty"`
+	Data     any `json:"data,omitempty"`
 }
 
 func NewZFSHandler(db *sql.DB) *ZFSHandler {

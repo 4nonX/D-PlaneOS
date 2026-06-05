@@ -1,4 +1,4 @@
-﻿package handlers
+package handlers
 
 import (
 	"encoding/json"
@@ -118,7 +118,7 @@ func ExecuteRsync(w http.ResponseWriter, r *http.Request) {
 		if len(all) < limit {
 			limit = len(all)
 		}
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"tasks":   all[:limit],
 		})
@@ -153,7 +153,7 @@ func ExecuteRsync(w http.ResponseWriter, r *http.Request) {
 	src, dst := req.Source, req.Destination
 	jobID := jobs.Start("rsync_backup", func(j *jobs.Job) {
 		output, err := cmdutil.RunSlow("rsync", "-avz", "--progress", src, dst)
-		audit.LogActivity(user, "rsync_backup", map[string]interface{}{
+		audit.LogActivity(user, "rsync_backup", map[string]any{
 			"source":      src,
 			"destination": dst,
 			"success":     err == nil,
@@ -169,7 +169,7 @@ func ExecuteRsync(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		j.Done(map[string]interface{}{"output": string(output)})
+		j.Done(map[string]any{"output": string(output)})
 		updateTask(taskID, func(t *BackupTask) {
 			t.Status = jobs.StatusDone
 			t.FinishedAt = &now
@@ -180,7 +180,7 @@ func ExecuteRsync(w http.ResponseWriter, r *http.Request) {
 	task.JobID = jobID
 	appendTask(task)
 
-	respondOK(w, map[string]interface{}{"job_id": jobID, "task_id": taskID})
+	respondOK(w, map[string]any{"job_id": jobID, "task_id": taskID})
 }
 
 // DeleteBackupTask removes a task by ID from the JSON file.
@@ -227,6 +227,6 @@ func DeleteBackupTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true, "deleted": id})
+	respondOK(w, map[string]any{"success": true, "deleted": id})
 }
 

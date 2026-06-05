@@ -92,18 +92,6 @@ func loadFileShares() ([]FileShare, error) {
 	return out, nil
 }
 
-func saveFileShares(shares []FileShare) error {
-	fileSharesMu.Lock()
-	defer fileSharesMu.Unlock()
-
-	os.MkdirAll(ConfigDir, 0755)
-	data, err := json.MarshalIndent(shares, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(configPath(fileSharesFile), data, 0600)
-}
-
 var errFileShareNotFound = errors.New("file share not found")
 
 // atomicModifyFileShares holds the write lock across the full load-modify-save cycle.
@@ -172,7 +160,7 @@ func ListFileShares(w http.ResponseWriter, r *http.Request) {
 	for i, s := range shares {
 		out[i] = toPublic(s)
 	}
-	respondOK(w, map[string]interface{}{"success": true, "shares": out})
+	respondOK(w, map[string]any{"success": true, "shares": out})
 }
 
 // CreateFileShare POST /api/file-shares
@@ -242,10 +230,10 @@ func CreateFileShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.LogActivity(share.CreatedBy, "file_share_create", map[string]interface{}{
+	audit.LogActivity(share.CreatedBy, "file_share_create", map[string]any{
 		"id": share.ID, "path": share.Path, "has_password": share.HasPassword,
 	})
-	respondOK(w, map[string]interface{}{"success": true, "share": toPublic(share)})
+	respondOK(w, map[string]any{"success": true, "share": toPublic(share)})
 }
 
 // DeleteFileShare DELETE /api/file-shares/{id}
@@ -270,8 +258,8 @@ func DeleteFileShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.LogActivity(r.Header.Get("X-User"), "file_share_revoke", map[string]interface{}{"id": id})
-	respondOK(w, map[string]interface{}{"success": true})
+	audit.LogActivity(r.Header.Get("X-User"), "file_share_revoke", map[string]any{"id": id})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // ─── Public handlers (no session required) ─────────────────────
@@ -303,7 +291,7 @@ func GetFileShareInfo(w http.ResponseWriter, r *http.Request) {
 		size = info.Size()
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":      true,
 		"filename":     s.Filename,
 		"size":         size,

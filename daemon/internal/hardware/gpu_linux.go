@@ -186,7 +186,7 @@ func probeDockerRuntimes(ctx context.Context) ([]string, bool) {
 		return nil, false
 	}
 	var info struct {
-		Runtimes map[string]interface{} `json:"Runtimes"`
+		Runtimes map[string]any `json:"Runtimes"`
 	}
 	if err := json.Unmarshal(out, &info); err != nil {
 		return nil, false

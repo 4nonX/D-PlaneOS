@@ -90,11 +90,12 @@ interface ReplicationConfig {
 }
 
 interface FencingConfig {
-  enable:            boolean
-  bmc_ip:            string
-  bmc_user:          string
-  bmc_password_file: string
-  jitter_max_ms:     number
+  enable:                    boolean
+  bmc_ip:                    string
+  bmc_user:                  string
+  bmc_password_file:         string
+  jitter_max_ms:             number
+  disk_fault_tolerance_pct?: number
 }
 
 interface WitnessEntry {
@@ -473,6 +474,7 @@ function FencingConfigForm() {
   const [user,      setUser]      = useState('')
   const [passFile,  setPassFile]  = useState('')
   const [jitterMs,  setJitterMs]  = useState(3000)
+  const [diskTolPct, setDiskTolPct] = useState(10)
 
   useEffect(() => {
     if (q.data?.config) {
@@ -482,6 +484,7 @@ function FencingConfigForm() {
       setUser(c.bmc_user)
       setPassFile(c.bmc_password_file)
       setJitterMs(c.jitter_max_ms ?? 3000)
+      setDiskTolPct(c.disk_fault_tolerance_pct ?? 10)
     }
   }, [q.data])
 
@@ -492,7 +495,7 @@ function FencingConfigForm() {
   })
 
   function submit() {
-    save.mutate({ enable, bmc_ip: ip.trim(), bmc_user: user.trim(), bmc_password_file: passFile.trim(), jitter_max_ms: jitterMs })
+    save.mutate({ enable, bmc_ip: ip.trim(), bmc_user: user.trim(), bmc_password_file: passFile.trim(), jitter_max_ms: jitterMs, disk_fault_tolerance_pct: diskTolPct })
   }
 
   return (
@@ -531,15 +534,21 @@ function FencingConfigForm() {
         </label>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 12, marginBottom: 16, alignItems: 'end' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '180px 180px 1fr', gap: 12, marginBottom: 16, alignItems: 'end' }}>
         <label className="field">
           <span className="field-label">Jitter Window (ms)</span>
           <input type="number" min={0} max={30000} step={500} value={jitterMs}
             onChange={e => setJitterMs(Math.min(30000, Math.max(0, parseInt(e.target.value) || 0)))}
             className="input" disabled={q.isLoading} />
         </label>
+        <label className="field">
+          <span className="field-label">Disk Fault Tolerance (%)</span>
+          <input type="number" min={0} max={50} step={1} value={diskTolPct}
+            onChange={e => setDiskTolPct(Math.min(50, Math.max(0, parseInt(e.target.value) || 0)))}
+            className="input" disabled={q.isLoading} />
+        </label>
         <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', margin: 0, paddingBottom: 6 }}>
-          Random delay (0–{jitterMs}ms) before firing. Prevents simultaneous mutual destruction if both nodes hit the 45s threshold at the same instant. Default 3000.
+          Jitter: random delay before firing to prevent mutual destruction. Disk tolerance: % of pool disks that may fail SCSI-3 PR without aborting (0 = all-or-nothing, default 10).
         </p>
       </div>
 
@@ -1475,7 +1484,8 @@ export function HAPage() {
                     title: `STONITH: Terminate ${p.name ?? p.id}?`,
                     message: 'I have physically verified the node is down or isolated. Proceed with chassis power-off via out-of-band management (IPMI BMC or PDU). This will import ZFS pools on this node and promote it to active.',
                     danger: true,
-                    confirmLabel: 'Fence & Promote'
+                    confirmLabel: 'Fence & Promote',
+                    confirmText: 'STONITH',
                   })) {
                     fencePeer.mutate(p.id)
                   }
@@ -1565,7 +1575,7 @@ export function HAPage() {
             canPromote={allNodes.length >= 2}
             onPromote={async () => {
               if (node.id === localID) {
-                if (await confirm({ title: 'Assume Primary Role Locally?', message: 'This node will force-import all storage pools and execute the failover protocol. Ensure the current active node is offline or fenced first to prevent split-brain.', danger: true, confirmLabel: 'Failover Now' })) {
+                if (await confirm({ title: 'Assume Primary Role Locally?', message: 'This node will force-import all storage pools and execute the failover protocol. Ensure the current active node is offline or fenced first to prevent split-brain.', danger: true, confirmLabel: 'Failover Now', confirmText: 'FAILOVER' })) {
                   localPromote.mutate()
                 }
               } else {
@@ -1580,7 +1590,7 @@ export function HAPage() {
               }
             }}
             onFence={async () => {
-              if (await confirm({ title: `STONITH: Terminate ${node.name ?? node.id}?`, message: 'Issues a chassis power-off via out-of-band management (IPMI BMC or PDU). Data loss may occur if the node has unsynchronised writes. Proceed?', danger: true, confirmLabel: 'Terminate Chassis' })) {
+              if (await confirm({ title: `STONITH: Terminate ${node.name ?? node.id}?`, message: 'Issues a chassis power-off via out-of-band management (IPMI BMC or PDU). Data loss may occur if the node has unsynchronised writes. Proceed?', danger: true, confirmLabel: 'Terminate Chassis', confirmText: 'STONITH' })) {
                 fencePeer.mutate(node.id)
               }
             }}

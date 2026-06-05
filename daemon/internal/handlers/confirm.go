@@ -42,7 +42,7 @@ func HandleIssueConfirmToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":    true,
 		"token":      token,
 		"expires_in": 60,

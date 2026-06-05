@@ -74,13 +74,13 @@ func CreateDirectory(w http.ResponseWriter, r *http.Request) {
 
 	safePath, ok := validateFilePath(req.Path)
 	if !ok {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	req.Path = safePath
 	output, err := cmdutil.RunFast("mkdir", "-p", req.Path)
 
-	audit.LogActivity(user, "directory_create", map[string]interface{}{
+	audit.LogActivity(user, "directory_create", map[string]any{
 		"path":    req.Path,
 		"success": err == nil,
 	})
@@ -90,7 +90,7 @@ func CreateDirectory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"path":    req.Path,
 		"output":  string(output),
@@ -118,20 +118,20 @@ func DeletePath(w http.ResponseWriter, r *http.Request) {
 
 	safePath, ok := validateFilePath(req.Path)
 	if !ok {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	req.Path = safePath
 
 	// GUARD: Prevent recursive deletion of pool roots or critical base paths (Finding 33)
 	if isPoolRoot(req.Path) {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Cannot delete a ZFS pool root or system base path via the file browser. Use the Storage tab to destroy pools."})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Cannot delete a ZFS pool root or system base path via the file browser. Use the Storage tab to destroy pools."})
 		return
 	}
 
 	output, err := cmdutil.RunFast("rm", "-rf", req.Path)
 
-	audit.LogActivity(user, "path_delete", map[string]interface{}{
+	audit.LogActivity(user, "path_delete", map[string]any{
 		"path":    req.Path,
 		"success": err == nil,
 	})
@@ -141,7 +141,7 @@ func DeletePath(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"path":    req.Path,
 		"output":  string(output),
@@ -171,7 +171,7 @@ func ChangeOwnership(w http.ResponseWriter, r *http.Request) {
 
 	safePath, ok := validateFilePath(req.Path)
 	if !ok {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	req.Path = safePath
@@ -183,7 +183,7 @@ func ChangeOwnership(w http.ResponseWriter, r *http.Request) {
 
 	output, err := cmdutil.RunFast("chown", ownerGroup, req.Path)
 
-	audit.LogActivity(user, "ownership_change", map[string]interface{}{
+	audit.LogActivity(user, "ownership_change", map[string]any{
 		"path":    req.Path,
 		"owner":   req.Owner,
 		"group":   req.Group,
@@ -196,7 +196,7 @@ func ChangeOwnership(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = output
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 	})
 }
@@ -232,14 +232,14 @@ func ChangePermissions(w http.ResponseWriter, r *http.Request) {
 
 	safePath, ok := validateFilePath(req.Path)
 	if !ok {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	req.Path = safePath
 
 	output, err := cmdutil.RunFast("chmod", req.Mode, req.Path)
 
-	audit.LogActivity(user, "permissions_change", map[string]interface{}{
+	audit.LogActivity(user, "permissions_change", map[string]any{
 		"path":    req.Path,
 		"mode":    req.Mode,
 		"success": err == nil,
@@ -251,7 +251,7 @@ func ChangePermissions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = output
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 	})
 }

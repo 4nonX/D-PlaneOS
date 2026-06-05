@@ -12,7 +12,7 @@ var (
 	webhookAlertFn   func(event, resource, message string)
 	smtpAlertFn      func(subject, body string)
 	telegramAlertFn  func(message string)
-	webSocketAlertFn func(event string, data interface{}, level string)
+	webSocketAlertFn func(event string, data any, level string)
 )
 
 // SetAlertDispatchers wires up the three outbound alert channels.
@@ -27,7 +27,7 @@ func SetAlertDispatchers(
 	webhook func(event, resource, message string),
 	smtp func(subject, body string),
 	telegram func(message string),
-	websocket func(event string, data interface{}, level string),
+	websocket func(event string, data any, level string),
 ) {
 	webhookAlertFn = webhook
 	smtpAlertFn = smtp
@@ -49,7 +49,7 @@ func SetAlertDispatchers(
 func DispatchAlert(level, event, resource, message string) {
 	if webSocketAlertFn != nil {
 		// Additive and non-blocking broadcast to UI
-		go webSocketAlertFn(event, map[string]interface{}{
+		go webSocketAlertFn(event, map[string]any{
 			"resource": resource,
 			"message":  message,
 		}, level)

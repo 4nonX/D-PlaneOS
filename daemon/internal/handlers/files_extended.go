@@ -104,10 +104,10 @@ func (h *FilesExtendedHandler) GetFileProperties(w http.ResponseWriter, r *http.
 	path = filepath.Clean(path)
 	info, err := os.Stat(path)
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"file":    buildFileInfo(path, info),
 	})
@@ -128,20 +128,20 @@ func (h *FilesExtendedHandler) ReadFile(w http.ResponseWriter, r *http.Request) 
 	}
 	safePath, ok := validateFilePath(filepath.Clean(path))
 	if !ok {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	info, err := os.Stat(safePath)
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	if info.IsDir() {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": "Path is a directory"})
+		respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": "Path is a directory"})
 		return
 	}
 	if info.Size() > maxReadBytes {
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success":   false,
 			"too_large": true,
 			"size":      info.Size(),
@@ -151,10 +151,10 @@ func (h *FilesExtendedHandler) ReadFile(w http.ResponseWriter, r *http.Request) 
 	}
 	data, err := os.ReadFile(safePath)
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"path":    safePath,
 		"content": string(data),
@@ -179,7 +179,7 @@ func (h *FilesExtendedHandler) WriteFile(w http.ResponseWriter, r *http.Request)
 	}
 	safePath, ok := validateFilePath(filepath.Clean(req.Path))
 	if !ok {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	perm := os.FileMode(0644)
@@ -189,12 +189,12 @@ func (h *FilesExtendedHandler) WriteFile(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if err := os.WriteFile(safePath, []byte(req.Content), perm); err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	user := r.Header.Get("X-User")
-	audit.LogActivity(user, "file_write", map[string]interface{}{"path": safePath, "size": len(req.Content)})
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "path": safePath, "size": len(req.Content)})
+	audit.LogActivity(user, "file_write", map[string]any{"path": safePath, "size": len(req.Content)})
+	respondJSON(w, http.StatusOK, map[string]any{"success": true, "path": safePath, "size": len(req.Content)})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -237,7 +237,7 @@ func (h *FilesExtendedHandler) DownloadFile(w http.ResponseWriter, r *http.Reque
 	io.Copy(w, f) //nolint:errcheck
 
 	user := r.Header.Get("X-User")
-	audit.LogActivity(user, "file_download", map[string]interface{}{"path": safePath})
+	audit.LogActivity(user, "file_download", map[string]any{"path": safePath})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -257,22 +257,22 @@ func (h *FilesExtendedHandler) RenameFile(w http.ResponseWriter, r *http.Request
 	}
 	oldPath, ok := validateFilePath(filepath.Clean(req.OldPath))
 	if !ok {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	newName := filepath.Base(req.NewName)
 	if newName == "" || newName == "." || newName == ".." || strings.ContainsAny(newName, "/\\") {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "Invalid filename"})
+		respondJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "Invalid filename"})
 		return
 	}
 	newPath := filepath.Join(filepath.Dir(oldPath), newName)
 	if err := os.Rename(oldPath, newPath); err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	user := r.Header.Get("X-User")
-	audit.LogActivity(user, "file_rename", map[string]interface{}{"old": oldPath, "new": newPath})
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "new_path": newPath})
+	audit.LogActivity(user, "file_rename", map[string]any{"old": oldPath, "new": newPath})
+	respondJSON(w, http.StatusOK, map[string]any{"success": true, "new_path": newPath})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,17 +292,17 @@ func (h *FilesExtendedHandler) CopyFile(w http.ResponseWriter, r *http.Request) 
 	src, ok1 := validateFilePath(filepath.Clean(req.Source))
 	dst, ok2 := validateFilePath(filepath.Clean(req.Destination))
 	if !ok1 || !ok2 {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	out, err := cmdutil.RunMedium("cp", "-a", src, dst)
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": fmt.Sprintf("%v: %s", err, out)})
+		respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": fmt.Sprintf("%v: %s", err, out)})
 		return
 	}
 	user := r.Header.Get("X-User")
-	audit.LogActivity(user, "file_copy", map[string]interface{}{"src": src, "dst": dst})
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "destination": dst})
+	audit.LogActivity(user, "file_copy", map[string]any{"src": src, "dst": dst})
+	respondJSON(w, http.StatusOK, map[string]any{"success": true, "destination": dst})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -322,24 +322,24 @@ func (h *FilesExtendedHandler) MoveFile(w http.ResponseWriter, r *http.Request) 
 	src, ok1 := validateFilePath(filepath.Clean(req.Source))
 	dst, ok2 := validateFilePath(filepath.Clean(req.Destination))
 	if !ok1 || !ok2 {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	// os.Rename is atomic on same filesystem; falls back to cp+rm across filesystems
 	if err := os.Rename(src, dst); err != nil {
 		out, cpErr := cmdutil.RunMedium("cp", "-a", src, dst)
 		if cpErr != nil {
-			respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": fmt.Sprintf("%v: %s", cpErr, out)})
+			respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": fmt.Sprintf("%v: %s", cpErr, out)})
 			return
 		}
 		if rmErr := os.RemoveAll(src); rmErr != nil {
-			respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": "Copied but could not remove source: " + rmErr.Error()})
+			respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": "Copied but could not remove source: " + rmErr.Error()})
 			return
 		}
 	}
 	user := r.Header.Get("X-User")
-	audit.LogActivity(user, "file_move", map[string]interface{}{"src": src, "dst": dst})
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "destination": dst})
+	audit.LogActivity(user, "file_move", map[string]any{"src": src, "dst": dst})
+	respondJSON(w, http.StatusOK, map[string]any{"success": true, "destination": dst})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -368,7 +368,7 @@ func (h *FilesExtendedHandler) UploadChunk(w http.ResponseWriter, r *http.Reques
 
 	destDir, ok := validateFilePath(destDir)
 	if !ok {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Path not allowed"})
+		respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Path not allowed"})
 		return
 	}
 	targetPath := filepath.Join(destDir, filename)
@@ -384,31 +384,31 @@ func (h *FilesExtendedHandler) UploadChunk(w http.ResponseWriter, r *http.Reques
 		}
 		f, err := os.OpenFile(targetPath, flag, 0644)
 		if err != nil {
-			respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+			respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": err.Error()})
 			return
 		}
 		defer f.Close()
 		if _, err := io.Copy(f, file); err != nil {
-			respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+			respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": err.Error()})
 			return
 		}
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "chunk": idx})
+		respondJSON(w, http.StatusOK, map[string]any{"success": true, "chunk": idx})
 		return
 	}
 
 	// Non-chunked
 	f, err := os.Create(targetPath)
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	defer f.Close()
 	n, err := io.Copy(f, file)
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, http.StatusOK, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "filename": filename, "size": n})
+	respondJSON(w, http.StatusOK, map[string]any{"success": true, "filename": filename, "size": n})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -497,7 +497,7 @@ func readLiveReplication() ([]LiveReplication, error) {
 		return nil, err
 	}
 
-	var raw []map[string]interface{}
+	var raw []map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}

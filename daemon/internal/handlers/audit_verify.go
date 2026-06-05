@@ -36,7 +36,7 @@ func (h *AuditRotationHandler) VerifyAuditChain(w http.ResponseWriter, r *http.R
 	// Load the HMAC key - must be the same key the daemon uses for writing
 	keyBytes, err := os.ReadFile(h.auditKeyPath)
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"valid":   false,
 			"error":   "Audit key not available. The daemon must have written at least one audit row.",
@@ -44,7 +44,7 @@ func (h *AuditRotationHandler) VerifyAuditChain(w http.ResponseWriter, r *http.R
 		return
 	}
 	if len(keyBytes) != 32 {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"valid":   false,
 			"error":   fmt.Sprintf("Audit key has unexpected length %d (want 32). Key file may be corrupt.", len(keyBytes)),
@@ -131,13 +131,13 @@ func (h *AuditRotationHandler) VerifyAuditChain(w http.ResponseWriter, r *http.R
 		checked++
 	}
 	if err := rows.Err(); err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
 			"success": false, "error": "audit log query error: " + err.Error(),
 		})
 		return
 	}
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"success":      true,
 		"valid":        valid,
 		"total_rows":   total,

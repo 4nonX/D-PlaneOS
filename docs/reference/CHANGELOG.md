@@ -6,6 +6,90 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v14.0.0 (2026-06-05) - "Vanguard"
+
+Upgrade from: v13.0.0 - Schema migration required (migration 00006 adds SCRAM-SHA-512 credential columns to `users` and `disk_fault_tolerance_pct` to `ha_fencing_config`; applied automatically at startup). No breaking API changes. No breaking configuration changes.
+
+This release closes the remaining architectural gaps between DPlaneOS and TrueNAS SCALE, adds several capabilities that exceed TrueNAS, and fixes three mechanical failure modes introduced by translating Python/Debian patterns into Go/NixOS: a sync-before-reboot bug that caused D-state deadlock during failover, configfs writes that outran NVMe AEN propagation, and non-atomic state file writes racing with ZFS pool export on NixOS. The code quality pass removed all dead code and migrated 137 files from `interface{}` to `any`.
+
+### Added
+
+- **SCRAM-SHA-512 authentication (`daemon/internal/scram/`, migration 00006)**: Full RFC 5802 SCRAM-SHA-512 implementation with PBKDF2 (100k iterations, SHA-512). Two-round REST challenge/response via `POST /api/auth/scram/challenge` and `POST /api/auth/scram/verify`. On every password-set path the daemon now derives and stores both a bcrypt hash (backward-compatible web login over HTTPS) and SCRAM keys (StoredKey + ServerKey). Applied to all six callsites: user self-service `ChangePassword`, admin `CreateUser`, admin `UpdateUser`, admin `ResetUserPassword`, and both branches of the bootstrap `HandleSetup` (INSERT and UPDATE). The SCRAM verify path correctly gates on TOTP and must-change-password, mirroring the bcrypt path exactly. 9 unit tests. Exceeds TrueNAS, which applies SCRAM only to API keys; DPlane applies it to all authentication paths.
+
+- **must_change_password session restriction (`daemon/internal/security/session.go`, `daemon/internal/middleware/rbac.go`)**: Sessions created after a forced password reset or admin password set now carry `status='must_change_password'` instead of `active`. `ValidateSessionAndGetUser` reads this status; the RBAC middleware rejects all requests except `POST /api/auth/change-password` with a 403 and `action: "change_password"` until the user complies. Applies to both bcrypt and SCRAM login paths.
+
+- **Fencing disk fault tolerance (`daemon/internal/ha/fence.go`, `daemon/cmd/dplane-fenced/main.go`, migration 00006)**: `DiskFaultTolerancePct` field on `FencingConfig` (0-50%, default 10%, capped at 50%). `dplane-fenced` now counts SCSI-3 PR reservation failures per disk; if the failure fraction exceeds the threshold it calls `log.Fatalf` (forcing systemd restart and requiring admin review) rather than continuing with reduced fencing coverage. `SaveFencingConfig` writes the tolerance to `/var/lib/dplaneos/fence-tolerance` atomically (temp + rename) for `dplane-fenced` which has no DB access. `dplane-fenced` caches the last-known-good value in memory so pool export cannot silently revert the threshold. Matches TrueNAS 10% default. UI field added to `FencingConfigForm`.
+
+- **Directory cache persistence (`daemon/internal/ldap/cache.go`)**: `NewDirectoryCacheWithPersistence(ttl, path)` loads the last-known-good JSON snapshot on daemon startup so authentication works immediately before the first LDAP contact after a restart. Successful refreshes write an atomic snapshot (temp + rename). Concurrent pool export races are handled: if the persistent path is on a ZFS dataset being exported, the rename fails cleanly and the in-memory cache continues serving.
+
+- **Job credentials (`daemon/internal/jobs/jobs.go`)**: `UserID`, `Username`, and `Role` fields added to `Job` and `JobSnapshot`. `StartWithCreds(jobType, userID, username, role, fn)` variant allows job goroutines to inspect caller identity without threading a request context through call sites. `Start` delegates to `StartWithCreds` with zero values.
+
+- **NVMe-oF ANA groups (`daemon/internal/nvmet/spec.go`, `daemon/internal/nvmet/apply_linux.go`)**: `ANAState` type and `ANAGroup` struct added. `Export` gains `ANAEnabled` and `ANAGroups` fields. `applyANAGroupState` writes the ANA group directory and `ana_state` file in kernel configfs, then waits `ANAPropagationDelay` (200ms by default, 0 in tests) for the kernel's AEN to reach connected NVMe hosts before returning. Callers must not release the VIP until this function returns. ANA toggle added to NVMe target creation form.
+
+- **iSCSI ALUA (`daemon/internal/handlers/iscsi.go`)**: `ALUAState` type (Active/Optimized=0, Active/Non-Optimized=1, Standby=2, Unavailable=3). `ISCSICreateRequest` gains `alua_enabled` and `alua_state` fields. `configureALUA` sets `alua_support=1` and `alua_access_state` on the LIO TPG via targetcli. `POST /api/iscsi/targets/alua` allows runtime state flip during HA failover without tearing down the target. ALUA toggle in iSCSI creation form; ALUA state-change modal in the target list row. Exceeds TrueNAS, which has ALUA for iSCSI only; DPlane has both ALUA (iSCSI) and ANA (NVMe-oF).
+
+- **ZFS pool destroy dependency check (`daemon/internal/handlers/zfs_pool_maintenance.go`)**: `HandlePoolDestroy` converted from standalone function to `ZFSHandler` method. `poolDependencyCheck` queries `/proc/mounts` for active dataset mountpoints and the `nfs_exports` and `smb_shares` DB tables. With `force=false` (default), any active dependency returns HTTP 409 with a dependency list. With `force=true`, the same check runs and blocks if dependencies are found. The `confirmRoute` wrapper already requires typing the pool name before the request arrives.
+
+- **ZFS force export dependency check (`daemon/internal/handlers/zfs_operations.go`)**: `ExportPool` runs `poolDependencyCheck` before honoring `force=true`. Force export is refused if any dataset in the pool is actively mounted or referenced by a share, preventing silent data corruption on connected NFS/SMB clients.
+
+- **ZFS quota-below-current-usage guard (`daemon/internal/handlers/zfs_operations.go`)**: `SetDatasetQuota` queries `zfs get -H -p referenced` (raw bytes via `-p`) before applying `refquota`. If the proposed quota is below current referenced usage the request returns HTTP 400 with a human-readable message. `parseRawBytes` and `humanToBytes` helpers added.
+
+- **ZFS snapshot clone detection (`daemon/internal/handlers/zfs_snapshots.go`)**: `DestroySnapshot` scans `zfs list -t filesystem,volume -o name,origin` before attempting deletion. If any clone's origin matches the target snapshot, returns a specific error naming the dependent clone instead of the opaque ZFS kernel rejection.
+
+- **Snapshot retention policies (`daemon/internal/handlers/replication_retention.go`, new)**: `SnapshotRetentionPolicy` struct with per-bucket keep counts (hourly, daily, weekly, monthly, yearly). Time-bucket algorithm retains the N most recent snapshots per bucket; snapshots beyond the limit are pruned. Only snapshots matching the configured prefix are touched; manual snapshots are never pruned. `RunRetentionPolicies` is called from the replication monitor after every tick so local pruning happens after remote copies are confirmed current. `GET/POST /api/replication/retention` CRUD endpoint. RetentionTab UI with create/edit/delete modal in ReplicationPage.
+
+- **Replication: remote snapshot chain validation (`daemon/internal/handlers/replication_schedule.go`)**: Before every incremental send, the schedule runner verifies the base snapshot exists on the remote via `ssh remote zfs list -H -t snapshot -o name <remote_base>`. If the remote chain is broken (remote rollback, manual pruning), falls back to a full send with a clear log message rather than failing mid-stream and leaving the remote dataset inconsistent.
+
+- **Replication: restore from remote (`daemon/internal/handlers/replication_remote.go`)**: `POST /api/replication/restore` - disaster recovery path. `execPipedRestore` implements the reverse pipeline: `ssh remote zfs send | local zfs recv`. Verifies the snapshot exists on the remote before starting, supports `-F` force, pipes stderr through the existing progress parser for real-time ETA. RestoreForm UI tab in ReplicationPage.
+
+- **Replication: retry with exponential backoff (`daemon/internal/handlers/replication_schedule.go`)**: The send pipeline is wrapped in a 3-attempt retry loop with backoff (30s then 120s) for transient network failures. All attempts failing produces a single error message including the attempt count.
+
+- **Replication: concurrent schedule conflict lock (`daemon/internal/handlers/replication_schedule.go`)**: `replActiveSet` map guarded by `replActiveMu`. Two schedules targeting the same `sourceDataset|remoteID` pair cannot run concurrently. The second is rejected with `"skipped"` status and a clear message rather than corrupting the remote ZFS stream.
+
+- **HA: D-state safe self-reboot (`daemon/internal/ha/standby.go`, `daemon/internal/ha/standby_reboot_linux.go`)**: `ForceSelfReboot` now calls `syscall.Reboot(LINUX_REBOOT_CMD_RESTART)` via `golang.org/x/sys/unix` as its primary path - a single kernel syscall with no fork, no exec, no filesystem I/O. `runtime.LockOSThread()` is called first to ensure the syscall runs on a dedicated OS thread that cannot be migrated even if other goroutines are blocked in cgo D-state calls. The `exec.Command("reboot", "-f")` remains as fallback only. See fix section for why `sync()` was removed.
+
+- **Text-input confirmation for highest-risk HA operations**: Both STONITH fence operations in `HAPage.tsx` require typing `STONITH` before firing. Local failover requires typing `FAILOVER`. User deletion in `UsersPage.tsx` requires typing the exact username. iSCSI target deletion requires typing the IQN suffix.
+
+- **Confirmations added to 10 previously unprotected destructive operations**: DirectoryPage (LDAP group mapping remove, LDAP cache reset), FirewallPage (delete rule), NetworkPage (delete VLAN, delete bond), QuotasPage (dataset quota, project quota), NFSPage (delete export), SharesPage (delete SMB share). NFSPage and SharesPage migrated from fragile `[confirming]` local state pattern to the `useConfirm` hook.
+
+### Changed
+
+- **`interface{}` replaced with `any` across 137 first-party Go files**: Go 1.18+ idiomatic alias. Zero semantic change; vendor directory excluded.
+
+- **`HandlePoolDestroy` is now a `ZFSHandler` method**: Required for database access to run `poolDependencyCheck`. Route registration updated from `handlers.HandlePoolDestroy` to `zfsHandler.HandlePoolDestroy`.
+
+- **`ForceSelfReboot` no longer calls `sync()`**: See Fixed section. The reboot path now follows the correct sequence: lock OS thread, attempt direct kernel reboot syscall, fall back to `reboot -f` (which already skips sync via the `-f` flag). The `logger` call is now non-blocking (goroutine).
+
+- **Replication schedule failure alerts use `"warning"` level**: `updateScheduleStatus` previously dispatched `"info"` on all status changes including failures. Failures now use `"warning"` which routes to SMTP and webhook alert channels per the alert dispatch rules.
+
+- **Replication monitor runs retention after each tick**: `StartReplicationMonitor` calls `RunRetentionPolicies` after `runDueReplicationSchedules` on every 5-minute tick. Retention is intentionally run after replication, not before, so local pruning only happens after remote copies are confirmed current.
+
+- **`applyANAGroupState` blocks for AEN propagation**: After writing `ana_state` to configfs, the function sleeps `ANAPropagationDelay` (200ms) before returning. Callers cannot proceed to VIP handoff until this returns, ensuring NVMe hosts have processed the state-change notification.
+
+- **`replication_schedule.go` imports `sync` for conflict lock**: No behavioral change to existing schedules that do not share a source+remote pair.
+
+### Fixed
+
+- **HA: `sync()` before `reboot -f` caused D-state deadlock on pool export timeout**: When ZFS pool export blocked in D-state (hung bus, stuck SCSI device), `ForceSelfReboot` called `exec.Command("sync").Run()` before `reboot -f`. `sync(2)` flushes all dirty pages including those from the D-state hung pool - it joins the same D-state queue and the reboot function blocks indefinitely. The `-f` flag on `reboot` explicitly means "skip sync and reboot immediately"; the `sync` call directly defeated it. Fixed by removing `sync` entirely and using `syscall.Reboot` (which never syncs) as the primary path.
+
+- **SCRAM auth: TOTP bypass** - `SCRAMVerify` was creating `active` sessions even when `totpEnabled == 1`. Fixed to create `pending_totp` sessions with a 5-minute TTL, mirroring the bcrypt login path exactly.
+
+- **SCRAM auth: `must_change_password` session bypass** - Both the bcrypt login path and the new `SCRAMVerify` handler were creating `active` sessions when `mustChange == 1`. Fixed in both paths: sessions now carry `status='must_change_password'` and the RBAC middleware enforces the restriction.
+
+- **SCRAM keys missing from admin password paths** - `CreateUser`, `UpdateUser` (admin password change), `ResetUserPassword`, and bootstrap `HandleSetup` called `bcrypt.GenerateFromPassword` without deriving SCRAM keys. All four now atomically store bcrypt hash and SCRAM keys (salt, iterations, StoredKey, ServerKey) in a single UPDATE/INSERT.
+
+- **`cancelEdit` in `ISCSIPage.tsx` did not reset `aluaEnabled`**: After canceling an edit that had ALUA enabled, creating a new target would incorrectly default to ALUA on. Fixed.
+
+- **`cancelEdit` and `startEdit` in `NVMeOFPage.tsx` ignored `anaEnabled`**: `cancelEdit` did not reset `anaEnabled` to false; `startEdit` did not load `ana_enabled` from the existing export. Both fixed. `NVMeExport` interface extended with `ana_enabled?: boolean`.
+
+- **`nvmet/spec.go` helper functions appeared unused on non-Linux builds**: `slug`, `subsysDirName`, `portDirName`, `hostDirName`, and `nvmetRoot` are used only in `apply_linux.go` (linux build tag). staticcheck flagged them as unused on Windows. Fixed by moving them to `apply_linux.go` and removing unused imports from `spec.go`.
+
+### Removed
+
+- **Dead code**: `saveRsyncSchedules`, `executeCommandAsync`, `getPoolUsagePercent`, `executeBackgroundCommandWithTimeout`, `isInZFSPool`, `detectDiskType`, `saveFileShares`, `runGitGlobal`, `saveMinioConfig`, `saveRemotes`, `saveReplicationSchedules`, `persistDHCP`, `persistRemoveInterface`, `persistFirewallPorts`, `saveSSHKeys` (11 unused exported functions across 10 handler files). `scheduleFile_deprecated` const, `netRollbackContent` and `netRollbackPath` vars in `zfs_operations.go`, `clearanceCooldown` const in `monitoring/background.go`. Two unused `steps` variable assignments in `docker_enhanced.go`. Removed unused `os/exec` and `errors` imports from `command_utils.go` after function removal.
+
+---
+
 ## v13.0.0 (2026-06-04) - "Aegis"
 
 Upgrade from: v12.5.1 - Schema migration required (migration 00005 adds `allowed_resources` column to `api_tokens`; applied automatically at startup). No breaking API changes. No breaking configuration changes.

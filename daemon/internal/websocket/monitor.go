@@ -12,7 +12,7 @@ import (
 type MonitorEvent struct {
 	Type      string      `json:"type"`
 	Timestamp time.Time   `json:"timestamp"`
-	Data      interface{} `json:"data"`
+	Data      any `json:"data"`
 	Level     string      `json:"level"` // info, warning, critical
 }
 
@@ -81,7 +81,7 @@ func (h *MonitorHub) Unregister(conn *websocket.Conn) {
 }
 
 // Broadcast sends an event to all connected clients
-func (h *MonitorHub) Broadcast(eventType string, data interface{}, level string) {
+func (h *MonitorHub) Broadcast(eventType string, data any, level string) {
 	event := MonitorEvent{
 		Type:      eventType,
 		Timestamp: time.Now(),

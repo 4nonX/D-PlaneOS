@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"log"
+	"slices"
 
 	"dplaned/internal/networkdwriter"
 	"dplaned/internal/nixwriter"
@@ -50,25 +51,6 @@ func persistStaticIP(iface, cidr, gateway string, dns []string) {
 	}
 	if ReconcilerDB != nil {
 		_ = reconciler.SaveStaticIP(ReconcilerDB, iface, cidr, gateway)
-	}
-}
-
-func persistDHCP(iface string) {
-	if NetWriter != nil {
-		if err := NetWriter.SetDHCP(iface, nil); err != nil {
-			log.Printf("[persist] SetDHCP %s: %v", iface, err)
-		}
-	}
-	if ReconcilerDB != nil {
-		_ = reconciler.SaveDHCP(ReconcilerDB, iface)
-	}
-}
-
-func persistRemoveInterface(iface string) {
-	if NetWriter != nil {
-		if err := NetWriter.RemoveInterface(iface); err != nil {
-			log.Printf("[persist] RemoveInterface %s: %v", iface, err)
-		}
 	}
 }
 
@@ -140,14 +122,6 @@ func persistNTP(_ []string)     { /* timesyncd.conf write in handler - already p
 // ── NixOS-only: firewall and samba ───────────────────────────────────────────
 // These have no systemd equivalent and still require nixos-rebuild switch.
 // That is acceptable: firewall and samba global settings change rarely.
-
-func persistFirewallPorts(tcpPorts, udpPorts []int) {
-	if NixWriter != nil {
-		if err := NixWriter.SetFirewallPorts(tcpPorts, udpPorts); err != nil {
-			log.Printf("[persist] SetFirewallPorts: %v", err)
-		}
-	}
-}
 
 func persistSambaGlobals(db *sql.DB) {
 	if NixWriter == nil || !NixWriter.IsNixOS() {
@@ -226,12 +200,7 @@ func persistFirewallFromRequest(action, portSpec string) {
 }
 
 func containsPort(ports []int, port int) bool {
-	for _, p := range ports {
-		if p == port {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ports, port)
 }
 
 func removePort(ports []int, port int) ([]int, bool) {

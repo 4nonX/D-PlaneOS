@@ -44,7 +44,7 @@ func HandleDatasetSearch(w http.ResponseWriter, r *http.Request) {
 		[]string{"list", "-H", "-o", "name,used,avail,refer,mountpoint,type", "-r"})
 	if err != nil {
 		// On an empty system or error, return empty results rather than 500
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":  true,
 			"results":  []datasetSearchResult{},
 			"total":    0,
@@ -150,7 +150,7 @@ func HandleDatasetSearch(w http.ResponseWriter, r *http.Request) {
 		results = []datasetSearchResult{}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"results":  results,
 		"total":    totalCount,

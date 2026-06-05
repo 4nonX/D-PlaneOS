@@ -16,6 +16,7 @@ import (
 	"dplaned/internal/audit"
 	ldapinternal "dplaned/internal/ldap"
 	"dplaned/internal/middleware"
+	"dplaned/internal/scram"
 	"dplaned/internal/secrets"
 	"dplaned/internal/security"
 	"golang.org/x/crypto/bcrypt"
@@ -62,9 +63,7 @@ func getLoginDelay(failures int) time.Duration {
 		return 0
 	}
 	delay := time.Duration(1<<uint(failures-1)) * time.Second
-	if delay > 30*time.Second {
-		delay = 30 * time.Second
-	}
+	delay = min(delay, 30*time.Second)
 	return delay
 }
 
@@ -189,7 +188,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if throttled, remaining := checkLoginThrottle(clientIP); throttled {
 		h.auditLog("", "login_throttled", fmt.Sprintf("IP %s throttled for %.0fs", clientIP, remaining.Seconds()), clientIP)
 		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(remaining.Seconds())+1))
-		respondJSON(w, http.StatusTooManyRequests, map[string]interface{}{
+		respondJSON(w, http.StatusTooManyRequests, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Too many failed attempts. Try again in %d seconds.", int(remaining.Seconds())+1),
 		})
@@ -198,7 +197,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+		respondJSON(w, http.StatusBadRequest, map[string]any{
 			"success": false, "error": "Invalid request body",
 		})
 		return
@@ -206,7 +205,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Allowlist validation
 	if !isAlphanumericDash(req.Username) || len(req.Username) > 64 {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+		respondJSON(w, http.StatusBadRequest, map[string]any{
 			"success": false, "error": "Invalid username format",
 		})
 		return
@@ -226,13 +225,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		bcrypt.CompareHashAndPassword([]byte("$2a$10$dummyhashfortimingoracle000000000000000000000000000000"), []byte(req.Password))
 		recordLoginFailure(clientIP)
 		log.Printf("AUTH FAIL: unknown user %q from %s", req.Username, clientIP)
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+		respondJSON(w, http.StatusUnauthorized, map[string]any{
 			"success": false, "error": "Invalid credentials",
 		})
 		return
 	} else if err != nil {
 		log.Printf("AUTH ERROR: db query failed: %v", err)
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
 			"success": false, "error": "Internal error",
 		})
 		return
@@ -241,7 +240,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if active != 1 {
 		recordLoginFailure(clientIP)
 		log.Printf("AUTH FAIL: disabled user %q from %s", req.Username, clientIP)
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+		respondJSON(w, http.StatusUnauthorized, map[string]any{
 			"success": false, "error": "Account disabled",
 		})
 		return
@@ -252,7 +251,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		if authErr := h.ldapAuthenticate(req.Username, req.Password); authErr != nil {
 			recordLoginFailure(clientIP)
 			log.Printf("AUTH FAIL: LDAP bind failed for %q from %s: %v", req.Username, clientIP, authErr)
-			respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+			respondJSON(w, http.StatusUnauthorized, map[string]any{
 				"success": false, "error": "Invalid credentials",
 			})
 			return
@@ -261,7 +260,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(req.Password)); err != nil {
 			recordLoginFailure(clientIP)
 			log.Printf("AUTH FAIL: wrong password for %q from %s", req.Username, clientIP)
-			respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+			respondJSON(w, http.StatusUnauthorized, map[string]any{
 				"success": false, "error": "Invalid credentials",
 			})
 			return
@@ -272,7 +271,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		log.Printf("AUTH ERROR: failed to generate session token: %v", err)
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
 			"success": false, "error": "Internal error",
 		})
 		return
@@ -296,13 +295,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			log.Printf("AUTH ERROR: failed to create pending session: %v", err)
-			respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			respondJSON(w, http.StatusInternalServerError, map[string]any{
 				"success": false, "error": "Internal error",
 			})
 			return
 		}
 		log.Printf("AUTH PENDING TOTP: %q from %s", req.Username, clientIP)
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success":       true,
 			"requires_totp": true,
 			"pending_token": sessionID,
@@ -310,17 +309,22 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Insert full active session with metadata
+	// Insert session. Restricted status when must_change_password is set so the
+	// middleware rejects all endpoints except change-password until the user complies.
+	sessionStatus := "active"
+	if mustChange == 1 {
+		sessionStatus = "must_change_password"
+	}
 	ip := clientIP
 	userAgent := r.Header.Get("User-Agent")
 	createdAt := time.Now().Unix()
 	_, err = h.db.Exec(
-		`INSERT INTO sessions (session_id, user_id, username, ip_address, user_agent, created_at, expires_at, status) VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')`,
-		sessionID, userID, req.Username, ip, userAgent, createdAt, expiresAt,
+		`INSERT INTO sessions (session_id, user_id, username, ip_address, user_agent, created_at, expires_at, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		sessionID, userID, req.Username, ip, userAgent, createdAt, expiresAt, sessionStatus,
 	)
 	if err != nil {
 		log.Printf("AUTH ERROR: failed to create session: %v", err)
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
 			"success": false, "error": "Internal error",
 		})
 		return
@@ -335,7 +339,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		log.Printf("AUTH: failed to update last_login for user %d: %v", userID, err)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":              true,
 		"session_id":           sessionID,
 		"username":             req.Username,
@@ -359,7 +363,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		log.Printf("LOGOUT: %q from %s", username, clientIP)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 	})
 }
@@ -370,7 +374,7 @@ func (h *AuthHandler) Check(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("X-Session-ID")
 
 	if sessionID == "" {
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"authenticated": false,
 		})
 		return
@@ -385,15 +389,15 @@ func (h *AuthHandler) Check(w http.ResponseWriter, r *http.Request) {
 	).Scan(&username, &expiresAt)
 
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"authenticated": false,
 		})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"authenticated": true,
-		"user": map[string]interface{}{
+		"user": map[string]any{
 			"username": username,
 		},
 	})
@@ -405,7 +409,7 @@ func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("X-Session-ID")
 
 	if sessionID == "" {
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+		respondJSON(w, http.StatusUnauthorized, map[string]any{
 			"success": false, "error": "No session",
 		})
 		return
@@ -422,15 +426,15 @@ func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 	).Scan(&userID, &username, &email, &role, &mustChange, &source)
 
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+		respondJSON(w, http.StatusUnauthorized, map[string]any{
 			"success": false, "error": "Invalid session",
 		})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
-		"user": map[string]interface{}{
+		"user": map[string]any{
 			"id":                   userID,
 			"username":             username,
 			"email":                email,
@@ -456,7 +460,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := r.Header.Get("X-Session-ID")
 	if sessionID == "" {
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+		respondJSON(w, http.StatusUnauthorized, map[string]any{
 			"success": false, "error": "Not authenticated",
 		})
 		return
@@ -469,7 +473,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		sessionID, time.Now().Unix(),
 	).Scan(&username)
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+		respondJSON(w, http.StatusUnauthorized, map[string]any{
 			"success": false, "error": "Invalid session",
 		})
 		return
@@ -477,7 +481,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	var req changePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+		respondJSON(w, http.StatusBadRequest, map[string]any{
 			"success": false, "error": "Invalid request",
 		})
 		return
@@ -489,7 +493,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	// Validate password strength (complexity requirements)
 	if ok, msg := validatePasswordStrength(req.NewPassword); !ok {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+		respondJSON(w, http.StatusBadRequest, map[string]any{
 			"success": false, "error": msg,
 		})
 		return
@@ -499,35 +503,54 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	var storedHash string
 	err = h.db.QueryRow(`SELECT password_hash FROM users WHERE username = $1`, username).Scan(&storedHash)
 	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
 			"success": false, "error": "Internal error",
 		})
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(req.CurrentPassword)); err != nil {
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+		respondJSON(w, http.StatusUnauthorized, map[string]any{
 			"success": false, "error": "Current password is incorrect",
 		})
 		return
 	}
 
-	// Hash new password
+	// Hash new password with bcrypt (backward compat) and derive SCRAM-SHA-512 keys.
 	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
+			"success": false, "error": "Internal error",
+		})
+		return
+	}
+	scramKeys, err := scram.Derive(req.NewPassword)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
 			"success": false, "error": "Internal error",
 		})
 		return
 	}
 
-	// Update
+	// Update - store both bcrypt hash and SCRAM keys atomically
 	_, err = h.db.Exec(
-		`UPDATE users SET password_hash = $1, must_change_password = 0 WHERE username = $2`,
-		string(newHash), username,
+		`UPDATE users SET
+			password_hash     = $1,
+			scram_salt        = $2,
+			scram_iterations  = $3,
+			scram_stored_key  = $4,
+			scram_server_key  = $5,
+			must_change_password = 0
+		WHERE username = $6`,
+		string(newHash),
+		scram.EncodeBase64(scramKeys.Salt),
+		scramKeys.Iterations,
+		scram.EncodeBase64(scramKeys.StoredKey),
+		scram.EncodeBase64(scramKeys.ServerKey),
+		username,
 	)
 	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
 			"success": false, "error": "Failed to update password",
 		})
 		return
@@ -542,7 +565,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	h.auditLog(username, "password_changed", "Password changed", clientIP)
 	log.Printf("PASSWORD CHANGED: %q from %s", username, clientIP)
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Password changed successfully",
 	})
@@ -561,7 +584,7 @@ func (h *AuthHandler) CSRFToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sessionID == "" {
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+		respondJSON(w, http.StatusUnauthorized, map[string]any{
 			"success": false, "error": "No session",
 		})
 		return
@@ -575,13 +598,13 @@ func (h *AuthHandler) CSRFToken(w http.ResponseWriter, r *http.Request) {
 	_, err := h.db.Exec(`UPDATE sessions SET csrf_token = $1 WHERE session_id = $2`, token, sessionID)
 	if err != nil {
 		log.Printf("AUTH ERROR: failed to save CSRF token: %v", err)
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
 			"success": false, "error": "Internal error",
 		})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"csrf_token": token,
 	})
@@ -763,8 +786,8 @@ func (h *AuthHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 
 	currentSession := ""
 	authHeader := r.Header.Get("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		currentSession = strings.TrimPrefix(authHeader, "Bearer ")
+	if v, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
+		currentSession = v
 	} else {
 		cookie, err := r.Cookie("session_id")
 		if err == nil {
@@ -801,7 +824,7 @@ func (h *AuthHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":  true,
 		"sessions": entries,
 	})
@@ -851,5 +874,208 @@ func (h *AuthHandler) RevokeSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.auditLog(user.Username, "session_revoked", fmt.Sprintf("Revoked session %s", req.ID[:8]), r.RemoteAddr)
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true})
+	respondJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SCRAM-SHA-512 Challenge/Response Authentication (RFC 5802)
+//  Endpoint 1: POST /api/auth/scram/challenge
+//  Endpoint 2: POST /api/auth/scram/verify
+// ═══════════════════════════════════════════════════════════════
+
+// SCRAMChallenge begins a SCRAM-SHA-512 handshake. The client sends its username
+// and a random nonce; the server returns the challenge parameters needed to
+// compute the client proof.
+//
+// POST /api/auth/scram/challenge
+// Request:  {"username":"<str>", "client_nonce":"<base64url>"}
+// Response: {"challenge_id":"<str>", "server_nonce":"<base64url>", "salt":"<base64>", "iterations":<int>}
+func (h *AuthHandler) SCRAMChallenge(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username    string `json:"username"`
+		ClientNonce string `json:"client_nonce"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "Invalid request"})
+		return
+	}
+	if !isAlphanumericDash(req.Username) || len(req.Username) > 64 || req.ClientNonce == "" {
+		respondJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "Invalid parameters"})
+		return
+	}
+
+	// Look up SCRAM credentials. Return a synthetic challenge even for unknown users
+	// to prevent username enumeration timing attacks.
+	var saltB64, storedKeyB64, serverKeyB64 string
+	var iterations int
+	err := h.db.QueryRow(
+		`SELECT COALESCE(scram_salt,''), COALESCE(scram_iterations,0),
+		        COALESCE(scram_stored_key,''), COALESCE(scram_server_key,'')
+		 FROM users WHERE username = $1 AND active = 1 LIMIT 1`,
+		req.Username,
+	).Scan(&saltB64, &iterations, &storedKeyB64, &serverKeyB64)
+
+	hasSCRAM := err == nil && iterations > 0 && storedKeyB64 != ""
+
+	// For users without SCRAM keys yet, use synthetic params so timing is uniform.
+	if !hasSCRAM {
+		saltB64 = scram.EncodeBase64(make([]byte, 16))
+		iterations = scram.DefaultIterations
+		storedKeyB64 = ""
+		serverKeyB64 = ""
+	}
+
+	serverNonce, err := scram.RandomNonce()
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Internal error"})
+		return
+	}
+
+	var storedKey, serverKey []byte
+	if hasSCRAM {
+		storedKey, _ = scram.DecodeBase64(storedKeyB64)
+		serverKey, _ = scram.DecodeBase64(serverKeyB64)
+	}
+
+	challengeID := scram.NewChallenge(&scram.Challenge{
+		Username:    req.Username,
+		ClientNonce: req.ClientNonce,
+		ServerNonce: serverNonce,
+		StoredKey:   storedKey,
+		ServerKey:   serverKey,
+		SaltB64:     saltB64,
+		Iterations:  iterations,
+	})
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success":      true,
+		"challenge_id": challengeID,
+		"server_nonce": serverNonce,
+		"salt":         saltB64,
+		"iterations":   iterations,
+	})
+}
+
+// SCRAMVerify completes the SCRAM-SHA-512 handshake. The client computes a
+// ClientProof from the challenge parameters; the server verifies it and returns
+// a session token plus the ServerProof so the client can confirm server identity.
+//
+// POST /api/auth/scram/verify
+// Request:  {"challenge_id":"<str>", "client_proof":"<base64>"}
+// Response: {"success":true, "token":"<str>", "server_proof":"<base64>"}
+func (h *AuthHandler) SCRAMVerify(w http.ResponseWriter, r *http.Request) {
+	clientIP := security.RealIP(r)
+
+	if throttled, wait := checkLoginThrottle(clientIP); throttled {
+		respondJSON(w, http.StatusTooManyRequests, map[string]any{
+			"success": false,
+			"error":   fmt.Sprintf("Too many attempts. Try again in %.0f seconds.", wait.Seconds()),
+		})
+		return
+	}
+
+	var req struct {
+		ChallengeID string `json:"challenge_id"`
+		ClientProof string `json:"client_proof"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "Invalid request"})
+		return
+	}
+
+	fail := func() {
+		recordLoginFailure(clientIP)
+		respondJSON(w, http.StatusUnauthorized, map[string]any{"success": false, "error": "Authentication failed"})
+	}
+
+	ch := scram.TakeChallenge(req.ChallengeID)
+	if ch == nil {
+		fail()
+		return
+	}
+
+	clientProof, err := scram.DecodeBase64(req.ClientProof)
+	if err != nil || len(ch.StoredKey) == 0 {
+		fail()
+		return
+	}
+
+	authMsg := scram.AuthMessage(ch.Username, ch.ClientNonce, ch.ServerNonce, ch.SaltB64, ch.Iterations)
+	serverProof, ok := scram.Verify(ch.StoredKey, ch.ServerKey, clientProof, authMsg)
+	if !ok {
+		log.Printf("SCRAM FAIL: bad proof for %q from %s", ch.Username, clientIP)
+		fail()
+		return
+	}
+
+	// Proof valid - look up the user and create a session
+	var userID int
+	var active, mustChange, totpEnabled int
+	err = h.db.QueryRow(
+		`SELECT u.id, u.active, COALESCE(u.must_change_password,0), COALESCE(t.totp_enabled,0)
+		 FROM users u LEFT JOIN totp_secrets t ON t.user_id = u.id
+		 WHERE u.username = $1 LIMIT 1`, ch.Username,
+	).Scan(&userID, &active, &mustChange, &totpEnabled)
+	if err != nil || active != 1 {
+		fail()
+		return
+	}
+
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Internal error"})
+		return
+	}
+	sessionID := hex.EncodeToString(tokenBytes)
+	createdAt := time.Now().Unix()
+
+	// Mirror the bcrypt login flow exactly: TOTP takes priority over must_change_password.
+	if totpEnabled == 1 {
+		// Issue a short-lived pending session; the client must complete TOTP via
+		// POST /api/auth/totp/verify before it is promoted to 'active'.
+		pendingExpiry := time.Now().Add(5 * time.Minute).Unix()
+		if _, err := h.db.Exec(
+			`INSERT INTO sessions (session_id, user_id, username, created_at, expires_at, status)
+			 VALUES ($1, $2, $3, $4, $5, 'pending_totp')`,
+			sessionID, userID, ch.Username, createdAt, pendingExpiry,
+		); err != nil {
+			respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Internal error"})
+			return
+		}
+		recordLoginSuccess(clientIP)
+		log.Printf("SCRAM AUTH PENDING TOTP: %q from %s", ch.Username, clientIP)
+		respondJSON(w, http.StatusOK, map[string]any{
+			"success":       true,
+			"requires_totp": true,
+			"pending_token": sessionID,
+			"server_proof":  scram.EncodeBase64(serverProof),
+		})
+		return
+	}
+
+	scramSessionStatus := "active"
+	if mustChange == 1 {
+		scramSessionStatus = "must_change_password"
+	}
+	expiresAt := time.Now().Add(24 * time.Hour).Unix()
+	_, err = h.db.Exec(
+		`INSERT INTO sessions (session_id, user_id, username, ip_address, user_agent, created_at, expires_at, status)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		sessionID, userID, ch.Username, clientIP, r.Header.Get("User-Agent"), createdAt, expiresAt, scramSessionStatus,
+	)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Internal error"})
+		return
+	}
+
+	recordLoginSuccess(clientIP)
+	log.Printf("SCRAM AUTH OK: %q from %s", ch.Username, clientIP)
+	audit.LogAction("scram_login", ch.Username, "SCRAM-SHA-512 authentication successful", true, 0)
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success":              true,
+		"token":                sessionID,
+		"server_proof":         scram.EncodeBase64(serverProof),
+		"must_change_password": mustChange == 1,
+	})
 }

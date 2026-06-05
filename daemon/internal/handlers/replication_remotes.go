@@ -33,7 +33,7 @@ type Remote struct {
 	Fingerprint  string    `json:"fingerprint"`         // SHA256:<base64> - SSH host key, pinned after first connect
 	HostKey      string    `json:"host_key,omitempty"`  // authorized_keys format, used for known_hosts pinning by ssh binary
 	KeyInstalled bool      `json:"key_installed"`       // true once authorize has succeeded
-	LastTested   time.Time `json:"last_tested,omitempty"`
+	LastTested   *time.Time `json:"last_tested,omitempty"`
 	TestOK       bool      `json:"test_ok"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -62,17 +62,6 @@ func loadRemotes() ([]Remote, error) {
 		return nil, err
 	}
 	return remotes, nil
-}
-
-func saveRemotes(remotes []Remote) error {
-	replStateMu.Lock()
-	defer replStateMu.Unlock()
-	os.MkdirAll(ConfigDir, 0755)
-	data, err := json.MarshalIndent(remotes, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(configPath(replRemotesFile), data, 0644)
 }
 
 var errRemoteNotFound = errors.New("remote not found")
@@ -141,7 +130,7 @@ func (h *RemotesHandler) HandleListRemotes(w http.ResponseWriter, r *http.Reques
 		respondErrorSimple(w, "Failed to load remotes: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "remotes": remotes})
+	respondOK(w, map[string]any{"success": true, "remotes": remotes})
 }
 
 // HandleCreateRemote serves POST /api/replication/remotes
@@ -195,7 +184,7 @@ func (h *RemotesHandler) HandleCreateRemote(w http.ResponseWriter, r *http.Reque
 		respondErrorSimple(w, "Failed to save remotes", http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "remote": remote})
+	respondOK(w, map[string]any{"success": true, "remote": remote})
 	gitops.CommitAllAsync(h.db)
 }
 
@@ -275,7 +264,7 @@ func (h *RemotesHandler) HandleUpdateRemote(w http.ResponseWriter, r *http.Reque
 		respondErrorSimple(w, "Failed to save remotes", http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 	gitops.CommitAllAsync(h.db)
 }
 
@@ -327,7 +316,7 @@ func (h *RemotesHandler) HandleDeleteRemote(w http.ResponseWriter, r *http.Reque
 		respondErrorSimple(w, "Failed to save remotes", http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 	gitops.CommitAllAsync(h.db)
 }
 
@@ -446,7 +435,7 @@ func (h *RemotesHandler) HandleAuthorizeRemote(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"message":     fmt.Sprintf("Replication key installed on %s@%s. Password authentication is no longer required for replication to this peer.", remote.User, remote.Host),
 		"fingerprint": savedFingerprint,
@@ -496,7 +485,7 @@ func (h *RemotesHandler) HandleTestRemote(w http.ResponseWriter, r *http.Request
 	client, err := ssh.Dial("tcp", addr, cfg)
 	if err != nil {
 		updateRemoteTestStatus(id, false)
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":     false,
 			"error":       sanitiseSSHConnError(err),
 			"duration_ms": time.Since(start).Milliseconds(),
@@ -508,7 +497,7 @@ func (h *RemotesHandler) HandleTestRemote(w http.ResponseWriter, r *http.Request
 	sess, err := client.NewSession()
 	if err != nil {
 		updateRemoteTestStatus(id, false)
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":     false,
 			"error":       "Session open failed: " + err.Error(),
 			"duration_ms": time.Since(start).Milliseconds(),
@@ -610,7 +599,7 @@ func updateRemoteTestStatus(id string, ok bool) {
 	if err := atomicModifyRemotes(func(all []Remote) ([]Remote, error) {
 		for i := range all {
 			if all[i].ID == id {
-				all[i].LastTested = now
+				all[i].LastTested = &now
 				all[i].TestOK = ok
 				break
 			}
@@ -632,7 +621,7 @@ func persistTestSuccess(id, fingerprint, hostKey string) {
 			if all[i].ID != id {
 				continue
 			}
-			all[i].LastTested = now
+			all[i].LastTested = &now
 			all[i].TestOK = true
 			if !all[i].KeyInstalled {
 				all[i].KeyInstalled = true
@@ -652,9 +641,9 @@ func persistTestSuccess(id, fingerprint, hostKey string) {
 }
 
 // parseRemoteTestOutput extracts hostname and zfs_version from key=value lines.
-func parseRemoteTestOutput(out string) map[string]interface{} {
-	result := map[string]interface{}{}
-	for _, line := range strings.Split(out, "\n") {
+func parseRemoteTestOutput(out string) map[string]any {
+	result := map[string]any{}
+	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
 		k, v, ok := strings.Cut(line, "=")
 		if !ok {
@@ -745,7 +734,7 @@ func (h *RemotesHandler) HandleResetFingerprint(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 	gitops.CommitAllAsync(h.db)
 }
 

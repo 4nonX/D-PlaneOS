@@ -200,6 +200,17 @@ func RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
+		// Enforce must_change_password restriction: allow only the change-password
+		// endpoint until the user sets a new password. This prevents a compromised
+		// temporary password from being used to access any other resource.
+		if secUser.MustChangePassword && r.URL.Path != "/api/auth/change-password" {
+			respondJSON(w, http.StatusForbidden, map[string]string{
+				"error":  "Password change required before accessing this resource",
+				"action": "change_password",
+			})
+			return
+		}
+
 		// Convert to middleware User type
 		user := &User{
 			ID:       secUser.ID,
@@ -220,7 +231,7 @@ func GetUserFromContext(r *http.Request) (*User, bool) {
 }
 
 // respondJSON sends a JSON response
-func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+func respondJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(payload)

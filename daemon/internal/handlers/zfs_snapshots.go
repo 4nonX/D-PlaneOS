@@ -56,7 +56,7 @@ func (h *ZFSSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *http.Reques
 
 	output, err := executeCommand("zfs", args)
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":   true,
 			"snapshots": []Snapshot{},
 		})
@@ -65,7 +65,7 @@ func (h *ZFSSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *http.Reques
 
 	snapshots := parseSnapshotList(output)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":   true,
 		"snapshots": snapshots,
 		"count":     len(snapshots),
@@ -112,14 +112,14 @@ func (h *ZFSSnapshotHandler) CreateSnapshot(w http.ResponseWriter, r *http.Reque
 	duration := time.Since(start)
 
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to create snapshot: %v", err),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"snapshot": fullName,
 		"duration": duration.Milliseconds(),
@@ -142,16 +142,34 @@ func (h *ZFSSnapshotHandler) DestroySnapshot(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Guard: detect dependent clones before attempting destruction.
+	// ZFS will refuse the delete at the kernel level but the error is opaque;
+	// proactively checking gives a clear, actionable message.
+	if cloneOut, err := executeCommandWithTimeout(TimeoutFast, "zfs",
+		[]string{"list", "-H", "-t", "filesystem,volume", "-o", "name,origin"}); err == nil {
+		for line := range strings.SplitSeq(cloneOut, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 && fields[1] == req.Snapshot {
+				respondOK(w, map[string]any{
+					"success": false,
+					"error":   fmt.Sprintf("snapshot has a dependent clone %q; destroy or promote the clone first", fields[0]),
+					"clone":   fields[0],
+				})
+				return
+			}
+		}
+	}
+
 	err := libzfs.SnapshotDestroy(req.Snapshot)
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to destroy snapshot: %v", err),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"message":  fmt.Sprintf("Snapshot %s destroyed", req.Snapshot),
 	})
@@ -185,14 +203,14 @@ func (h *ZFSSnapshotHandler) RollbackSnapshot(w http.ResponseWriter, r *http.Req
 	duration := time.Since(start)
 
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to rollback: %v", err),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"message":  fmt.Sprintf("Rolled back to %s", req.Snapshot),
 		"duration": duration.Milliseconds(),
@@ -225,14 +243,14 @@ func (h *ZFSSnapshotHandler) CloneSnapshot(w http.ResponseWriter, r *http.Reques
 	duration := time.Since(start)
 
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to clone snapshot: %v", err),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"clone":    req.Clone,
 		"origin":   req.Snapshot,

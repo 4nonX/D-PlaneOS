@@ -239,7 +239,7 @@ func (h *SecretsRotationHandler) RotateKeys(w http.ResponseWriter, r *http.Reque
 	}
 
 	log.Printf("SECRETS ROTATE: rotated %d secret values under new key", rotated)
-	respondOK(w, map[string]interface{}{"success": true, "rotated_count": rotated})
+	respondOK(w, map[string]any{"success": true, "rotated_count": rotated})
 }
 
 // smtpConfigForRotation mirrors SMTPConfig without pulling in the full type.

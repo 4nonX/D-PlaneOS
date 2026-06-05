@@ -133,7 +133,7 @@ func GetCircuitBreakerStatus(w http.ResponseWriter, r *http.Request) {
 	ldapBreaker.mu.RLock()
 	defer ldapBreaker.mu.RUnlock()
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":         true,
 		"state":           stateStr,
 		"failures":        ldapBreaker.failures,
@@ -155,7 +155,7 @@ func ResetCircuitBreaker(w http.ResponseWriter, r *http.Request) {
 	ldapBreaker.failures = 0
 	ldapBreaker.mu.Unlock()
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "Circuit breaker reset to closed state",
 	})

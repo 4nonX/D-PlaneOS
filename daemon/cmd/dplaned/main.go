@@ -36,6 +36,7 @@ import (
 	"dplaned/internal/nixwriter"
 	"dplaned/internal/persistguard"
 	"dplaned/internal/reconciler"
+	"dplaned/internal/scram"
 	"dplaned/internal/secrets"
 	"dplaned/internal/security"
 	"dplaned/internal/websocket"
@@ -398,7 +399,7 @@ func main() {
 	zfs.SetAlertSenders(
 		func(event, pool, msg string) {
 			handlers.SendWebhookAlert(db, event, "critical", msg,
-				map[string]interface{}{"pool": pool})
+				map[string]any{"pool": pool})
 		},
 		handlers.SendSMTPAlert,
 	)
@@ -491,7 +492,7 @@ func main() {
 
 	// Initialize ZED Event Listener (Unix Socket)
 	go zfs.StartZEDListener(daemonCtx, "/run/dplaneos/dplaneos.sock",
-		func(eventType string, data interface{}, level string) {
+		func(eventType string, data any, level string) {
 			wsHub.Broadcast(eventType, data, level)
 		},
 		func(event, pool, msg string) {
@@ -513,7 +514,7 @@ func main() {
 
 	// Initialize Background Monitor (30s interval)
 	// Broadcasts inotify stats to WebSocket clients
-	bgMonitor := monitoring.NewBackgroundMonitor(30*time.Second, func(eventType string, data interface{}, level string) {
+	bgMonitor := monitoring.NewBackgroundMonitor(30*time.Second, func(eventType string, data any, level string) {
 		wsHub.Broadcast(eventType, data, level)
 	})
 	bgMonitor.Start()
@@ -526,7 +527,7 @@ func main() {
 	handlers.SetAlertDispatchers(
 		func(event, source, msg string) {
 			handlers.SendWebhookAlert(db, event, "critical", msg,
-				map[string]interface{}{"source": source})
+				map[string]any{"source": source})
 		},
 		handlers.SendSMTPAlert,
 		func(message string) {
@@ -543,7 +544,7 @@ func main() {
 	// Wire WebSocket hub into jobs system for automatic background task updates
 	jobs.SetBroadcastCallback(wsHub.Broadcast)
 
-	clusterMgr.SetReplicationProgressReporter(func(p map[string]interface{}) {
+	clusterMgr.SetReplicationProgressReporter(func(p map[string]any) {
 		wsHub.Broadcast("ha.replication_progress", p, "info")
 	})
 
@@ -586,6 +587,9 @@ func main() {
 	r.HandleFunc("/api/auth/sessions", authHandler.ListSessions).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/auth/sessions", authHandler.RevokeSession).Methods("DELETE", "OPTIONS")
 	r.HandleFunc("/api/csrf", authHandler.CSRFToken).Methods("GET")
+	// SCRAM-SHA-512 challenge/response (RFC 5802)
+	r.HandleFunc("/api/auth/scram/challenge", authHandler.SCRAMChallenge).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/auth/scram/verify", authHandler.SCRAMVerify).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/confirm/issue", handlers.HandleIssueConfirmToken).Methods("POST")
 
 	// TOTP 2FA
@@ -697,8 +701,10 @@ func main() {
 	// v3.0.0: ZFS Replication (remote send/recv)
 	replicationRemoteHandler := handlers.NewReplicationHandler()
 	r.Handle("/api/replication/remote", permRoute("storage", "write", replicationRemoteHandler.ReplicateToRemote)).Methods("POST")
+	r.Handle("/api/replication/restore", permRoute("storage", "admin", replicationRemoteHandler.RestoreFromRemote)).Methods("POST")
 	r.Handle("/api/replication/ssh-keygen", permRoute("storage", "admin", handlers.GenerateReplicationKey)).Methods("POST")
 	r.Handle("/api/replication/ssh-pubkey", permRoute("storage", "read", handlers.GetReplicationPubKey)).Methods("GET")
+	r.Handle("/api/replication/retention", permRoute("storage", "admin", http.HandlerFunc(handlers.HandleRetentionPolicies))).Methods("GET", "POST")
 
 	// v3.4.0: Replication Peers (zero-touch key distribution, ID-linked schedules)
 	remotesHandler := handlers.NewRemotesHandler(db)
@@ -1096,6 +1102,13 @@ func main() {
 
 	handlers.StartScrubMonitor()
 	handlers.InitAuth() // Finding 24
+	go func() {
+		t := time.NewTicker(5 * time.Minute)
+		defer t.Stop()
+		for range t.C {
+			scram.PruneExpired()
+		}
+	}()
 
 	// Removable Media handlers
 	removableHandler := handlers.NewRemovableMediaHandler()
@@ -1248,7 +1261,7 @@ func main() {
 
 	// Pools lifecycle endpoints (used by PoolsPage wizard)
 	r.Handle("/api/zfs/pools/create", permRoute("storage", "write", http.HandlerFunc(handlers.HandlePoolCreate))).Methods("POST")
-	r.Handle("/api/zfs/pools/destroy", permRoute("storage", "admin", confirmRoute("pool_destroy", jsonField("name"), handlers.HandlePoolDestroy))).Methods("POST")
+	r.Handle("/api/zfs/pools/destroy", permRoute("storage", "admin", confirmRoute("pool_destroy", jsonField("name"), zfsHandler.HandlePoolDestroy))).Methods("POST")
 
 	// Trash / Recycle Bin (v2.0.0)
 	trashHandler := handlers.NewTrashHandler()
@@ -1315,6 +1328,7 @@ func main() {
 	r.Handle("/api/iscsi/acls", permRoute("storage", "write", handlers.AddISCSIACL)).Methods("POST")
 	r.Handle("/api/iscsi/acls", permRoute("storage", "write", handlers.DeleteISCSIACL)).Methods("DELETE")
 	r.Handle("/api/iscsi/zvols", permRoute("storage", "read", handlers.GetISCSIZvolList)).Methods("GET")
+	r.Handle("/api/iscsi/targets/alua", permRoute("storage", "write", handlers.SetISCSIALUAState)).Methods("POST")
 
 	// v8.0.0: NVMe-oF target (nvmet + ZFS zvol)
 	r.Handle("/api/nvmet/status", permRoute("storage", "read", handlers.GetNVMeTargetStatus)).Methods("GET")
@@ -1407,7 +1421,7 @@ func main() {
 		Level:   audit.LevelInfo,
 		Command: "DAEMON_START",
 		Success: true,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"version": Version,
 			"listen":  *listenAddr,
 		},

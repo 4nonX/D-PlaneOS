@@ -210,7 +210,7 @@ func (h *APITokenHandler) listTokens(w http.ResponseWriter, userID int) {
 		tokens = []apiToken{}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"tokens":  tokens,
 	})
@@ -268,7 +268,7 @@ func (h *APITokenHandler) createToken(w http.ResponseWriter, userID int, usernam
 		return
 	}
 
-	var expiresAt interface{}
+	var expiresAt any
 	if expiresDays > 0 {
 		expiresAt = time.Now().AddDate(0, 0, expiresDays).Format("2006-01-02 15:04:05")
 	}
@@ -301,7 +301,7 @@ func (h *APITokenHandler) createToken(w http.ResponseWriter, userID int, usernam
 	}
 	audit.LogAction("api_token", username, fmt.Sprintf("Created API token '%s' (scopes: %s, resources: %s)", name, scopes, resourceDesc), true, 0)
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":           true,
 		"token":             fullToken, // shown ONCE only
 		"id":                id,
@@ -338,7 +338,7 @@ func (h *APITokenHandler) revokeByID(w http.ResponseWriter, tokenID, userID int,
 	}
 
 	audit.LogAction("api_token", username, fmt.Sprintf("Revoked API token '%s'", name), true, 0)
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Token revoked",
 	})

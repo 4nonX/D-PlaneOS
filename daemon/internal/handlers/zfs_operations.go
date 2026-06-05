@@ -41,12 +41,12 @@ func StartScrub(w http.ResponseWriter, r *http.Request) {
 	// Run scrub at idle I/O priority
 	_, err := executeBackgroundCommand("zpool", []string{"scrub", req.Pool})
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	// Broadcast scrub_started so the frontend (PoolsPage) can react in real time.
 	if diskEventHub != nil {
-		diskEventHub.Broadcast("scrub_started", map[string]interface{}{"pool": req.Pool}, "info")
+		diskEventHub.Broadcast("scrub_started", map[string]any{"pool": req.Pool}, "info")
 	}
 
 	// Poll for natural completion every 10 s and broadcast scrub_completed.
@@ -70,7 +70,7 @@ func StartScrub(w http.ResponseWriter, r *http.Request) {
 				}
 				if !strings.Contains(out, "scrub in progress") {
 					if diskEventHub != nil {
-						diskEventHub.Broadcast("scrub_completed", map[string]interface{}{
+						diskEventHub.Broadcast("scrub_completed", map[string]any{
 							"pool":      pool,
 							"cancelled": false,
 						}, "info")
@@ -81,7 +81,7 @@ func StartScrub(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Scrub started on pool %s (idle I/O priority)", req.Pool),
 	})
@@ -103,14 +103,14 @@ func StopScrub(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := executeCommandWithTimeout(TimeoutMedium, "zpool", []string{"scrub", "-s", req.Pool})
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	// Broadcast scrub_completed so PoolsPage knows the scrub has ended.
 	if diskEventHub != nil {
-		diskEventHub.Broadcast("scrub_completed", map[string]interface{}{"pool": req.Pool, "cancelled": true}, "info")
+		diskEventHub.Broadcast("scrub_completed", map[string]any{"pool": req.Pool, "cancelled": true}, "info")
 	}
-	respondOK(w, map[string]interface{}{"success": true, "message": "Scrub stopped"})
+	respondOK(w, map[string]any{"success": true, "message": "Scrub stopped"})
 }
 
 func GetScrubStatus(w http.ResponseWriter, r *http.Request) {
@@ -122,13 +122,13 @@ func GetScrubStatus(w http.ResponseWriter, r *http.Request) {
 	
 	rawScan, err := zfs.GetPoolScanLine(pool)
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
 	parsed := zfs.ParseScanLine(rawScan)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"pool":         pool,
 		"scrubbing":    parsed.InProgress && !strings.Contains(rawScan, "resilver"),
 		"percent_done": parsed.PercentDone,
@@ -151,14 +151,14 @@ func HandleResilverStatus(w http.ResponseWriter, r *http.Request) {
 
 	rawScan, err := zfs.GetPoolScanLine(pool)
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
 	// Only return resilver data - not scrub
 	isResilver := strings.Contains(rawScan, "resilver")
 	if !isResilver {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"pool":         pool,
 			"resilvering":  false,
 			"percent_done": 0,
@@ -173,12 +173,12 @@ func HandleResilverStatus(w http.ResponseWriter, r *http.Request) {
 
 	parsed := zfs.ParseScanLine(rawScan)
 
-	var completedAt interface{} = nil
+	var completedAt any = nil
 	if parsed.CompletedAt != "" {
 		completedAt = parsed.CompletedAt
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"pool":         pool,
 		"resilvering":  parsed.InProgress || parsed.Completed,
 		"percent_done": parsed.PercentDone,
@@ -234,14 +234,14 @@ func AddVdevToPool(w http.ResponseWriter, r *http.Request) {
 
 	if err := libzfs.VdevAdd(req.Pool, req.VdevType, req.Disks); err != nil {
 		storageops.Fail(registryDB, opID, fmt.Sprintf("zpool add: %v", err))
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to add vdev: %v", err),
 		})
 		return
 	}
 	storageops.Commit(registryDB, opID)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":   true,
 		"pool":      req.Pool,
 		"vdev_type": req.VdevType,
@@ -275,10 +275,10 @@ func RemoveCacheOrLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := libzfs.VdevRemove(req.Pool, req.Device); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "pool": req.Pool, "removed": req.Device})
+	respondOK(w, map[string]any{"success": true, "pool": req.Pool, "removed": req.Device})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -324,7 +324,7 @@ func ReplaceDisk(w http.ResponseWriter, r *http.Request) {
 	jobID := jobs.Start("zpool-replace", func(j *jobs.Job) {
 		// Broadcast resilver_started immediately so PoolsPage shows live state.
 		if diskEventHub != nil {
-			diskEventHub.Broadcast("resilver_started", map[string]interface{}{
+			diskEventHub.Broadcast("resilver_started", map[string]any{
 				"pool":     pool,
 				"old_disk": oldDisk,
 				"new_disk": newDisk,
@@ -334,7 +334,7 @@ func ReplaceDisk(w http.ResponseWriter, r *http.Request) {
 		if err := libzfs.VdevReplace(pool, oldDisk, newDisk, force); err != nil {
 			storageops.Fail(registryDB, opID, fmt.Sprintf("zpool replace: %v", err))
 			if diskEventHub != nil {
-				diskEventHub.Broadcast("resilver_completed", map[string]interface{}{
+				diskEventHub.Broadcast("resilver_completed", map[string]any{
 					"pool":    pool,
 					"success": false,
 					"error":   err.Error(),
@@ -363,7 +363,7 @@ func ReplaceDisk(w http.ResponseWriter, r *http.Request) {
 						}
 						// If "resilver" is no longer present, it means it finished
 						if !strings.Contains(rawScan, "resilver") {
-							diskEventHub.Broadcast("resilver_completed", map[string]interface{}{
+							diskEventHub.Broadcast("resilver_completed", map[string]any{
 								"pool":    pool,
 								"success": true,
 							}, "info")
@@ -371,7 +371,7 @@ func ReplaceDisk(w http.ResponseWriter, r *http.Request) {
 						}
 						// Broadcast progress
 						parsed := zfs.ParseScanLine(rawScan)
-						diskEventHub.Broadcast("resilver_progress", map[string]interface{}{
+						diskEventHub.Broadcast("resilver_progress", map[string]any{
 							"pool":         pool,
 							"percent_done": parsed.PercentDone,
 							"eta":          parsed.ETA,
@@ -384,7 +384,7 @@ func ReplaceDisk(w http.ResponseWriter, r *http.Request) {
 				}
 			}()
 		}
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"success":  true,
 			"pool":     pool,
 			"old_disk": oldDisk,
@@ -392,7 +392,7 @@ func ReplaceDisk(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"job_id":   jobID,
 		"pool":     pool,
@@ -423,9 +423,34 @@ func (h *ZFSHandler) SetDatasetQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := map[string]interface{}{"success": true, "dataset": req.Dataset}
+	results := map[string]any{"success": true, "dataset": req.Dataset}
 
 	if req.RefQuota != "" {
+		if req.RefQuota != "none" && req.RefQuota != "0" {
+			// Guard: refuse to set a refquota smaller than current referenced usage.
+			// ZFS allows this but the dataset becomes immediately over-quota, which
+			// silently blocks all new writes and confuses users.
+			// -p returns raw bytes; -H suppresses header.
+			if rawOut, err := executeCommandWithTimeout(TimeoutFast, "zfs",
+				[]string{"get", "-H", "-p", "-o", "value", "referenced", req.Dataset}); err == nil {
+				usedStr, _ := libzfs.DatasetGet(req.Dataset, "referenced") // human-readable for error msg
+				usedBytes := parseRawBytes(strings.TrimSpace(rawOut))
+				quotaBytes := parseRawBytes(req.RefQuota) // also try raw; handled below
+				if quotaBytes == 0 {
+					// req.RefQuota is in human form (e.g. "50G") - convert via zfs parse
+					quotaBytes = humanToBytes(req.RefQuota)
+				}
+				if usedBytes > 0 && quotaBytes > 0 && quotaBytes < usedBytes {
+					respondJSON(w, http.StatusBadRequest, map[string]any{
+						"success": false,
+						"error": fmt.Sprintf(
+							"refquota (%s) is smaller than current referenced usage (%s); the dataset would be immediately over-quota",
+							req.RefQuota, usedStr),
+					})
+					return
+				}
+			}
+		}
 		if err := libzfs.DatasetSet(req.Dataset, "refquota", req.RefQuota); err != nil {
 			results["refquota_error"] = err.Error()
 			results["success"] = false
@@ -460,18 +485,18 @@ func (h *ZFSHandler) GetDatasetQuota(w http.ResponseWriter, r *http.Request) {
 		dataset,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
 	props := map[string]string{}
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
 			props[parts[0]] = parts[1]
 		}
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":        true,
 		"dataset":        dataset,
 		"quota":          props["quota"],
@@ -513,7 +538,7 @@ func RunSMARTTest(w http.ResponseWriter, r *http.Request) {
 		"-t", req.Type, devicePath,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error(), "output": output})
+		respondOK(w, map[string]any{"success": false, "error": err.Error(), "output": output})
 		return
 	}
 
@@ -523,7 +548,7 @@ func RunSMARTTest(w http.ResponseWriter, r *http.Request) {
 		estimate = "hours (depends on disk size)"
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"device":   req.Device,
 		"type":     req.Type,
@@ -544,10 +569,10 @@ func GetSMARTTestResults(w http.ResponseWriter, r *http.Request) {
 		"-l", "selftest", "/dev/" + device,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"device":  device,
 		"results": strings.TrimSpace(output),
@@ -587,10 +612,10 @@ func SetZFSDelegation(w http.ResponseWriter, r *http.Request) {
 		"allow", req.User, req.Permissions, req.Dataset,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"dataset":     req.Dataset,
 		"user":        req.User,
@@ -613,7 +638,7 @@ func GetZFSDelegation(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, "Failed to query delegations: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"dataset":     dataset,
 		"delegations": strings.TrimSpace(output),
@@ -640,10 +665,10 @@ func RevokeZFSDelegation(w http.ResponseWriter, r *http.Request) {
 		"unallow", req.User, req.Permissions, req.Dataset,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -651,10 +676,8 @@ func RevokeZFSDelegation(w http.ResponseWriter, r *http.Request) {
 // ═══════════════════════════════════════════════════════════════
 
 var (
-	netRollbackMu      sync.Mutex // guards all netRollback* globals
-	netRollbackContent []byte
-	netRollbackPath    string
-	netRollbackTimer   *time.Timer
+	netRollbackMu    sync.Mutex // guards all netRollback* globals
+	netRollbackTimer *time.Timer
 )
 
 // No hollow structs needed
@@ -686,13 +709,13 @@ func ApplyNetworkWithRollback(w http.ResponseWriter, r *http.Request) {
 	// Save current config for rollback
 	currentConfig, err := readFileContent(req.ConfigPath)
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": "Cannot read current config"})
+		respondOK(w, map[string]any{"success": false, "error": "Cannot read current config"})
 		return
 	}
 
 	// Write new config
 	if err := writeFileContent(req.ConfigPath, []byte(req.NewConfig)); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": "Cannot write new config"})
+		respondOK(w, map[string]any{"success": false, "error": "Cannot write new config"})
 		return
 	}
 
@@ -708,8 +731,6 @@ func ApplyNetworkWithRollback(w http.ResponseWriter, r *http.Request) {
 	if netRollbackTimer != nil {
 		netRollbackTimer.Stop()
 	}
-	netRollbackContent = currentConfig
-	netRollbackPath = req.ConfigPath
 	netRollbackTimer = time.AfterFunc(time.Duration(req.TimeoutSeconds)*time.Second, func() {
 		netRollbackMu.Lock()
 		defer netRollbackMu.Unlock()
@@ -722,12 +743,10 @@ func ApplyNetworkWithRollback(w http.ResponseWriter, r *http.Request) {
 			log.Printf("NETWORK ROLLBACK ERROR: Failed to apply rollback config: %v", err)
 		}
 		netRollbackTimer = nil
-		netRollbackPath = ""
-		netRollbackContent = nil
 	})
 	netRollbackMu.Unlock()
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":         true,
 		"timeout_seconds": req.TimeoutSeconds,
 		"message":         fmt.Sprintf("Network config applied. Confirm within %d seconds or auto-revert.", req.TimeoutSeconds),
@@ -742,10 +761,8 @@ func ConfirmNetwork(w http.ResponseWriter, r *http.Request) {
 		netRollbackTimer.Stop()
 		netRollbackTimer = nil
 	}
-	netRollbackContent = nil
-	netRollbackPath = ""
 	netRollbackMu.Unlock()
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "Network change confirmed. Rollback cancelled.",
 	})
@@ -768,6 +785,39 @@ func executeCommandBytes(path string, args []string) ([]byte, error) {
 // ═══════════════════════════════════════════════════════════════
 //  Helper for quota size validation
 // ═══════════════════════════════════════════════════════════════
+
+// parseRawBytes parses a decimal byte count string ("12345678") returned by
+// `zfs get -p`. Returns 0 on parse failure.
+func parseRawBytes(s string) int64 {
+	n, _ := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	return n
+}
+
+// humanToBytes converts ZFS-style human size strings ("50G", "1T", "512M") to
+// bytes. Returns 0 for unrecognised input. Uppercase and lowercase suffixes
+// are both accepted.
+func humanToBytes(s string) int64 {
+	s = strings.TrimSpace(s)
+	if len(s) == 0 {
+		return 0
+	}
+	multipliers := map[byte]int64{
+		'K': 1024, 'k': 1024,
+		'M': 1024 * 1024, 'm': 1024 * 1024,
+		'G': 1024 * 1024 * 1024, 'g': 1024 * 1024 * 1024,
+		'T': 1024 * 1024 * 1024 * 1024, 't': 1024 * 1024 * 1024 * 1024,
+		'P': 1024 * 1024 * 1024 * 1024 * 1024, 'p': 1024 * 1024 * 1024 * 1024 * 1024,
+	}
+	last := s[len(s)-1]
+	if mult, ok := multipliers[last]; ok {
+		n, err := strconv.ParseFloat(s[:len(s)-1], 64)
+		if err != nil {
+			return 0
+		}
+		return int64(n * float64(mult))
+	}
+	return parseRawBytes(s)
+}
 
 func isValidSize(s string) bool {
 	if s == "none" || s == "0" {
@@ -827,7 +877,7 @@ func (h *ZFSHandler) GetUserGroupQuotas(w http.ResponseWriter, r *http.Request) 
 
 	parseEntries := func(raw []byte) []QuotaEntry {
 		var entries []QuotaEntry
-		for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		for line := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
 			if line == "" {
 				continue
 			}
@@ -848,7 +898,7 @@ func (h *ZFSHandler) GetUserGroupQuotas(w http.ResponseWriter, r *http.Request) 
 		return entries
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"dataset": dataset,
 		"users":   parseEntries(userOut),
@@ -873,10 +923,10 @@ func (h *ZFSHandler) HoldSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := libzfs.SnapshotHold(req.Tag, req.Snapshot); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "snapshot": req.Snapshot, "tag": req.Tag})
+	respondOK(w, map[string]any{"success": true, "snapshot": req.Snapshot, "tag": req.Tag})
 }
 
 // ReleaseSnapshot removes a hold on a snapshot.
@@ -896,10 +946,10 @@ func (h *ZFSHandler) ReleaseSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := libzfs.SnapshotRelease(req.Tag, req.Snapshot); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "snapshot": req.Snapshot, "tag": req.Tag})
+	respondOK(w, map[string]any{"success": true, "snapshot": req.Snapshot, "tag": req.Tag})
 }
 
 // ListHolds lists current holds on a snapshot.
@@ -913,14 +963,14 @@ func (h *ZFSHandler) ListHolds(w http.ResponseWriter, r *http.Request) {
 
 	holds, err := libzfs.SnapshotListHolds(snapshot)
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	if holds == nil {
 		holds = []libzfs.HoldEntry{}
 	}
 
-	respondOK(w, map[string]interface{}{"success": true, "snapshot": snapshot, "holds": holds})
+	respondOK(w, map[string]any{"success": true, "snapshot": snapshot, "holds": holds})
 }
 
 // SplitPool splits a mirrored pool into two pools.
@@ -947,10 +997,10 @@ func (h *ZFSHandler) SplitPool(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := libzfs.PoolSplit(req.Pool, req.NewPool); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "pool": req.Pool, "new_pool": req.NewPool})
+	respondOK(w, map[string]any{"success": true, "pool": req.Pool, "new_pool": req.NewPool})
 }
 
 func isValidHoldTag(tag string) bool {
@@ -995,7 +1045,7 @@ func (h *ZFSHandler) SetUserGroupQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"dataset": req.Dataset,
 		"type":    req.Type,
@@ -1066,14 +1116,14 @@ func PoolOperations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if opErr != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   opErr.Error(),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Pool %s: %s successful", req.Pool, req.Op),
 	})
@@ -1125,7 +1175,7 @@ func AttachDisk(w http.ResponseWriter, r *http.Request) {
 
 	jobID := jobs.Start("zpool-attach", func(j *jobs.Job) {
 		if diskEventHub != nil {
-			diskEventHub.Broadcast("resilver_started", map[string]interface{}{
+			diskEventHub.Broadcast("resilver_started", map[string]any{
 				"pool":     pool,
 				"old_disk": oldDisk,
 				"new_disk": newDisk,
@@ -1135,7 +1185,7 @@ func AttachDisk(w http.ResponseWriter, r *http.Request) {
 		if err := libzfs.VdevAttach(pool, oldDisk, newDisk); err != nil {
 			storageops.Fail(registryDB, opID, fmt.Sprintf("zpool attach: %v", err))
 			if diskEventHub != nil {
-				diskEventHub.Broadcast("resilver_completed", map[string]interface{}{
+				diskEventHub.Broadcast("resilver_completed", map[string]any{
 					"pool":    pool,
 					"success": false,
 					"error":   err.Error(),
@@ -1146,15 +1196,15 @@ func AttachDisk(w http.ResponseWriter, r *http.Request) {
 		}
 		storageops.Commit(registryDB, opID)
 		if diskEventHub != nil {
-			diskEventHub.Broadcast("resilver_completed", map[string]interface{}{
+			diskEventHub.Broadcast("resilver_completed", map[string]any{
 				"pool":    pool,
 				"success": true,
 			}, "success")
 		}
-		j.Done(map[string]interface{}{"message": "Disk attach complete, resilvering started."})
+		j.Done(map[string]any{"message": "Disk attach complete, resilvering started."})
 	})
 
-	respondOK(w, map[string]interface{}{"success": true, "job_id": jobID})
+	respondOK(w, map[string]any{"success": true, "job_id": jobID})
 }
 
 // DetachDisk detaches a device from a mirror
@@ -1178,14 +1228,14 @@ func DetachDisk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := libzfs.VdevDetach(req.Pool, req.Disk); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   err.Error(),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true, "pool": req.Pool, "detached": req.Disk})
+	respondOK(w, map[string]any{"success": true, "pool": req.Pool, "detached": req.Disk})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1228,7 +1278,7 @@ func GetPoolTopology(w http.ResponseWriter, r *http.Request) {
 	}
 
 	topology := parseZpoolStatus(output, pool)
-	respondOK(w, map[string]interface{}{"success": true, "topology": topology})
+	respondOK(w, map[string]any{"success": true, "topology": topology})
 }
 
 func parseZpoolStatus(output, poolName string) PoolTopology {
@@ -1241,12 +1291,12 @@ func parseZpoolStatus(output, poolName string) PoolTopology {
 	configStart := -1
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "state:") {
-			topo.State = strings.TrimSpace(strings.TrimPrefix(trimmed, "state:"))
-		} else if strings.HasPrefix(trimmed, "status:") {
-			topo.Status = strings.TrimSpace(strings.TrimPrefix(trimmed, "status:"))
-		} else if strings.HasPrefix(trimmed, "scan:") {
-			topo.Scan = strings.TrimSpace(strings.TrimPrefix(trimmed, "scan:"))
+		if v, ok := strings.CutPrefix(trimmed, "state:"); ok {
+			topo.State = strings.TrimSpace(v)
+		} else if v, ok := strings.CutPrefix(trimmed, "status:"); ok {
+			topo.Status = strings.TrimSpace(v)
+		} else if v, ok := strings.CutPrefix(trimmed, "scan:"); ok {
+			topo.Scan = strings.TrimSpace(v)
 		} else if strings.HasPrefix(trimmed, "config:") {
 			configStart = i + 1
 		}
@@ -1471,7 +1521,7 @@ func (h *ZFSHandler) RenameDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // PromoteDataset promotes a ZFS clone to a full dataset
@@ -1500,7 +1550,7 @@ func (h *ZFSHandler) PromoteDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 
@@ -1536,7 +1586,7 @@ func (h *ZFSHandler) OfflineDisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // ExportPool exports a ZFS pool
@@ -1582,11 +1632,26 @@ func (h *ZFSHandler) ExportPool(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Execute
+	// 2. If force requested, check for active dependencies first.
+	// A forced export with open NFS/SMB handles causes silent data corruption on
+	// clients. We allow force only when there are no active mounts or shares.
+	if req.Force {
+		deps, err := poolDependencyCheck(h.db, req.Pool)
+		if err == nil && len(deps) > 0 {
+			respondJSON(w, http.StatusConflict, map[string]any{
+				"success": false,
+				"error":   "force export refused: active mounts or shares detected; stop all services first",
+				"dependencies": deps,
+			})
+			return
+		}
+	}
+
+	// 3. Execute
 	if err := libzfs.PoolExport(req.Pool, req.Force); err != nil {
 		respondErrorSimple(w, "Export failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }

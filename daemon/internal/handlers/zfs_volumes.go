@@ -51,7 +51,7 @@ func ListZvols(w http.ResponseWriter, r *http.Request) {
 			Compression:  fields[6],
 		})
 	}
-	respondOK(w, map[string]interface{}{"success": true, "volumes": zvols})
+	respondOK(w, map[string]any{"success": true, "volumes": zvols})
 }
 
 // CreateZvol handles POST /api/zfs/volumes

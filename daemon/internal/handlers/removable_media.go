@@ -1,4 +1,4 @@
-﻿package handlers
+package handlers
 
 import (
 	"encoding/json"
@@ -68,7 +68,7 @@ func (h *RemovableMediaHandler) ListDevices(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"devices": devices,
 	})
@@ -103,7 +103,7 @@ func (h *RemovableMediaHandler) MountDevice(w http.ResponseWriter, r *http.Reque
 	output, err := cmdutil.RunMedium("mount", req.Device, req.MountPoint)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to mount: %v - %s", err, string(output)),
 		})
@@ -133,7 +133,7 @@ func (h *RemovableMediaHandler) UnmountDevice(w http.ResponseWriter, r *http.Req
 	output, err := cmdutil.RunFast("umount", req.Device)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to unmount: %v - %s", err, string(output)),
 		})
@@ -167,7 +167,7 @@ func (h *RemovableMediaHandler) EjectDevice(w http.ResponseWriter, r *http.Reque
 	output, err := cmdutil.RunFast("eject", req.Device)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to eject: %v - %s", err, string(output)),
 		})

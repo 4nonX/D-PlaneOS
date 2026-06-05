@@ -16,7 +16,7 @@ type SendProgressState struct {
 // FeedSendProgressLine parses one line of `zfs send -P` stderr. When emit is true,
 // update contains percent, bytes_sent, total_bytes, rate_bps, rate_mbs, eta_seconds
 // suitable for jobs.Job.Progress and WebSocket payloads.
-func FeedSendProgressLine(line string, st *SendProgressState, minInterval time.Duration) (update map[string]interface{}, emit bool) {
+func FeedSendProgressLine(line string, st *SendProgressState, minInterval time.Duration) (update map[string]any, emit bool) {
 	fields := strings.Fields(line)
 	if len(fields) < 2 {
 		return nil, false
@@ -47,7 +47,7 @@ func FeedSendProgressLine(line string, st *SendProgressState, minInterval time.D
 		}
 		st.LastSent = sent
 		st.LastTime = now
-		return map[string]interface{}{
+		return map[string]any{
 			"percent":     percent,
 			"bytes_sent":  sent,
 			"total_bytes": st.TotalSize,

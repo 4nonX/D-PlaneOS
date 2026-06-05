@@ -121,7 +121,7 @@ func writeAuthorizedKeys(username string, keys []SSHManagedKey) error {
 			continue
 		}
 		if k.Label != "" {
-			sb.WriteString(fmt.Sprintf("# %s\n", k.Label))
+			fmt.Fprintf(&sb, "# %s\n", k.Label)
 		}
 		sb.WriteString(k.PublicKey + "\n")
 	}
@@ -213,18 +213,6 @@ func loadSSHKeys() ([]SSHManagedKey, error) {
 	return out, nil
 }
 
-func saveSSHKeys(keys []SSHManagedKey) error {
-	sshKeysMu.Lock()
-	defer sshKeysMu.Unlock()
-
-	os.MkdirAll(ConfigDir, 0755)
-	data, err := json.MarshalIndent(keys, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(configPath(sshKeysFile), data, 0600)
-}
-
 var (
 	errSSHKeyNotFound  = errors.New("ssh key not found")
 	errSSHKeyDuplicate = errors.New("ssh key duplicate")
@@ -270,7 +258,7 @@ func GetSSHStatus(w http.ResponseWriter, r *http.Request) {
 	if active {
 		ssOut, ssErr := cmdutil.RunFast("ss", "-tlnp")
 		if ssErr == nil {
-			for _, line := range strings.Split(string(ssOut), "\n") {
+			for line := range strings.SplitSeq(string(ssOut), "\n") {
 				if strings.Contains(line, "sshd") {
 					fields := strings.Fields(line)
 					if len(fields) >= 4 {
@@ -285,7 +273,7 @@ func GetSSHStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"active":  active,
 		"port":    port,
@@ -314,7 +302,7 @@ func ListSSHKeys(w http.ResponseWriter, r *http.Request) {
 	if keys == nil {
 		keys = []SSHManagedKey{}
 	}
-	respondOK(w, map[string]interface{}{"success": true, "keys": keys})
+	respondOK(w, map[string]any{"success": true, "keys": keys})
 }
 
 // AddSSHKey POST /api/ssh/keys
@@ -400,7 +388,7 @@ func AddSSHKey(w http.ResponseWriter, r *http.Request) {
 
 	if err := writeAuthorizedKeys(req.Username, finalKeys); err != nil {
 		log.Printf("ssh_keys: writeAuthorizedKeys for %s: %v", req.Username, err)
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"key":     key,
 			"warning": "Key saved but authorized_keys write failed: " + err.Error(),
@@ -408,10 +396,10 @@ func AddSSHKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.LogActivity(r.Header.Get("X-User"), "ssh_key_add", map[string]interface{}{
+	audit.LogActivity(r.Header.Get("X-User"), "ssh_key_add", map[string]any{
 		"id": key.ID, "username": req.Username, "key_type": kt,
 	})
-	respondOK(w, map[string]interface{}{"success": true, "key": key})
+	respondOK(w, map[string]any{"success": true, "key": key})
 }
 
 // DeleteSSHKey DELETE /api/ssh/keys/{id}
@@ -447,8 +435,8 @@ func DeleteSSHKey(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ssh_keys: writeAuthorizedKeys for %s after delete: %v", username, err)
 	}
 
-	audit.LogActivity(r.Header.Get("X-User"), "ssh_key_delete", map[string]interface{}{"id": id, "username": username})
-	respondOK(w, map[string]interface{}{"success": true})
+	audit.LogActivity(r.Header.Get("X-User"), "ssh_key_delete", map[string]any{"id": id, "username": username})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // ─── SSH Daemon Settings ────────────────────────────────────────
@@ -475,7 +463,7 @@ func GetSSHDaemon(w http.ResponseWriter, r *http.Request) {
 		passwordAuth = &v
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":           true,
 		"port":              state.SSHPort,
 		"password_auth":     passwordAuth,
@@ -529,12 +517,12 @@ func PostSSHDaemon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.LogActivity(r.Header.Get("X-User"), "ssh_daemon_update", map[string]interface{}{
+	audit.LogActivity(r.Header.Get("X-User"), "ssh_daemon_update", map[string]any{
 		"port":              port,
 		"password_auth":     req.PasswordAuth,
 		"permit_root_login": permitRootLogin,
 	})
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "SSH daemon settings saved. Apply NixOS configuration to activate.",
 	})

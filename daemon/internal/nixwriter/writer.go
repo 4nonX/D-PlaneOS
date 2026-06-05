@@ -229,8 +229,8 @@ func (w *Writer) MarkApplied() error {
 // Change represents a single property change in the declarative state.
 type Change struct {
 	Path string      `json:"path"`
-	From interface{} `json:"from"`
-	To   interface{} `json:"to"`
+	From any `json:"from"`
+	To   any `json:"to"`
 	Op   string      `json:"op"` // "add", "remove", "modify"
 }
 
@@ -590,14 +590,6 @@ func (w *Writer) SetSSHDaemon(opts SSHDaemonOpts) error {
 }
  
 // ── Core write mechanics ─────────────────────────────────────────────────────
- 
-// flush serialises the current state to dplane-state.json atomically.
-// On non-NixOS systems this is a deliberate no-op.
-func (w *Writer) flush() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.flushLocked()
-}
  
 func (w *Writer) flushLocked() error {
 	if !w.nixOS {

@@ -18,6 +18,7 @@ import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { toast } from '@/hooks/useToast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 interface UGQuota { dataset: string; type: 'user'|'group'; id: string; quota: number; used?: number }
 
@@ -40,6 +41,7 @@ function DatasetQuotaLookup() {
   const [quota, setQuota] = useState('')
 
   const qc = useQueryClient()
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const datasetsQ = useQuery({
     queryKey: ['zfs', 'datasets', 'names'],
@@ -90,9 +92,10 @@ function DatasetQuotaLookup() {
             <input value={quota} onChange={e=>setQuota(e.target.value)} placeholder="100GB" className="input"/>
           </label>
           <button onClick={()=>setQ.mutate()} disabled={!quota.trim()||setQ.isPending} className="btn btn-primary"><Icon name="save" size={14}/>{setQ.isPending?'Setting…':'Set'}</button>
-          <button onClick={()=>removeQ.mutate()} disabled={removeQ.isPending} className="btn btn-ghost" style={{ color:'var(--error)', borderColor:'var(--error-border)' }}><Icon name="delete" size={14}/>Remove</button>
+          <button onClick={async () => { if (await confirm({ title: 'Remove quota?', danger: true, confirmLabel: 'Remove' })) { removeQ.mutate() } }} disabled={removeQ.isPending} className="btn btn-ghost" style={{ color:'var(--error)', borderColor:'var(--error-border)' }}><Icon name="delete" size={14}/>Remove</button>
         </div>
       )}
+      <ConfirmDialog />
     </div>
   )
 }
@@ -159,6 +162,7 @@ function ProjectQuotas() {
   const [queried, setQueried] = useState<string | null>(null)
   const [projectId, setProjectId] = useState('')
   const [quota, setQuota] = useState('')
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const pqQ = useQuery({
     queryKey: ['quota', 'project', queried],
@@ -242,7 +246,7 @@ function ProjectQuotas() {
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>used {q.used}</span>
                   )}
                   <button
-                    onClick={() => removeQ.mutate(q.id)}
+                    onClick={async () => { if (await confirm({ title: 'Remove quota?', danger: true, confirmLabel: 'Remove' })) { removeQ.mutate(q.id) } }}
                     disabled={removeQ.isPending}
                     className="btn btn-ghost btn-sm"
                     style={{ color: 'var(--error)', padding: '4px 6px' }}
@@ -287,6 +291,7 @@ function ProjectQuotas() {
           </>
         )}
       </div>
+      <ConfirmDialog />
     </div>
   )
 }

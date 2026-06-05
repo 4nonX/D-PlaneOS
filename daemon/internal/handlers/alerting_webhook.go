@@ -80,7 +80,7 @@ type webhookPayload struct {
 	Severity  string                 `json:"severity"`
 	Message   string                 `json:"message"`
 	Timestamp string                 `json:"timestamp"`
-	Data      map[string]interface{} `json:"data,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ func (h *WebhookHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WARN: webhook list rows: %v", err)
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"webhooks": configs,
 		"count":    len(configs),
@@ -176,17 +176,17 @@ func (h *WebhookHandler) SaveWebhook(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "Failed to create webhook", err)
 			return
 		}
-		respondOK(w, map[string]interface{}{"success": true, "id": id, "message": "Webhook created"})
+		respondOK(w, map[string]any{"success": true, "id": id, "message": "Webhook created"})
 	} else {
 		// Update - only replace secret_value if provided, keep existing otherwise
-		var args []interface{}
+		var args []any
 		var query string
 		if req.SecretValue != "" {
 			query = `UPDATE webhook_configs
 				SET name=$1, url=$2, secret_header=$3, secret_value=$4, content_type=$5, body_template=$6,
 				    enabled=$7, events=$8, updated_at=NOW()
 				WHERE id=$9`
-			args = []interface{}{
+			args = []any{
 				req.Name, req.URL, req.SecretHeader, req.SecretValue,
 				req.ContentType, req.BodyTemplate,
 				req.Enabled, req.Events, req.ID,
@@ -196,7 +196,7 @@ func (h *WebhookHandler) SaveWebhook(w http.ResponseWriter, r *http.Request) {
 				SET name=$1, url=$2, secret_header=$3, content_type=$4, body_template=$5,
 				    enabled=$6, events=$7, updated_at=NOW()
 				WHERE id=$8`
-			args = []interface{}{
+			args = []any{
 				req.Name, req.URL, req.SecretHeader,
 				req.ContentType, req.BodyTemplate,
 				req.Enabled, req.Events, req.ID,
@@ -206,7 +206,7 @@ func (h *WebhookHandler) SaveWebhook(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "Failed to update webhook", err)
 			return
 		}
-		respondOK(w, map[string]interface{}{"success": true, "message": "Webhook updated"})
+		respondOK(w, map[string]any{"success": true, "message": "Webhook updated"})
 	}
 }
 
@@ -218,7 +218,7 @@ func (h *WebhookHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to delete webhook", err)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "message": "Webhook deleted"})
+	respondOK(w, map[string]any{"success": true, "message": "Webhook deleted"})
 }
 
 // TestWebhook fires a test payload to a specific webhook.
@@ -245,14 +245,14 @@ func (h *WebhookHandler) TestWebhook(w http.ResponseWriter, r *http.Request) {
 		Severity:  "info",
 		Message:   fmt.Sprintf("Test alert from DPlaneOS webhook '%s'", cfg.Name),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Data:      map[string]interface{}{"webhook_id": cfg.ID, "webhook_name": cfg.Name},
+		Data:      map[string]any{"webhook_id": cfg.ID, "webhook_name": cfg.Name},
 	}
 
 	if err := dispatchWebhook(cfg, payload); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "message": "Test payload delivered"})
+	respondOK(w, map[string]any{"success": true, "message": "Test payload delivered"})
 }
 
 // ── Internal dispatch ──────────────────────────────────────────────────────────
@@ -262,8 +262,8 @@ func (h *WebhookHandler) TestWebhook(w http.ResponseWriter, r *http.Request) {
 //
 // Example callers:
 //
-//	handlers.SendWebhookAlert(db, EventPoolDegraded, "critical", "Pool 'tank' degraded", map[string]interface{}{"pool": "tank"})
-func SendWebhookAlert(db *sql.DB, event, severity, message string, data map[string]interface{}) {
+//	handlers.SendWebhookAlert(db, EventPoolDegraded, "critical", "Pool 'tank' degraded", map[string]any{"pool": "tank"})
+func SendWebhookAlert(db *sql.DB, event, severity, message string, data map[string]any) {
 	if db == nil {
 		return
 	}

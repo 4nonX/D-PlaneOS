@@ -65,18 +65,6 @@ func loadMinioConfig() (MinioConfig, error) {
 	return cfg, nil
 }
 
-func saveMinioConfig(cfg MinioConfig) error {
-	minioMu.Lock()
-	defer minioMu.Unlock()
-
-	os.MkdirAll(ConfigDir, 0755)
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(configPath(minioConfigFile), data, 0600)
-}
-
 var errMinioValidation = errors.New("minio config validation failed")
 
 // atomicModifyMinioConfig holds the write lock across the full load-modify-save cycle.
@@ -133,7 +121,7 @@ func validateMinioConfig(cfg MinioConfig) error {
 		return fmt.Errorf("volume_path must be an absolute path")
 	}
 	if strings.Contains(cfg.VolumePath, "..") {
-		return fmt.Errorf("volume_path must not contain ..")
+		return fmt.Errorf("volume_path must not contain path traversal sequences")
 	}
 	if cfg.APIPort < 1 || cfg.APIPort > 65535 {
 		return fmt.Errorf("api_port must be 1-65535")
@@ -150,10 +138,10 @@ func validateMinioConfig(cfg MinioConfig) error {
 func generateMinioEnv(cfg MinioConfig) string {
 	var sb strings.Builder
 	sb.WriteString("# DPlaneOS MinIO - managed automatically, do not edit by hand\n")
-	sb.WriteString(fmt.Sprintf("MINIO_ROOT_USER=%s\n", cfg.RootUser))
-	sb.WriteString(fmt.Sprintf("MINIO_ROOT_PASSWORD=%s\n", cfg.RootPassword))
-	sb.WriteString(fmt.Sprintf("MINIO_VOLUMES=%s\n", cfg.VolumePath))
-	sb.WriteString(fmt.Sprintf("MINIO_OPTS=--address :%d --console-address :%d\n", cfg.APIPort, cfg.ConsolePort))
+	fmt.Fprintf(&sb, "MINIO_ROOT_USER=%s\n", cfg.RootUser)
+	fmt.Fprintf(&sb, "MINIO_ROOT_PASSWORD=%s\n", cfg.RootPassword)
+	fmt.Fprintf(&sb, "MINIO_VOLUMES=%s\n", cfg.VolumePath)
+	fmt.Fprintf(&sb, "MINIO_OPTS=--address :%d --console-address :%d\n", cfg.APIPort, cfg.ConsolePort)
 	return sb.String()
 }
 
@@ -217,7 +205,7 @@ func GetMinioStatus(w http.ResponseWriter, r *http.Request) {
 	installed := minioInstalled()
 	active := installed && minioServiceActive()
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":      true,
 		"installed":    installed,
 		"active":       active,
@@ -235,7 +223,7 @@ func GetMinioConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Redact password in response
-	out := map[string]interface{}{
+	out := map[string]any{
 		"root_user":    cfg.RootUser,
 		"root_password": func() string {
 			if cfg.RootPassword != "" {
@@ -247,7 +235,7 @@ func GetMinioConfig(w http.ResponseWriter, r *http.Request) {
 		"api_port":     cfg.APIPort,
 		"console_port": cfg.ConsolePort,
 	}
-	respondOK(w, map[string]interface{}{"success": true, "config": out})
+	respondOK(w, map[string]any{"success": true, "config": out})
 }
 
 // UpdateMinioConfig saves config and applies it (restarts service if running).
@@ -303,8 +291,8 @@ func UpdateMinioConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.LogActivity("system", "minio_config_updated", map[string]interface{}{"action": "MinIO configuration updated"})
-	respondOK(w, map[string]interface{}{"success": true, "message": "Configuration applied"})
+	audit.LogActivity("system", "minio_config_updated", map[string]any{"action": "MinIO configuration updated"})
+	respondOK(w, map[string]any{"success": true, "message": "Configuration applied"})
 }
 
 // StartMinio starts the MinIO service.
@@ -328,7 +316,7 @@ func StartMinio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	audit.LogActivity("system", "minio_start", nil)
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // StopMinio stops the MinIO service.
@@ -339,7 +327,7 @@ func StopMinio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	audit.LogActivity("system", "minio_stop", nil)
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // RestartMinio restarts the MinIO service.
@@ -359,5 +347,5 @@ func RestartMinio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	audit.LogActivity("system", "minio_restart", nil)
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }

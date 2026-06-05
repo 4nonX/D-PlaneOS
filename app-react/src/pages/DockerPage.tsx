@@ -37,6 +37,7 @@ import { toast } from '@/hooks/useToast'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { useWsStore } from '@/stores/ws'
 import type { IconMapResponse } from '@/lib/iconTypes'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -2267,6 +2268,7 @@ interface RepoStatus {
 
 function GitSyncTab() {
   const qc = useQueryClient()
+  const { confirm, ConfirmDialog } = useConfirm()
   const [subTab, setSubTab] = useState<'repos' | 'credentials'>('repos')
   const [repoModal, setRepoModal] = useState<GitRepo | null | 'new'>(null)
   const [credModal, setCredModal] = useState<GitCredential | null | 'new'>(null)
@@ -2486,7 +2488,7 @@ function GitSyncTab() {
                       <button onClick={() => setRepoModal(repo)} disabled={!!op} className="btn btn-ghost" style={{ padding: '6px 8px' }}>
                         <Icon name="edit" size={14} />
                       </button>
-                      <button onClick={() => repoAction(repo.id, 'delete')} disabled={!!op} className="btn btn-ghost" style={{ padding: '6px 8px', color: 'var(--error)' }}>
+                      <button onClick={async () => { if (await confirm({ title: `Delete repository "${repo.name}"?`, danger: true, confirmLabel: 'Delete' })) { repoAction(repo.id, 'delete') } }} disabled={!!op} className="btn btn-ghost" style={{ padding: '6px 8px', color: 'var(--error)' }}>
                         <Icon name="delete" size={14} />
                       </button>
                     </div>
@@ -2536,7 +2538,7 @@ function GitSyncTab() {
                   <button onClick={() => setCredModal(cred)} className="btn btn-ghost" style={{ padding: '5px 8px' }}>
                     <Icon name="edit" size={13} />
                   </button>
-                  <button onClick={() => deleteCredential(cred.id)} className="btn btn-ghost" style={{ padding: '5px 8px', color: 'var(--error)' }}>
+                  <button onClick={async () => { if (await confirm({ title: `Delete credential "${cred.name}"?`, danger: true, confirmLabel: 'Delete' })) { deleteCredential(cred.id) } }} className="btn btn-ghost" style={{ padding: '5px 8px', color: 'var(--error)' }}>
                     <Icon name="delete" size={13} />
                   </button>
                 </div>
@@ -2596,6 +2598,7 @@ function GitSyncTab() {
           </div>
         </div>
       )}
+      <ConfirmDialog />
     </div>
   )
 }

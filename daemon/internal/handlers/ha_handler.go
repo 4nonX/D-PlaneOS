@@ -53,7 +53,7 @@ func (h *HAHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":          true,
 		"cluster":          status,
 		"witness":          witnessCfg,
@@ -78,7 +78,7 @@ func (h *HAHandler) BecomeStandby(w http.ResponseWriter, r *http.Request) {
 	// Respond immediately so the caller (Keepalived notify script) does not
 	// block waiting. The actual export happens asynchronously; if it fails the
 	// node will reboot before the new primary imports the pools.
-	respondJSON(w, http.StatusAccepted, map[string]interface{}{
+	respondJSON(w, http.StatusAccepted, map[string]any{
 		"success": true,
 		"message": "Graceful standby transition initiated - node will export pools and yield within 4 seconds or reboot",
 	})
@@ -101,7 +101,7 @@ func (h *HAHandler) RegisterPeer(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "Failed to register peer", err)
 		return
 	}
-	respondJSON(w, http.StatusCreated, map[string]interface{}{
+	respondJSON(w, http.StatusCreated, map[string]any{
 		"success": true,
 		"message": "Peer registered - heartbeat will begin within 15 seconds",
 		"peer_id": req.ID,
@@ -116,7 +116,7 @@ func (h *HAHandler) RemovePeer(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to remove peer", err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Peer removed",
 	})
@@ -142,7 +142,7 @@ func (h *HAHandler) PeerHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Reply with our own identity so peers can detect our role
 	info := h.mgr.LocalInfo()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":  true,
 		"node_id":  info["id"],
 		"address":  info["address"],
@@ -154,7 +154,7 @@ func (h *HAHandler) PeerHeartbeat(w http.ResponseWriter, r *http.Request) {
 // The secret itself is never returned.
 // GET /api/ha/cluster-secret/configure
 func (h *HAHandler) GetClusterSecretConfig(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"configured": h.mgr.IsClusterSecretConfigured(),
 	})
@@ -177,9 +177,9 @@ func (h *HAHandler) SetClusterSecretConfig(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if req.Secret == "" {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "message": "Cluster secret cleared - peer authentication disabled"})
+		respondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Cluster secret cleared - peer authentication disabled"})
 	} else {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "message": "Cluster secret updated - takes effect immediately"})
+		respondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Cluster secret updated - takes effect immediately"})
 	}
 }
 
@@ -204,7 +204,7 @@ func (h *HAHandler) SetPeerRole(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusNotFound, "Failed to update role", err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Peer role updated to " + req.Role,
 	})
@@ -214,7 +214,7 @@ func (h *HAHandler) SetPeerRole(w http.ResponseWriter, r *http.Request) {
 // GET /api/ha/local
 func (h *HAHandler) LocalNodeInfo(w http.ResponseWriter, r *http.Request) {
 	info := h.mgr.LocalInfo()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"node":    info,
 	})
@@ -241,7 +241,7 @@ func (h *HAHandler) GetFencingConfig(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to read fencing config", err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"config":  cfg,
 	})
@@ -259,7 +259,7 @@ func (h *HAHandler) ConfigureFencing(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to save fencing config", err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Fencing configuration updated successfully",
 	})
@@ -269,7 +269,7 @@ func (h *HAHandler) ConfigureFencing(w http.ResponseWriter, r *http.Request) {
 // GET /api/ha/replication/configure
 func (h *HAHandler) GetReplicationConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := h.mgr.GetReplicationConfig()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"config":  cfg,
 	})
@@ -304,7 +304,7 @@ func (h *HAHandler) ConfigureHAReplication(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "HA replication configured and background loop started (if active)",
 	})
@@ -352,13 +352,13 @@ func (h *HAHandler) Promote(w http.ResponseWriter, r *http.Request) {
 		j.Log(fmt.Sprintf("HA Promote: Promoting candidate %q (leader %q)...", req.Candidate, req.Leader))
 		ha.ExecutePromotion(req.Candidate, req.Leader)
 		j.Log("HA Promote: Promotion sequence complete.")
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"candidate": req.Candidate,
 			"leader":    req.Leader,
 		})
 	})
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Failover promotion initiated. Monitor progress via job " + jobID + ".",
 		"job_id":  jobID,
@@ -389,7 +389,7 @@ func (h *HAHandler) TriggerFence(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	respondJSON(w, http.StatusAccepted, map[string]interface{}{
+	respondJSON(w, http.StatusAccepted, map[string]any{
 		"success": true,
 		"message": "Fencing sequence initiated asynchronously for Node " + req.NodeID,
 	})
@@ -399,7 +399,7 @@ func (h *HAHandler) TriggerFence(w http.ResponseWriter, r *http.Request) {
 // POST /api/ha/toggle {"enable": true/false}
 func (h *HAHandler) ToggleHA(w http.ResponseWriter, r *http.Request) {
 	if NixWriter == nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success": false,
 			"error":   "High Availability requires NixOS",
 		})
@@ -414,7 +414,7 @@ func (h *HAHandler) ToggleHA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !gitops.TryLock() {
-		respondJSON(w, 423, map[string]interface{}{
+		respondJSON(w, 423, map[string]any{
 			"success": false,
 			"error":   "A reconciliation is already in progress. Please wait for the current operation to finish.",
 		})
@@ -446,11 +446,11 @@ func (h *HAHandler) ToggleHA(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Printf("HA: NixOS rebuild success. HA is now %v", req.Enable)
 			j.Log("NixOS reconfiguration completed successfully.")
-			j.Done(map[string]interface{}{"output": string(out)})
+			j.Done(map[string]any{"output": string(out)})
 		}
 	})
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "HA state updated. System reconfiguration started.",
 		"job_id":  jobID,
@@ -465,7 +465,7 @@ func (h *HAHandler) GetWitnessConfig(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to read witness config", err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"config":  cfg,
 	})
@@ -487,7 +487,7 @@ func (h *HAHandler) ConfigureWitness(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to save witness config", err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Quorum witness configuration saved",
 	})
@@ -557,7 +557,7 @@ func (h *HAHandler) TestWitness(w http.ResponseWriter, r *http.Request) {
 		required = 1
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":          true,
 		"quorum_satisfied": healthy >= required,
 		"healthy":          healthy,
@@ -574,7 +574,7 @@ func (h *HAHandler) GetPDUConfig(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to read PDU config", err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"config":  cfg,
 	})
@@ -596,7 +596,7 @@ func (h *HAHandler) ConfigurePDU(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to save PDU config", err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "PDU fencing configuration saved",
 	})
@@ -616,7 +616,7 @@ func (h *HAHandler) GetSyncStatus(w http.ResponseWriter, r *http.Request) {
 // POST /api/ha/clear_fault
 func (h *HAHandler) ClearFault(w http.ResponseWriter, r *http.Request) {
 	h.mgr.ClearFault()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Fault cleared. Hysteresis and Subordinate Mode reset. Auto-failover re-enabled.",
 	})
@@ -635,7 +635,7 @@ func (h *HAHandler) GetSBDConfig(w http.ResponseWriter, r *http.Request) {
 	if !lastOK.IsZero() {
 		lastRenewalUnix = lastOK.Unix()
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":           true,
 		"config":            cfg,
 		"lease_active":      ha.GlobalSBD.IsLive(),
@@ -671,7 +671,7 @@ func (h *HAHandler) ConfigureSBD(w http.ResponseWriter, r *http.Request) {
 	}
 	// Restart lease manager with the new config (no-op if pool is now empty).
 	ha.GlobalSBD.Restart(req)
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "SBD fencing configuration saved",
 	})
@@ -699,7 +699,7 @@ func (h *HAHandler) RegisterMaintenance(w http.ResponseWriter, r *http.Request) 
 		status = "disabled"
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Maintenance mode %s. Fencing suspended for %d seconds.", status, req.Seconds),
 	})

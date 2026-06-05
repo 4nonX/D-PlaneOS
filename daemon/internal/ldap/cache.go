@@ -1,7 +1,9 @@
 package ldap
 
 import (
+	"encoding/json"
 	"log"
+	"os"
 	"sync"
 	"time"
 )
@@ -15,16 +17,26 @@ import (
 //     glitch, DC rebooting), authentication and role mapping continue to work
 //     against the last-known-good snapshot.
 //
-// Mirrors TrueNAS's DSCacheFill pattern in plugins/directoryservices_/cache.py.
+// Mirrors TrueNAS's DSCacheFill pattern in plugins/directoryservices_/cache.py,
+// but extends it with on-disk persistence so the warm cache survives daemon
+// restarts and is available immediately before the first successful LDAP refresh.
 type DirectoryCache struct {
 	mu          sync.RWMutex
-	users       map[string]*User // key: lowercase username
+	users       map[string]*User    // key: lowercase username
 	groups      map[string][]string // key: lowercase group CN, value: member usernames
 	lastRefresh time.Time
 	ttl         time.Duration
 	stale       bool // true if last refresh failed
+	persistPath string
 
 	stop chan struct{}
+}
+
+// cacheSnapshot is the on-disk format for persistent cache storage.
+type cacheSnapshot struct {
+	Users       []*User            `json:"users"`
+	Groups      map[string][]string `json:"groups"`
+	RefreshedAt time.Time          `json:"refreshed_at"`
 }
 
 // NewDirectoryCache creates a cache with the given TTL. Call Start() to begin
@@ -39,6 +51,19 @@ func NewDirectoryCache(ttl time.Duration) *DirectoryCache {
 		ttl:    ttl,
 		stop:   make(chan struct{}),
 	}
+}
+
+// NewDirectoryCacheWithPersistence creates a cache that automatically saves
+// successful refresh snapshots to path and preloads the last snapshot on
+// creation. This means authentication remains available immediately after a
+// daemon restart, even before the first LDAP refresh completes.
+func NewDirectoryCacheWithPersistence(ttl time.Duration, path string) *DirectoryCache {
+	c := NewDirectoryCache(ttl)
+	c.persistPath = path
+	if err := c.loadSnapshot(path); err != nil && !os.IsNotExist(err) {
+		log.Printf("LDAP CACHE: could not load snapshot from %s: %v", path, err)
+	}
+	return c
 }
 
 // Start launches a background goroutine that refreshes the cache every ttl/2.
@@ -92,14 +117,79 @@ func (c *DirectoryCache) refresh(fetch func() ([]*User, error)) {
 		}
 	}
 
+	now := time.Now()
 	c.mu.Lock()
 	c.users = newUsers
 	c.groups = newGroups
-	c.lastRefresh = time.Now()
+	c.lastRefresh = now
 	c.stale = false
 	c.mu.Unlock()
 
 	log.Printf("LDAP CACHE: refreshed %d users, %d groups", len(newUsers), len(newGroups))
+
+	if c.persistPath != "" {
+		if err := c.persistSnapshot(users, newGroups, now); err != nil {
+			log.Printf("LDAP CACHE: snapshot write failed: %v", err)
+		}
+	}
+}
+
+// persistSnapshot writes a JSON snapshot of the current cache to disk.
+// Uses atomic temp-file + rename so the on-disk snapshot is always either
+// the previous complete version or the new complete version - never a partial
+// write. This matters on NixOS where /var/lib/dplaneos/ may be a ZFS dataset:
+// if a pool export races with this write, the rename will fail with ENOENT or
+// EXDEV (if the mount was torn down), which is handled gracefully - we log and
+// continue serving from the in-memory cache.
+func (c *DirectoryCache) persistSnapshot(users []*User, groups map[string][]string, at time.Time) error {
+	snap := cacheSnapshot{Users: users, Groups: groups, RefreshedAt: at}
+	data, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	tmp := c.persistPath + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, c.persistPath); err != nil {
+		// Clean up the temp file on rename failure.
+		os.Remove(tmp) //nolint:errcheck
+		return err
+	}
+	return nil
+}
+
+// loadSnapshot reads a previously persisted snapshot and preloads the cache.
+// This is called only from NewDirectoryCacheWithPersistence before the first refresh.
+func (c *DirectoryCache) loadSnapshot(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var snap cacheSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return err
+	}
+
+	newUsers := make(map[string]*User, len(snap.Users))
+	for _, u := range snap.Users {
+		newUsers[lowerASCII(u.Username)] = u
+	}
+	groups := snap.Groups
+	if groups == nil {
+		groups = make(map[string][]string)
+	}
+
+	c.mu.Lock()
+	c.users = newUsers
+	c.groups = groups
+	c.lastRefresh = snap.RefreshedAt
+	c.stale = true // still stale until next live refresh confirms the directory is reachable
+	c.mu.Unlock()
+
+	log.Printf("LDAP CACHE: preloaded snapshot: %d users, %d groups (from %s)",
+		len(newUsers), len(groups), snap.RefreshedAt.Format(time.RFC3339))
+	return nil
 }
 
 // GetUser returns a cached user by username. Returns nil, false if not cached.

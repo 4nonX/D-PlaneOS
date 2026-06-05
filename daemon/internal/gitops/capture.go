@@ -114,20 +114,7 @@ func CaptureCategories(live *LiveState, categories []string) *DesiredState {
 
 	if set["replication"] {
 		for _, r := range live.Replication {
-			out.Replication = append(out.Replication, DesiredReplication{
-				Name:              r.Name,
-				SourceDataset:     r.SourceDataset,
-				RemoteHost:        r.RemoteHost,
-				RemoteUser:        r.RemoteUser,
-				RemotePort:        r.RemotePort,
-				RemotePool:        r.RemotePool,
-				SSHKeyPath:        r.SSHKeyPath,
-				Interval:          r.Interval,
-				TriggerOnSnapshot: r.TriggerOnSnapshot,
-				Compress:          r.Compress,
-				RateLimitMB:       r.RateLimitMB,
-				Enabled:           r.Enabled,
-			})
+			out.Replication = append(out.Replication, DesiredReplication(r))
 		}
 	}
 

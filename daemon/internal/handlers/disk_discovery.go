@@ -1,4 +1,4 @@
-﻿package handlers
+package handlers
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -70,7 +71,7 @@ func HandleDiskDiscovery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"disks":       disks,
 		"suggestions": generatePoolSuggestions(disks),
 	})
@@ -99,7 +100,7 @@ func HandleReplacementDiskCandidates(w http.ResponseWriter, r *http.Request) {
 		out = append(out, d)
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"disks":   out,
 	})
@@ -233,8 +234,8 @@ func readWWN(devName string) string {
 	// Fall back to parsing the by-id path.
 	byID := findByIDPath(devName)
 	base := filepath.Base(byID)
-	if strings.HasPrefix(base, "wwn-") {
-		return strings.TrimPrefix(base, "wwn-")
+	if s, ok := strings.CutPrefix(base, "wwn-"); ok {
+		return s
 	}
 	return ""
 }
@@ -369,8 +370,8 @@ func getPoolForDisk(byIDPath, devName string, zpoolStatus string) (poolName, hea
 	currentPool := ""
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "pool:") {
-			currentPool = strings.TrimSpace(strings.TrimPrefix(trimmed, "pool:"))
+		if v, ok := strings.CutPrefix(trimmed, "pool:"); ok {
+			currentPool = strings.TrimSpace(v)
 			continue
 		}
 		if currentPool == "" {
@@ -409,22 +410,7 @@ func hasMountPoint(dev blockDevice) bool {
 	if strings.TrimSpace(dev.MountPoint) != "" {
 		return true
 	}
-	for _, child := range dev.Children {
-		if hasMountPoint(child) {
-			return true
-		}
-	}
-	return false
-}
-
-// isInZFSPool is kept for backwards compatibility; discoverDisks() now uses
-// getPoolForDisk instead.
-func isInZFSPool(diskName string) bool {
-	zpoolOut, err := runFast("zpool", "status", "-P")
-	if err != nil {
-		return false
-	}
-	return diskNameInZpoolStatus(string(zpoolOut), diskName)
+	return slices.ContainsFunc(dev.Children, hasMountPoint)
 }
 
 func diskNameInZpoolStatus(status, diskName string) bool {
@@ -433,11 +419,6 @@ func diskNameInZpoolStatus(status, diskName string) bool {
 	}
 	pattern := regexp.MustCompile(`(^|[^[:alnum:]])` + regexp.QuoteMeta(diskName) + `(p?[0-9]+)?([^[:alnum:]]|$)`)
 	return pattern.MatchString(status)
-}
-
-// detectDiskType is the original simple classifier; kept so existing callers compile.
-func detectDiskType(name string) string {
-	return detectDiskTypeEnhanced(name)
 }
 
 // runFast is a thin wrapper around exec with a 10-second timeout, returning
@@ -517,12 +498,9 @@ func generatePoolSuggestions(disks []DiskInfo) []PoolSuggestion {
 	}
 
 	if len(available) >= 4 {
-		numDisks := len(available)
-		if numDisks > 6 {
-			numDisks = 6
-		}
+		numDisks := min(len(available), 6)
 		var diskPaths []string
-		for i := 0; i < numDisks; i++ {
+		for i := range numDisks {
 			diskPaths = append(diskPaths, stableID(available[i]))
 		}
 		suggestions = append(suggestions, PoolSuggestion{
@@ -799,8 +777,8 @@ func resolveAndValidateDiskPaths(paths []string) ([]string, error) {
 
 		// Full /dev/<name> path - strip to bare name and look up.
 		name := p
-		if strings.HasPrefix(p, "/dev/") {
-			name = strings.TrimPrefix(p, "/dev/")
+		if v, ok := strings.CutPrefix(p, "/dev/"); ok {
+			name = v
 		}
 
 		// name must not contain slashes or path separators (injection guard).

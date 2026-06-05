@@ -87,7 +87,7 @@ func (h *SystemHandler) GetUPSStatus(w http.ResponseWriter, r *http.Request) {
 	upsData := parseUPSData(output)
 	respondOK(w, CommandResponse{
 		Success: true,
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"battery_charge":  getUPSValue(upsData, "battery.charge", "N/A") + "%",
 			"battery_runtime": getUPSValue(upsData, "battery.runtime", "N/A") + " sec",
 			"status":          getUPSValue(upsData, "ups.status", "Unknown"),
@@ -166,7 +166,7 @@ func (h *SystemHandler) SaveUPSConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.LogActivity(user, "ups_config_save", map[string]interface{}{
+	audit.LogActivity(user, "ups_config_save", map[string]any{
 		"action":    req.Action,
 		"threshold": req.Threshold,
 		"grace":     req.Grace,
@@ -202,14 +202,14 @@ func (h *SystemHandler) handleNetworkGet(w http.ResponseWriter, _ *http.Request,
 	duration := time.Since(start)
 	audit.LogCommand(audit.LevelInfo, user, "ip_addr", nil, addrErr == nil, duration, addrErr)
 	if addrErr != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": addrErr.Error(), "duration_ms": duration.Milliseconds()})
+		respondOK(w, map[string]any{"success": false, "error": addrErr.Error(), "duration_ms": duration.Milliseconds()})
 		return
 	}
 
 	// Convert to map slice expected by frontend
-	interfaces := make([]map[string]interface{}, 0, len(addrs))
+	interfaces := make([]map[string]any, 0, len(addrs))
 	for _, a := range addrs {
-		interfaces = append(interfaces, map[string]interface{}{
+		interfaces = append(interfaces, map[string]any{
 			"addr":  a.IP.String(),
 			"cidr":  a.CIDR.String(),
 		})
@@ -217,12 +217,12 @@ func (h *SystemHandler) handleNetworkGet(w http.ResponseWriter, _ *http.Request,
 
 	// Get routes via netlinkx (reads /proc/net/route - no exec)
 	nlRoutes, routeErr := netlinkx.RouteList()
-	routes := make([]map[string]interface{}, 0, len(nlRoutes))
+	routes := make([]map[string]any, 0, len(nlRoutes))
 	if routeErr != nil {
 		log.Printf("failed to read routes: %v", routeErr)
 	} else {
 		for _, rt := range nlRoutes {
-			routes = append(routes, map[string]interface{}{
+			routes = append(routes, map[string]any{
 				"dst":  rt.Dst.String(),
 				"via":  rt.Gateway.String(),
 				"dev":  rt.Iface,
@@ -230,19 +230,19 @@ func (h *SystemHandler) handleNetworkGet(w http.ResponseWriter, _ *http.Request,
 		}
 	}
 
-	dns := map[string]interface{}{"nameservers": []string{}, "search": []string{}}
+	dns := map[string]any{"nameservers": []string{}, "search": []string{}}
 	if content, err := os.ReadFile("/etc/resolv.conf"); err == nil {
-		for _, line := range strings.Split(string(content), "\n") {
+		for line := range strings.SplitSeq(string(content), "\n") {
 			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "nameserver ") {
-				dns["nameservers"] = append(dns["nameservers"].([]string), strings.TrimSpace(strings.TrimPrefix(line, "nameserver ")))
-			} else if strings.HasPrefix(line, "search ") {
-				dns["search"] = strings.Fields(strings.TrimSpace(strings.TrimPrefix(line, "search ")))
+			if s, ok := strings.CutPrefix(line, "nameserver "); ok {
+				dns["nameservers"] = append(dns["nameservers"].([]string), strings.TrimSpace(s))
+			} else if s, ok := strings.CutPrefix(line, "search "); ok {
+				dns["search"] = strings.Fields(strings.TrimSpace(s))
 			}
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"interfaces":  interfaces,
 		"routes":      routes,
@@ -306,7 +306,7 @@ func netmaskToCIDR(mask string) int {
 }
 
 func (h *SystemHandler) handleNetworkPost(w http.ResponseWriter, r *http.Request, user string) {
-	var req map[string]interface{}
+	var req map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request", http.StatusBadRequest)
 		return
@@ -354,13 +354,13 @@ func (h *SystemHandler) handleNetworkPost(w http.ResponseWriter, r *http.Request
 			_ = netlinkx.RouteReplace("default", strings.Split(gateway, "/")[0], iface)
 		}
 		if err != nil {
-			respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+			respondOK(w, map[string]any{"success": false, "error": err.Error()})
 			return
 		}
 		audit.LogCommand(audit.LevelInfo, user, "network_configure", []string{iface, address}, true, time.Since(opStart), nil)
 		// Persist to DB (boot reconciliation) and Nix fragment (NixOS: systemd.network)
 		persistStaticIP(iface, address, strings.Split(gateway, "/")[0], nil)
-		respondOK(w, map[string]interface{}{"success": true, "message": "Interface configured"})
+		respondOK(w, map[string]any{"success": true, "message": "Interface configured"})
 		return
 	}
 
@@ -395,17 +395,17 @@ func (h *SystemHandler) handleNetworkPost(w http.ResponseWriter, r *http.Request
 			_, routeErr = executeCommand("ip", delArgs)
 		}
 		if routeErr != nil {
-			respondOK(w, map[string]interface{}{"success": false, "error": routeErr.Error()})
+			respondOK(w, map[string]any{"success": false, "error": routeErr.Error()})
 			return
 		}
-		respondOK(w, map[string]interface{}{"success": true})
+		respondOK(w, map[string]any{"success": true})
 		return
 	}
 
 	if action == "set_dns" {
 		// { "action": "set_dns", "nameservers": ["1.1.1.1", "8.8.8.8"], "search": ["example.com"] }
 		var servers []string
-		if raw, ok := req["nameservers"].([]interface{}); ok {
+		if raw, ok := req["nameservers"].([]any); ok {
 			for _, s := range raw {
 				if ip, ok := s.(string); ok && net.ParseIP(strings.TrimSpace(ip)) != nil {
 					servers = append(servers, strings.TrimSpace(ip))
@@ -417,7 +417,7 @@ func (h *SystemHandler) handleNetworkPost(w http.ResponseWriter, r *http.Request
 			return
 		}
 		var searchDomains []string
-		if raw, ok := req["search"].([]interface{}); ok {
+		if raw, ok := req["search"].([]any); ok {
 			for _, s := range raw {
 				if domain, ok := s.(string); ok && domain != "" {
 					searchDomains = append(searchDomains, strings.TrimSpace(domain))
@@ -440,7 +440,7 @@ func (h *SystemHandler) handleNetworkPost(w http.ResponseWriter, r *http.Request
 		// Persist to Nix fragment (NixOS: networking.nameservers)
 		persistDNS(servers)
 		audit.LogCommand(audit.LevelInfo, user, "dns_set", servers, true, 0, nil)
-		respondOK(w, map[string]interface{}{"success": true, "nameservers": servers, "search": searchDomains})
+		respondOK(w, map[string]any{"success": true, "nameservers": servers, "search": searchDomains})
 		return
 	}
 
@@ -500,7 +500,7 @@ func (h *SystemHandler) Reboot(w http.ResponseWriter, r *http.Request) {
 	user := r.Header.Get("X-User")
 	audit.LogActivity(user, "system_reboot", nil)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "System rebooting in 2 seconds...",
 	})
@@ -521,7 +521,7 @@ func (h *SystemHandler) Poweroff(w http.ResponseWriter, r *http.Request) {
 	user := r.Header.Get("X-User")
 	audit.LogActivity(user, "system_poweroff", nil)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "System powering off in 2 seconds...",
 	})
@@ -586,7 +586,7 @@ func (h *SystemHandler) RunDiagnostics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmdEntry, _ := security.CommandWhitelist[name]
+	cmdEntry := security.CommandWhitelist[name]
 	cmd := exec.Command(cmdEntry.Path, args...)
 
 	start := time.Now()
@@ -637,7 +637,7 @@ func (h *SystemHandler) RunDiagnostics(w http.ResponseWriter, r *http.Request) {
 
 func parseUPSData(output string) map[string]string {
 	data := make(map[string]string)
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) == 2 {
 			data[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
@@ -653,17 +653,17 @@ func getUPSValue(data map[string]string, key, defaultValue string) string {
 	return defaultValue
 }
 
-func parseJournalLogs(output string) []map[string]interface{} {
-	var logs []map[string]interface{}
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+func parseJournalLogs(output string) []map[string]any {
+	var logs []map[string]any
+	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
 		if line == "" {
 			continue
 		}
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		if err := json.Unmarshal([]byte(line), &logEntry); err != nil {
 			continue
 		}
-		entry := map[string]interface{}{
+		entry := map[string]any{
 			"time":    fmt.Sprintf("%v", logEntry["__REALTIME_TIMESTAMP"]),
 			"message": fmt.Sprintf("%v", logEntry["MESSAGE"]),
 			"unit":    fmt.Sprintf("%v", logEntry["_SYSTEMD_UNIT"]),

@@ -53,7 +53,7 @@ func (h *ZFSEncryptionHandler) ListEncryptedDatasets(w http.ResponseWriter, r *h
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success":  true,
 		"datasets": datasets,
 	})
@@ -86,7 +86,7 @@ func (h *ZFSEncryptionHandler) UnlockDataset(w http.ResponseWriter, r *http.Requ
 
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to unlock: %v - %s", err, string(output)),
 		})
@@ -116,7 +116,7 @@ func (h *ZFSEncryptionHandler) LockDataset(w http.ResponseWriter, r *http.Reques
 	output, err := cmdutil.RunFast("zfs", "unload-key", req.Dataset)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to lock: %v - %s", err, string(output)),
 		})
@@ -171,7 +171,7 @@ func (h *ZFSEncryptionHandler) CreateEncryptedDataset(w http.ResponseWriter, r *
 	
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to create: %v - %s", err, string(out)),
 		})
@@ -210,7 +210,7 @@ func (h *ZFSEncryptionHandler) ChangeKey(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to change key: %v - %s", err, string(out)),
 		})

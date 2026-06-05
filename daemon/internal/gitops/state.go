@@ -939,7 +939,7 @@ type parsedLine struct {
 	lineNum int
 }
 
-type yamlNode = interface{} // string | map[string]yamlNode | []yamlNode
+type yamlNode = any // string | map[string]yamlNode | []yamlNode
 
 func splitLines(s string) []parsedLine {
 	var result []parsedLine

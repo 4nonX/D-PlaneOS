@@ -34,7 +34,7 @@ func NewLDAPHandler(db *sql.DB) *LDAPHandler {
 
 type ldapResp struct {
 	Success bool        `json:"success"`
-	Data    interface{} `json:"data,omitempty"`
+	Data    any `json:"data,omitempty"`
 	Error   string      `json:"error,omitempty"`
 	Warning string      `json:"warning,omitempty"`
 }
@@ -194,7 +194,7 @@ func (h *LDAPHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 	audit.Log(audit.AuditLog{
 		Level: audit.LevelInfo, Command: "LDAP_CONFIG_SAVE",
 		User: r.Header.Get("X-User"), Success: true,
-		Metadata: map[string]interface{}{"enabled": req.Enabled, "server": req.Server},
+		Metadata: map[string]any{"enabled": req.Enabled, "server": req.Server},
 	})
 	var warning string
 	if req.UseTLS == 0 {
@@ -263,7 +263,7 @@ func (h *LDAPHandler) TestConnection(w http.ResponseWriter, r *http.Request) {
 	msg := fmt.Sprintf("Connected in %dms", ms)
 	h.updateTest(true, msg)
 	audit.Log(audit.AuditLog{Level: audit.LevelInfo, Command: "LDAP_TEST_OK", User: r.Header.Get("X-User"), Success: true})
-	writeJSON(w, 200, ldapResp{Success: true, Data: map[string]interface{}{"message": msg, "duration_ms": ms}})
+	writeJSON(w, 200, ldapResp{Success: true, Data: map[string]any{"message": msg, "duration_ms": ms}})
 }
 
 // ============================================================
@@ -403,7 +403,7 @@ func (h *LDAPHandler) TriggerSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.Log(audit.AuditLog{Level: audit.LevelInfo, Command: "LDAP_SYNC_MANUAL", User: r.Header.Get("X-User"), Success: success})
-	writeJSON(w, 200, ldapResp{Success: success, Data: map[string]interface{}{
+	writeJSON(w, 200, ldapResp{Success: success, Data: map[string]any{
 		"message":       msg,
 		"duration_ms":   ms,
 		"users_found":   syncRes.UsersFound,
@@ -524,7 +524,7 @@ func (h *LDAPHandler) AddMapping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	audit.Log(audit.AuditLog{Level: audit.LevelInfo, Command: "LDAP_MAPPING_ADD", User: r.Header.Get("X-User"), Success: true,
-		Metadata: map[string]interface{}{"ldap_group": req.LDAPGroup, "role": req.RoleName}})
+		Metadata: map[string]any{"ldap_group": req.LDAPGroup, "role": req.RoleName}})
 	writeJSON(w, 201, ldapResp{Success: true, Data: map[string]int64{"id": id}})
 }
 
@@ -797,7 +797,7 @@ func (h *LDAPHandler) CreateDomain(w http.ResponseWriter, r *http.Request) {
 	audit.Log(audit.AuditLog{
 		Level: audit.LevelInfo, Command: "AD_DOMAIN_CREATE",
 		User: r.Header.Get("X-User"), Success: true,
-		Metadata: map[string]interface{}{"name": req.Name, "realm": req.Realm},
+		Metadata: map[string]any{"name": req.Name, "realm": req.Realm},
 	})
 	syncIDMAPToNixwriter(h.db)
 	writeJSON(w, 200, ldapResp{Success: true})
@@ -832,7 +832,7 @@ func (h *LDAPHandler) DeleteDomain(w http.ResponseWriter, r *http.Request) {
 	audit.Log(audit.AuditLog{
 		Level: audit.LevelInfo, Command: "AD_DOMAIN_DELETE",
 		User: r.Header.Get("X-User"), Success: true,
-		Metadata: map[string]interface{}{"name": name},
+		Metadata: map[string]any{"name": name},
 	})
 	syncIDMAPToNixwriter(h.db)
 	writeJSON(w, 200, ldapResp{Success: true})
@@ -920,15 +920,15 @@ func (h *LDAPHandler) JoinDomain(w http.ResponseWriter, r *http.Request) {
 		audit.Log(audit.AuditLog{
 			Level: audit.LevelInfo, Command: "AD_DOMAIN_JOIN",
 			User: user, Success: true,
-			Metadata: map[string]interface{}{"domain": name, "realm": realm},
+			Metadata: map[string]any{"domain": name, "realm": realm},
 		})
 
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"domain": name, "realm": realm, "joined": true,
 		})
 	})
 
-	respondJSON(w, http.StatusAccepted, map[string]interface{}{"job_id": jobID})
+	respondJSON(w, http.StatusAccepted, map[string]any{"job_id": jobID})
 }
 
 // ============================================================
@@ -990,13 +990,13 @@ func (h *LDAPHandler) LeaveDomain(w http.ResponseWriter, r *http.Request) {
 		audit.Log(audit.AuditLog{
 			Level: audit.LevelInfo, Command: "AD_DOMAIN_LEAVE",
 			User: user, Success: true,
-			Metadata: map[string]interface{}{"domain": name},
+			Metadata: map[string]any{"domain": name},
 		})
 
-		j.Done(map[string]interface{}{"domain": name, "left": true})
+		j.Done(map[string]any{"domain": name, "left": true})
 	})
 
-	respondJSON(w, http.StatusAccepted, map[string]interface{}{"job_id": jobID})
+	respondJSON(w, http.StatusAccepted, map[string]any{"job_id": jobID})
 }
 
 // syncIDMAPToNixwriter reads all enabled ad_domains and updates the nixwriter

@@ -217,8 +217,7 @@ func ValidatePoolTopology(top *PoolTopology) error {
 // TopologyDiskFingerprint returns sorted unique disk paths for drift comparison (best-effort).
 func TopologyDiskFingerprint(top PoolTopology) []string {
 	seen := map[string]bool{}
-	var collect func([]VdevGroup)
-	collect = func(groups []VdevGroup) {
+	collect := func(groups []VdevGroup) {
 		for _, g := range groups {
 			for _, d := range g.Disks {
 				d = strings.TrimSpace(d)

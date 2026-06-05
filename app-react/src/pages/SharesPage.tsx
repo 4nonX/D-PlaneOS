@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { Modal } from '@/components/ui/Modal'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { toast } from '@/hooks/useToast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -240,7 +241,7 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
 // ---------------------------------------------------------------------------
 
 function ShareCard({ share, onDeleted, onEdit }: { share: Share; onDeleted: () => void; onEdit: () => void }) {
-  const [confirming, setConfirming] = useState(false)
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete('/api/shares', { name: share.name }),
@@ -262,20 +263,12 @@ function ShareCard({ share, onDeleted, onEdit }: { share: Share; onDeleted: () =
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-        {!confirming
-          ? <>
-              <button className="btn btn-ghost" onClick={onEdit}><Icon name="edit" size={14} />Edit</button>
-              <button className="btn btn-danger" onClick={() => setConfirming(true)}><Icon name="delete" size={14} />Delete</button>
-            </>
-          : <>
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', alignSelf: 'center' }}>Sure?</span>
-              <button className="btn btn-danger" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
-                {deleteMutation.isPending ? '…' : 'Yes'}
-              </button>
-              <button className="btn btn-ghost" onClick={() => setConfirming(false)}>No</button>
-            </>
-        }
+        <button className="btn btn-ghost" onClick={onEdit}><Icon name="edit" size={14} />Edit</button>
+        <button className="btn btn-danger" onClick={async () => { if (await confirm({ title: `Delete share "${share.name}"?`, message: 'This SMB share will be removed.', danger: true, confirmLabel: 'Delete' })) { deleteMutation.mutate() } }} disabled={deleteMutation.isPending}>
+          <Icon name="delete" size={14} />Delete
+        </button>
       </div>
+      <ConfirmDialog />
     </div>
   )
 }

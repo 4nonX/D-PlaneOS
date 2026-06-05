@@ -61,18 +61,6 @@ func loadRsyncSchedules() ([]RsyncSchedule, error) {
 	return out, nil
 }
 
-func saveRsyncSchedules(schedules []RsyncSchedule) error {
-	rsyncSchedMu.Lock()
-	defer rsyncSchedMu.Unlock()
-
-	os.MkdirAll(ConfigDir, 0755)
-	data, err := json.MarshalIndent(schedules, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(configPath(rsyncScheduleFile), data, 0600)
-}
-
 // atomicModifyRsyncSchedules holds the write lock across the full load-modify-save
 // cycle, eliminating TOCTOU races between concurrent CRUD requests.
 func atomicModifyRsyncSchedules(fn func([]RsyncSchedule) ([]RsyncSchedule, error)) error {
@@ -170,7 +158,7 @@ func ListRsyncSchedules(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, "Failed to load schedules", http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "schedules": schedules})
+	respondOK(w, map[string]any{"success": true, "schedules": schedules})
 }
 
 // POST /api/backup/rsync/schedules
@@ -206,8 +194,8 @@ func CreateRsyncSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	installRsyncTimers(final)
 
-	audit.LogActivity(r.Header.Get("X-User"), "rsync_schedule_create", map[string]interface{}{"id": s.ID, "name": s.Name})
-	respondOK(w, map[string]interface{}{"success": true, "schedule": s})
+	audit.LogActivity(r.Header.Get("X-User"), "rsync_schedule_create", map[string]any{"id": s.ID, "name": s.Name})
+	respondOK(w, map[string]any{"success": true, "schedule": s})
 }
 
 // PUT /api/backup/rsync/schedules/{id}
@@ -246,8 +234,8 @@ func UpdateRsyncSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	installRsyncTimers(final)
 
-	audit.LogActivity(r.Header.Get("X-User"), "rsync_schedule_update", map[string]interface{}{"id": id})
-	respondOK(w, map[string]interface{}{"success": true, "schedule": req})
+	audit.LogActivity(r.Header.Get("X-User"), "rsync_schedule_update", map[string]any{"id": id})
+	respondOK(w, map[string]any{"success": true, "schedule": req})
 }
 
 // DELETE /api/backup/rsync/schedules/{id}
@@ -282,8 +270,8 @@ func DeleteRsyncSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	installRsyncTimers(final)
 
-	audit.LogActivity(r.Header.Get("X-User"), "rsync_schedule_delete", map[string]interface{}{"id": id})
-	respondOK(w, map[string]interface{}{"success": true})
+	audit.LogActivity(r.Header.Get("X-User"), "rsync_schedule_delete", map[string]any{"id": id})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // POST /api/backup/rsync/schedules/{id}/run
@@ -327,7 +315,7 @@ func RunRsyncScheduleNow(w http.ResponseWriter, r *http.Request) {
 					j.Fail(err.Error())
 				} else {
 					all[i].LastStatus = "done"
-					j.Done(map[string]interface{}{"output": string(output)})
+					j.Done(map[string]any{"output": string(output)})
 				}
 				all[i].LastJobID = j.ID
 				break
@@ -351,8 +339,8 @@ func RunRsyncScheduleNow(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WARN: RunRsyncScheduleNow: failed to persist running status for %s: %v", id, err)
 	}
 
-	audit.LogActivity(r.Header.Get("X-User"), "rsync_schedule_run_now", map[string]interface{}{"id": id})
-	respondOK(w, map[string]interface{}{"success": true, "job_id": jobID})
+	audit.LogActivity(r.Header.Get("X-User"), "rsync_schedule_run_now", map[string]any{"id": id})
+	respondOK(w, map[string]any{"success": true, "job_id": jobID})
 }
 
 // POST /api/backup/rsync/cron-hook
@@ -383,7 +371,7 @@ func RsyncCronHook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !target.Enabled {
-		respondOK(w, map[string]interface{}{"success": true, "skipped": "disabled"})
+		respondOK(w, map[string]any{"success": true, "skipped": "disabled"})
 		return
 	}
 
@@ -408,7 +396,7 @@ func RsyncCronHook(w http.ResponseWriter, r *http.Request) {
 					j.Fail(runErr.Error())
 				} else {
 					all[i].LastStatus = "done"
-					j.Done(map[string]interface{}{"output": string(output)})
+					j.Done(map[string]any{"output": string(output)})
 				}
 				break
 			}
@@ -419,5 +407,5 @@ func RsyncCronHook(w http.ResponseWriter, r *http.Request) {
 	})
 
 	log.Printf("RSYNC SCHEDULE: started job %s for schedule %s", jobID, scheduleID)
-	respondOK(w, map[string]interface{}{"success": true, "job_id": jobID})
+	respondOK(w, map[string]any{"success": true, "job_id": jobID})
 }

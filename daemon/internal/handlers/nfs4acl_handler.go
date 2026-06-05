@@ -87,14 +87,14 @@ func SetNFS4ACL(w http.ResponseWriter, r *http.Request) {
 	audit.LogCommand(audit.LevelInfo, user, "nfs4_setfacl", []string{req.Path}, err == nil, duration, err)
 
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   string(out),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"path":    req.Path,
 	})

@@ -1,4 +1,4 @@
-﻿package gitops
+package gitops
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 // DriftBroadcaster is the interface the detector uses to emit WS events.
 // Matches MonitorHub.Broadcast exactly - no import cycle needed.
 type DriftBroadcaster interface {
-	Broadcast(eventType string, data interface{}, level string)
+	Broadcast(eventType string, data any, level string)
 }
 
 // DriftDetector monitors for divergence between desired and live state.
@@ -218,7 +218,7 @@ func (d *DriftDetector) broadcast(result *DriftResult) {
 		level = "warning"
 	}
 
-	d.hub.Broadcast("gitops.drift", map[string]interface{}{
+	d.hub.Broadcast("gitops.drift", map[string]any{
 		"drifted":       result.Drifted,
 		"error":         result.Error,
 		"checked_at":    result.CheckedAt.Format(time.RFC3339),

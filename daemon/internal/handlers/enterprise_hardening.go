@@ -88,7 +88,7 @@ func (h *StateLockHandler) CheckStaleLocks(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"stale_locks": staleLocks,
 		"count":       len(staleLocks),
@@ -107,10 +107,10 @@ func (h *StateLockHandler) ClearStaleLock(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := ClearOperationLock(req.Dataset); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Lock cleared on %s", req.Dataset),
 	})
@@ -189,7 +189,7 @@ func (h *NixOSGuardHandler) DiffGenerations(w http.ResponseWriter, r *http.Reque
 		fromPkgs, _ := executeCommandWithTimeout(TimeoutFast, "ls", []string{fromPath + "/sw/bin/"})
 		toPkgs, _ := executeCommandWithTimeout(TimeoutFast, "ls", []string{toPath + "/sw/bin/"})
 
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":       true,
 			"method":        "package-list",
 			"from_packages": strings.Fields(fromPkgs),
@@ -198,7 +198,7 @@ func (h *NixOSGuardHandler) DiffGenerations(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"method":  "nix-diff",
 		"from":    from,
@@ -287,7 +287,7 @@ func (h *NixOSGuardHandler) ApplyWithWatchdog(w http.ResponseWriter, r *http.Req
 
 	// Enforce global reconciliation lock (Safety Phase 12.1)
 	if !gitops.TryLock() {
-		respondJSON(w, 423, map[string]interface{}{
+		respondJSON(w, 423, map[string]any{
 			"success": false,
 			"error":   "A reconciliation is already in progress. Please wait for the current operation to finish.",
 		})
@@ -370,7 +370,7 @@ func (h *NixOSGuardHandler) ApplyWithWatchdog(w http.ResponseWriter, r *http.Req
 		select {
 		case <-watchdogConfirmChan:
 			j.Log("Config change confirmed by user.")
-			j.Done(map[string]interface{}{
+			j.Done(map[string]any{
 				"status":        "confirmed",
 				"output":        output,
 				"pre_snapshots": preSnapshots,
@@ -392,7 +392,7 @@ func (h *NixOSGuardHandler) ApplyWithWatchdog(w http.ResponseWriter, r *http.Req
 		}
 	})
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"job_id":  jobID,
 		"message": "NixOS apply started in background",
@@ -406,7 +406,7 @@ func (h *NixOSGuardHandler) ConfirmApply(w http.ResponseWriter, r *http.Request)
 	defer watchdogMu.Unlock()
 
 	if !watchdogActive {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"message": "No pending watchdog to confirm",
 		})
@@ -421,7 +421,7 @@ func (h *NixOSGuardHandler) ConfirmApply(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "Config change confirmed. Watchdog cancelled.",
 	})
@@ -443,7 +443,7 @@ func (h *NixOSGuardHandler) WatchdogStatus(w http.ResponseWriter, r *http.Reques
 		deadline = watchdogDeadline.Format(time.RFC3339)
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":         true,
 		"watchdog_active": watchdogActive,
 		"deadline":        deadline,
@@ -459,21 +459,21 @@ func (h *NixOSGuardHandler) WatchdogStatus(w http.ResponseWriter, r *http.Reques
 // DockerPreFlight verifies Docker and ZFS are in sync
 // GET /api/docker/preflight
 func (h *DockerHandler) PreFlightCheck(w http.ResponseWriter, r *http.Request) {
-	checks := []map[string]interface{}{}
+	checks := []map[string]any{}
 
 	// Check 1: Docker is running
 	_, err := executeCommandWithTimeout(TimeoutFast, "docker", []string{"info", "--format", "{{.Driver}}"})
 	if err != nil {
-		checks = append(checks, map[string]interface{}{"check": "docker_running", "pass": false, "error": "Docker daemon not responding"})
+		checks = append(checks, map[string]any{"check": "docker_running", "pass": false, "error": "Docker daemon not responding"})
 	} else {
-		checks = append(checks, map[string]interface{}{"check": "docker_running", "pass": true})
+		checks = append(checks, map[string]any{"check": "docker_running", "pass": true})
 	}
 
 	// Check 2: Docker storage driver is ZFS
 	driverOut, _ := executeCommandWithTimeout(TimeoutFast, "docker", []string{"info", "--format", "{{.Driver}}"})
 	driver := strings.TrimSpace(driverOut)
 	isZFS := driver == "zfs"
-	checks = append(checks, map[string]interface{}{
+	checks = append(checks, map[string]any{
 		"check":  "storage_driver_zfs",
 		"pass":   isZFS,
 		"driver": driver,
@@ -482,10 +482,10 @@ func (h *DockerHandler) PreFlightCheck(w http.ResponseWriter, r *http.Request) {
 	// Check 3: ZFS pools are imported
 	poolOut, err := executeCommandWithTimeout(TimeoutFast, "zpool", []string{"list", "-H", "-o", "name,health"})
 	if err != nil {
-		checks = append(checks, map[string]interface{}{"check": "zfs_pools", "pass": false, "error": "No ZFS pools found"})
+		checks = append(checks, map[string]any{"check": "zfs_pools", "pass": false, "error": "No ZFS pools found"})
 	} else {
 		healthy := !strings.Contains(poolOut, "DEGRADED") && !strings.Contains(poolOut, "FAULTED")
-		checks = append(checks, map[string]interface{}{
+		checks = append(checks, map[string]any{
 			"check": "zfs_pools",
 			"pass":  healthy,
 			"pools": strings.TrimSpace(poolOut),
@@ -506,7 +506,7 @@ func (h *DockerHandler) PreFlightCheck(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	checks = append(checks, map[string]interface{}{
+	checks = append(checks, map[string]any{
 		"check": "no_stale_locks",
 		"pass":  !hasStale,
 	})
@@ -518,7 +518,7 @@ func (h *DockerHandler) PreFlightCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"all_pass": allPass,
 		"checks":   checks,
@@ -571,7 +571,7 @@ func (h *AuditRotationHandler) RotateAuditLogs(w http.ResponseWriter, r *http.Re
 	_, rotErr := h.db.Exec("DELETE FROM audit_logs WHERE timestamp < $1", cutoff)
 
 	if rotErr != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Rotation failed: %v", rotErr),
 		})
@@ -582,7 +582,7 @@ func (h *AuditRotationHandler) RotateAuditLogs(w http.ResponseWriter, r *http.Re
 	var countAfter int
 	h.db.QueryRow("SELECT COUNT(*) FROM audit_logs").Scan(&countAfter)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":      true,
 		"keep_days":    req.KeepDays,
 		"cutoff":       cutoff,
@@ -590,7 +590,7 @@ func (h *AuditRotationHandler) RotateAuditLogs(w http.ResponseWriter, r *http.Re
 		"after_count":  countAfter,
 	})
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":      true,
 		"keep_days":    req.KeepDays,
 		"cutoff":       cutoff,
@@ -609,7 +609,7 @@ func (h *AuditRotationHandler) GetAuditStats(w http.ResponseWriter, r *http.Requ
 
 	dbSize := "N/A (PostgreSQL)"
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":       true,
 		"total_entries": count,
 		"oldest_entry":  oldest.String,
@@ -644,7 +644,7 @@ func (h *AuditRotationHandler) GetAuditLogs(w http.ResponseWriter, r *http.Reque
 
 	query := `SELECT id, timestamp, actor, action, resource, details, ip_address, success 
 	          FROM audit_logs WHERE 1=1`
-	var args []interface{}
+	var args []any
 	argCount := 1
 
 	if search != "" {
@@ -668,7 +668,7 @@ func (h *AuditRotationHandler) GetAuditLogs(w http.ResponseWriter, r *http.Reque
 	}
 	defer rows.Close()
 
-	var logs []map[string]interface{}
+	var logs []map[string]any
 	for rows.Next() {
 		var id int64
 		var ts int64
@@ -677,7 +677,7 @@ func (h *AuditRotationHandler) GetAuditLogs(w http.ResponseWriter, r *http.Reque
 		if err := rows.Scan(&id, &ts, &actor, &action, &resource, &details, &ipAddress, &success); err != nil {
 			continue
 		}
-		logs = append(logs, map[string]interface{}{
+		logs = append(logs, map[string]any{
 			"id":         id,
 			"timestamp":  time.Unix(ts, 0).Format(time.RFC3339),
 			"actor":      actor,
@@ -693,10 +693,10 @@ func (h *AuditRotationHandler) GetAuditLogs(w http.ResponseWriter, r *http.Reque
 		log.Printf("WARN: audit log list rows: %v", err)
 	}
 	if logs == nil {
-		logs = []map[string]interface{}{}
+		logs = []map[string]any{}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"logs":    logs,
 		"limit":   limit,
@@ -711,14 +711,14 @@ func (h *AuditRotationHandler) GetCEStatus(w http.ResponseWriter, r *http.Reques
 	err := h.db.QueryRow("SELECT COUNT(*) FROM api_tokens WHERE name='compliance-engine-token'").Scan(&count)
 	if err != nil {
 		// Table might not exist in early v7.x or dev envs
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"has_compliance_engine": false,
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"has_compliance_engine": count > 0,
 	})
@@ -794,7 +794,7 @@ func (h *ZombieWatcherHandler) CheckDiskLatency(w http.ResponseWriter, r *http.R
 		overall = "slow"
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"overall": overall,
 		"disks":   results,
@@ -894,7 +894,7 @@ func HandleSMARTPrediction(w http.ResponseWriter, r *http.Request) {
 		"-A", "-j", devicePath,
 	})
 	if err != nil && output == "" {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"device":  device,
 			"error":   "smartctl failed: " + err.Error(),
@@ -913,7 +913,7 @@ func HandleSMARTPrediction(w http.ResponseWriter, r *http.Request) {
 		recommendation = "Replace this disk immediately. Back up all data now."
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":        true,
 		"device":         device,
 		"risk":           risk,

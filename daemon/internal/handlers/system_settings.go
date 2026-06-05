@@ -1,4 +1,4 @@
-﻿package handlers
+package handlers
 
 import (
 	"bufio"
@@ -157,7 +157,7 @@ func HandleSystemSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"success": true,
 			"status":  "saved",
 		}

@@ -67,7 +67,7 @@ func ExpandRAIDZ(w http.ResponseWriter, r *http.Request) {
 
 	jobID := jobs.Start("raidz-expand", func(j *jobs.Job) {
 		if diskEventHub != nil {
-			diskEventHub.Broadcast("raidz_expand_started", map[string]interface{}{
+			diskEventHub.Broadcast("raidz_expand_started", map[string]any{
 				"pool":        pool,
 				"anchor_disk": anchorDisk,
 				"new_disk":    newDisk,
@@ -77,7 +77,7 @@ func ExpandRAIDZ(w http.ResponseWriter, r *http.Request) {
 		output, err := executeCommandWithTimeout(TimeoutMedium, "zpool", []string{"attach", pool, anchorDisk, newDisk})
 		if err != nil {
 			if diskEventHub != nil {
-				diskEventHub.Broadcast("raidz_expand_completed", map[string]interface{}{
+				diskEventHub.Broadcast("raidz_expand_completed", map[string]any{
 					"pool":    pool,
 					"success": false,
 					"error":   err.Error(),
@@ -91,12 +91,12 @@ func ExpandRAIDZ(w http.ResponseWriter, r *http.Request) {
 		// Start a polling goroutine to emit progress events.
 		go pollRAIDZExpansion(pool)
 
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"message": "RAID-Z expansion initiated. Data redistribution running in the background.",
 		})
 	})
 
-	respondOK(w, map[string]interface{}{"success": true, "job_id": jobID})
+	respondOK(w, map[string]any{"success": true, "job_id": jobID})
 }
 
 // GetRAIDZExpandStatus returns the current expansion progress for a pool.
@@ -117,7 +117,7 @@ func GetRAIDZExpandStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	expanding, pct, eta := parseExpansionProgress(output)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":    true,
 		"pool":       pool,
 		"expanding":  expanding,
@@ -248,7 +248,7 @@ func pollRAIDZExpansion(pool string) {
 		expanding, pct, eta := parseExpansionProgress(output)
 		if !expanding {
 			if diskEventHub != nil {
-				diskEventHub.Broadcast("raidz_expand_completed", map[string]interface{}{
+				diskEventHub.Broadcast("raidz_expand_completed", map[string]any{
 					"pool":    pool,
 					"success": true,
 				}, "success")
@@ -257,7 +257,7 @@ func pollRAIDZExpansion(pool string) {
 		}
 
 		if diskEventHub != nil {
-			diskEventHub.Broadcast("raidz_expand_progress", map[string]interface{}{
+			diskEventHub.Broadcast("raidz_expand_progress", map[string]any{
 				"pool":    pool,
 				"percent": pct,
 				"eta":     eta,

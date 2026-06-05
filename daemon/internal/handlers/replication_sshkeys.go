@@ -54,7 +54,7 @@ func GenerateReplicationKey(w http.ResponseWriter, r *http.Request) {
 	// Invalidate all peer authorizations - the old key is no longer installed on any host.
 	resetAllRemotesKeyState()
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"public_key": strings.TrimSpace(string(pubKey)),
 		"key_path":   replKeyPath,
@@ -69,7 +69,7 @@ func GetReplicationPubKey(w http.ResponseWriter, r *http.Request) {
 	pubKey, err := os.ReadFile(replPubPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			respondJSON(w, http.StatusOK, map[string]interface{}{
+			respondJSON(w, http.StatusOK, map[string]any{
 				"success": true,
 				"exists":  false,
 			})
@@ -79,7 +79,7 @@ func GetReplicationPubKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"exists":     true,
 		"public_key": strings.TrimSpace(string(pubKey)),

@@ -53,7 +53,7 @@ type gitSyncConfig struct {
 func (h *GitSyncHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.loadConfig()
 	if err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to load config"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to load config"})
 		return
 	}
 
@@ -67,9 +67,9 @@ func (h *GitSyncHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondJSON(w, 200, map[string]interface{}{
+	respondJSON(w, 200, map[string]any{
 		"success": true,
-		"config": map[string]interface{}{
+		"config": map[string]any{
 			"repo_url":      cfg.RepoURL,
 			"branch":        cfg.Branch,
 			"local_path":    cfg.LocalPath,
@@ -108,12 +108,12 @@ func (h *GitSyncHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 		CommitEmail  string `json:"commit_email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Invalid request"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Invalid request"})
 		return
 	}
 
 	if req.RepoURL != "" && !strings.HasPrefix(req.RepoURL, "http") && !strings.HasPrefix(req.RepoURL, "git@") {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Invalid repo URL - use https:// or git@"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Invalid repo URL - use https:// or git@"})
 		return
 	}
 	if req.Branch == "" {
@@ -160,12 +160,12 @@ func (h *GitSyncHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 		req.RepoURL, req.Branch, req.SyncInterval, autoDeploy,
 		req.AuthType, req.SSHKeyPath, req.HostKeyMode, req.CommitName, req.CommitEmail)
 	if err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to save config"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to save config"})
 		return
 	}
 
 	log.Printf("GIT-SYNC: Config updated - repo=%s branch=%s auth=%s", req.RepoURL, req.Branch, req.AuthType)
-	respondJSON(w, 200, map[string]interface{}{"success": true, "message": "Configuration saved"})
+	respondJSON(w, 200, map[string]any{"success": true, "message": "Configuration saved"})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -175,14 +175,14 @@ func (h *GitSyncHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 func (h *GitSyncHandler) Pull(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.loadConfig()
 	if err != nil || cfg.RepoURL == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "No repository configured"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "No repository configured"})
 		return
 	}
 
 	h.syncMu.Lock()
 	if h.syncing {
 		h.syncMu.Unlock()
-		respondJSON(w, 409, map[string]interface{}{"success": false, "error": "Sync already in progress"})
+		respondJSON(w, 409, map[string]any{"success": false, "error": "Sync already in progress"})
 		return
 	}
 	h.syncing = true
@@ -201,7 +201,7 @@ func (h *GitSyncHandler) Pull(w http.ResponseWriter, r *http.Request) {
 			syncErr.Error(), time.Now().Format(time.RFC3339)); err != nil {
 			log.Printf("GIT-SYNC: failed to save error status: %v", err)
 		}
-		respondJSON(w, 200, map[string]interface{}{
+		respondJSON(w, 200, map[string]any{
 			"success": false,
 			"error":   syncErr.Error(),
 			"output":  result,
@@ -216,7 +216,7 @@ func (h *GitSyncHandler) Pull(w http.ResponseWriter, r *http.Request) {
 		log.Printf("GIT-SYNC: failed to update sync status: %v", err)
 	}
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"success": true,
 		"message": "Repository synced",
 		"commit":  commit,
@@ -250,11 +250,11 @@ func (h *GitSyncHandler) Pull(w http.ResponseWriter, r *http.Request) {
 func (h *GitSyncHandler) Status(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.loadConfig()
 	if err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to load config"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to load config"})
 		return
 	}
 
-	status := map[string]interface{}{
+	status := map[string]any{
 		"configured":  cfg.RepoURL != "",
 		"repo_url":    cfg.RepoURL,
 		"branch":      cfg.Branch,
@@ -287,7 +287,7 @@ func (h *GitSyncHandler) Status(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondJSON(w, 200, map[string]interface{}{"success": true, "status": status})
+	respondJSON(w, 200, map[string]any{"success": true, "status": status})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -297,12 +297,12 @@ func (h *GitSyncHandler) Status(w http.ResponseWriter, r *http.Request) {
 func (h *GitSyncHandler) ListStacks(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.loadConfig()
 	if err != nil || cfg.RepoURL == "" {
-		respondJSON(w, 200, map[string]interface{}{"success": true, "stacks": []string{}})
+		respondJSON(w, 200, map[string]any{"success": true, "stacks": []string{}})
 		return
 	}
 
 	files := h.findComposeFiles(cfg.LocalPath)
-	stacks := []map[string]interface{}{}
+	stacks := []map[string]any{}
 
 	for _, f := range files {
 		rel, _ := filepath.Rel(cfg.LocalPath, f)
@@ -312,7 +312,7 @@ func (h *GitSyncHandler) ListStacks(w http.ResponseWriter, r *http.Request) {
 			name = "root"
 		}
 
-		stack := map[string]interface{}{
+		stack := map[string]any{
 			"name": name,
 			"path": f,
 			"file": filepath.Base(f),
@@ -329,7 +329,7 @@ func (h *GitSyncHandler) ListStacks(w http.ResponseWriter, r *http.Request) {
 		stacks = append(stacks, stack)
 	}
 
-	respondJSON(w, 200, map[string]interface{}{"success": true, "stacks": stacks})
+	respondJSON(w, 200, map[string]any{"success": true, "stacks": stacks})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -342,13 +342,13 @@ func (h *GitSyncHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		Down  bool   `json:"down"`  // tear down instead
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Invalid request"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Invalid request"})
 		return
 	}
 
 	cfg, err := h.loadConfig()
 	if err != nil || cfg.RepoURL == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "No repository configured"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "No repository configured"})
 		return
 	}
 
@@ -357,7 +357,7 @@ func (h *GitSyncHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		// Validate the stack path is under our managed directory
 		clean := filepath.Clean(req.Stack)
 		if !strings.HasPrefix(clean, cfg.LocalPath) {
-			respondJSON(w, 403, map[string]interface{}{"success": false, "error": "Path not allowed"})
+			respondJSON(w, 403, map[string]any{"success": false, "error": "Path not allowed"})
 			return
 		}
 		files = []string{clean}
@@ -365,7 +365,7 @@ func (h *GitSyncHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		files = h.findComposeFiles(cfg.LocalPath)
 	}
 
-	results := []map[string]interface{}{}
+	results := []map[string]any{}
 	for _, f := range files {
 		dir := filepath.Dir(f)
 		action := "up"
@@ -376,7 +376,7 @@ func (h *GitSyncHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		}
 
 		out, err := cmdutil.RunSlow("docker", args...)
-		result := map[string]interface{}{
+		result := map[string]any{
 			"stack":   f,
 			"action":  action,
 			"success": err == nil,
@@ -389,7 +389,7 @@ func (h *GitSyncHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		log.Printf("GIT-SYNC: %s %s - success=%v", action, f, err == nil)
 	}
 
-	respondJSON(w, 200, map[string]interface{}{"success": true, "results": results})
+	respondJSON(w, 200, map[string]any{"success": true, "results": results})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -527,7 +527,7 @@ func (h *GitSyncHandler) ExportContainers(w http.ResponseWriter, r *http.Request
 		StackName  string   `json:"stack_name"`  // subdirectory name in repo
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Invalid request"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Invalid request"})
 		return
 	}
 	if req.StackName == "" {
@@ -542,12 +542,12 @@ func (h *GitSyncHandler) ExportContainers(w http.ResponseWriter, r *http.Request
 		// Get all running container names
 		out, err := cmdutil.RunFast("docker", "ps", "--format", "{{.Names}}")
 		if err != nil {
-			respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to list containers"})
+			respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to list containers"})
 			return
 		}
 		names := strings.Split(strings.TrimSpace(string(out)), "\n")
 		if len(names) == 0 || (len(names) == 1 && names[0] == "") {
-			respondJSON(w, 200, map[string]interface{}{"success": false, "error": "No running containers found"})
+			respondJSON(w, 200, map[string]any{"success": false, "error": "No running containers found"})
 			return
 		}
 		args = append(args, names...)
@@ -555,21 +555,21 @@ func (h *GitSyncHandler) ExportContainers(w http.ResponseWriter, r *http.Request
 
 	out, err := cmdutil.RunMedium("docker", args...)
 	if err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "docker inspect failed: " + err.Error()})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "docker inspect failed: " + err.Error()})
 		return
 	}
 
 	// Parse inspect JSON
-	var containers []map[string]interface{}
+	var containers []map[string]any
 	if err := json.Unmarshal(out, &containers); err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to parse inspect output"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to parse inspect output"})
 		return
 	}
 
 	// Generate compose YAML
 	compose := h.generateCompose(containers)
 
-	respondJSON(w, 200, map[string]interface{}{
+	respondJSON(w, 200, map[string]any{
 		"success":  true,
 		"yaml":     compose,
 		"services": len(containers),
@@ -587,23 +587,23 @@ func (h *GitSyncHandler) Push(w http.ResponseWriter, r *http.Request) {
 		Message   string `json:"message"`    // commit message
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Invalid request"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Invalid request"})
 		return
 	}
 
 	cfg, err := h.loadConfig()
 	if err != nil || cfg.RepoURL == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "No repository configured"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "No repository configured"})
 		return
 	}
 
 	if !dirExists(cfg.LocalPath + "/.git") {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Repository not cloned yet - pull first"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Repository not cloned yet - pull first"})
 		return
 	}
 
 	if req.Yaml == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "No YAML content provided"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "No YAML content provided"})
 		return
 	}
 	if req.StackName == "" {
@@ -622,7 +622,7 @@ func (h *GitSyncHandler) Push(w http.ResponseWriter, r *http.Request) {
 	composePath := filepath.Join(stackDir, "docker-compose.yml")
 
 	if err := os.WriteFile(composePath, []byte(req.Yaml), 0644); err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to write compose file: " + err.Error()})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to write compose file: " + err.Error()})
 		return
 	}
 
@@ -635,10 +635,10 @@ func (h *GitSyncHandler) Push(w http.ResponseWriter, r *http.Request) {
 	commitOut, commitErr := h.runGitEnv(cfg.LocalPath, nil, "commit", "-m", req.Message)
 	if commitErr != nil {
 		if strings.Contains(commitOut, "nothing to commit") {
-			respondJSON(w, 200, map[string]interface{}{"success": true, "message": "No changes to commit"})
+			respondJSON(w, 200, map[string]any{"success": true, "message": "No changes to commit"})
 			return
 		}
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Commit failed: " + commitOut})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Commit failed: " + commitOut})
 		return
 	}
 
@@ -647,7 +647,7 @@ func (h *GitSyncHandler) Push(w http.ResponseWriter, r *http.Request) {
 	defer cleanupAskpass()
 	pushOut, pushErr := h.runGitEnv(cfg.LocalPath, env, "push", "origin", cfg.Branch)
 	if pushErr != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Push failed: " + pushOut, "hint": "Check your authentication settings"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Push failed: " + pushOut, "hint": "Check your authentication settings"})
 		return
 	}
 
@@ -658,7 +658,7 @@ func (h *GitSyncHandler) Push(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("GIT-SYNC: Pushed stack '%s' to %s/%s", req.StackName, cfg.RepoURL, cfg.Branch)
-	respondJSON(w, 200, map[string]interface{}{
+	respondJSON(w, 200, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Pushed to %s", cfg.Branch),
 		"commit":  commit,
@@ -666,7 +666,7 @@ func (h *GitSyncHandler) Push(w http.ResponseWriter, r *http.Request) {
 }
 
 // generateCompose builds a docker-compose.yml from inspect data
-func (h *GitSyncHandler) generateCompose(containers []map[string]interface{}) string {
+func (h *GitSyncHandler) generateCompose(containers []map[string]any) string {
 	// First pass: collect all custom network names and named volume names
 	// so we can emit valid top-level blocks.
 	allNetworks := map[string]bool{}
@@ -681,9 +681,9 @@ func (h *GitSyncHandler) generateCompose(containers []map[string]interface{}) st
 				}
 			}
 		}
-		if mounts, ok := c["Mounts"].([]interface{}); ok {
+		if mounts, ok := c["Mounts"].([]any); ok {
 			for _, m := range mounts {
-				if mount, ok := m.(map[string]interface{}); ok {
+				if mount, ok := m.(map[string]any); ok {
 					if getString(mount, "Type") == "volume" {
 						if vol := getString(mount, "Name"); vol != "" {
 							allVolumes[vol] = true
@@ -725,7 +725,7 @@ func (h *GitSyncHandler) generateCompose(containers []map[string]interface{}) st
 		b.WriteString(fmt.Sprintf("    restart: %s\n", restartPolicy))
 
 		// Environment variables
-		if envList, ok := config["Env"].([]interface{}); ok && len(envList) > 0 {
+		if envList, ok := config["Env"].([]any); ok && len(envList) > 0 {
 			filtered := filterEnv(envList)
 			if len(filtered) > 0 {
 				b.WriteString("    environment:\n")
@@ -739,9 +739,9 @@ func (h *GitSyncHandler) generateCompose(containers []map[string]interface{}) st
 		if ports := getMap(hostConfig, "PortBindings"); len(ports) > 0 {
 			b.WriteString("    ports:\n")
 			for containerPort, bindings := range ports {
-				if bindList, ok := bindings.([]interface{}); ok {
+				if bindList, ok := bindings.([]any); ok {
 					for _, bind := range bindList {
-						if bm, ok := bind.(map[string]interface{}); ok {
+						if bm, ok := bind.(map[string]any); ok {
 							hostPort := getString(bm, "HostPort")
 							cp := strings.Split(containerPort, "/")[0]
 							proto := ""
@@ -756,10 +756,10 @@ func (h *GitSyncHandler) generateCompose(containers []map[string]interface{}) st
 		}
 
 		// Mounts: distinguish named volumes from bind mounts
-		if mounts, ok := c["Mounts"].([]interface{}); ok && len(mounts) > 0 {
+		if mounts, ok := c["Mounts"].([]any); ok && len(mounts) > 0 {
 			b.WriteString("    volumes:\n")
 			for _, m := range mounts {
-				if mount, ok := m.(map[string]interface{}); ok {
+				if mount, ok := m.(map[string]any); ok {
 					dst := getString(mount, "Destination")
 					if dst == "" {
 						continue
@@ -808,7 +808,7 @@ func (h *GitSyncHandler) generateCompose(containers []map[string]interface{}) st
 		}
 
 		// Labels (filter out internal docker labels)
-		if labels, ok := config["Labels"].(map[string]interface{}); ok {
+		if labels, ok := config["Labels"].(map[string]any); ok {
 			userLabels := map[string]string{}
 			for k, v := range labels {
 				if !strings.HasPrefix(k, "com.docker.") && !strings.HasPrefix(k, "org.opencontainers.") {
@@ -860,21 +860,21 @@ func (h *GitSyncHandler) generateCompose(containers []map[string]interface{}) st
 }
 
 // Helper functions for safe type assertions
-func getString(m map[string]interface{}, key string) string {
+func getString(m map[string]any, key string) string {
 	if v, ok := m[key].(string); ok {
 		return v
 	}
 	return ""
 }
 
-func getMap(m map[string]interface{}, key string) map[string]interface{} {
-	if v, ok := m[key].(map[string]interface{}); ok {
+func getMap(m map[string]any, key string) map[string]any {
+	if v, ok := m[key].(map[string]any); ok {
 		return v
 	}
-	return map[string]interface{}{}
+	return map[string]any{}
 }
 
-func filterEnv(envList []interface{}) []string {
+func filterEnv(envList []any) []string {
 	// Filter out common default env vars that aren't user-configured
 	skip := map[string]bool{"PATH": true, "HOME": true, "HOSTNAME": true, "TERM": true}
 	var result []string

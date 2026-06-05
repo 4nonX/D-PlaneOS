@@ -179,7 +179,7 @@ func (h *TOTPHandler) getTOTPSetup(w http.ResponseWriter, userID int, username s
 		}
 		// Build otpauth:// URI for QR code
 		otpauthURI := buildOTPAuthURI(username, secret)
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success":     true,
 			"enabled":     false,
 			"secret":      secret,
@@ -194,7 +194,7 @@ func (h *TOTPHandler) getTOTPSetup(w http.ResponseWriter, userID int, username s
 	}
 
 	// 2FA already enabled
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"enabled": enabled == 1,
 	})
@@ -266,7 +266,7 @@ func (h *TOTPHandler) verifyAndEnable(w http.ResponseWriter, r *http.Request, us
 	}
 
 	audit.LogAction("2fa", username, "Two-factor authentication enabled", true, 0)
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":      true,
 		"message":      "Two-factor authentication enabled",
 		"backup_codes": plainCodes, // shown ONCE only
@@ -330,7 +330,7 @@ func (h *TOTPHandler) disableTOTP(w http.ResponseWriter, r *http.Request, userID
 	}
 
 	audit.LogAction("2fa", username, "Two-factor authentication disabled", true, 0)
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Two-factor authentication has been disabled",
 	})
@@ -417,7 +417,7 @@ func (h *TOTPHandler) HandleTOTPVerify(w http.ResponseWriter, r *http.Request) {
 		log.Printf("TOTP SESSION EXPIRY ERROR: %v", err)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"session_id": sessionID,
 		"username":   username,

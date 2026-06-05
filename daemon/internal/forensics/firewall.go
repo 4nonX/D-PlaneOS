@@ -22,12 +22,12 @@ type NftRule struct {
 	Expr   []NftExpr `json:"expr"`
 }
 
-type NftExpr map[string]interface{}
+type NftExpr map[string]any
 
 type NftMatch struct {
 	Left  NftOp   `json:"left"`
 	Op    string  `json:"op"`
-	Right interface{} `json:"right"` // Can be float64 or []interface{} (port or port list)
+	Right any `json:"right"` // Can be float64 or []any (port or port list)
 }
 
 type NftOp struct {
@@ -105,11 +105,11 @@ func parseNftJSON(data []byte) (tcp []int, udp []int, err error) {
 				targetMap = udpMap
 			}
 
-			// Handle single port (JSON number -> float64) or port set ([]interface{})
+			// Handle single port (JSON number -> float64) or port set ([]any)
 			switch v := m.Right.(type) {
 			case float64:
 				targetMap[int(v)] = true
-			case []interface{}:
+			case []any:
 				for _, p := range v {
 					if port, ok := p.(float64); ok {
 						targetMap[int(port)] = true

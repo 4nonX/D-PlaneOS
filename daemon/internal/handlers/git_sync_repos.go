@@ -49,12 +49,12 @@ func (h *GitReposHandler) ListCredentials(w http.ResponseWriter, r *http.Request
 		CASE WHEN ssh_key <> '' THEN 1 ELSE 0 END as has_ssh
 		FROM git_credentials ORDER BY name`)
 	if err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, 500, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	defer rows.Close()
 
-	var creds []map[string]interface{}
+	var creds []map[string]any
 	for rows.Next() {
 		var id int
 		var name, host, authType, notes, createdAt string
@@ -63,7 +63,7 @@ func (h *GitReposHandler) ListCredentials(w http.ResponseWriter, r *http.Request
 			log.Printf("GIT CREDS LIST SCAN ERROR: %v", err)
 			continue
 		}
-		creds = append(creds, map[string]interface{}{
+		creds = append(creds, map[string]any{
 			"id": id, "name": name, "host": host, "auth_type": authType,
 			"notes": notes, "created_at": createdAt,
 			"has_token": hasToken == 1, "has_ssh": hasSSH == 1,
@@ -73,9 +73,9 @@ func (h *GitReposHandler) ListCredentials(w http.ResponseWriter, r *http.Request
 		log.Printf("GIT CREDS LIST ROWS ERROR: %v", err)
 	}
 	if creds == nil {
-		creds = []map[string]interface{}{}
+		creds = []map[string]any{}
 	}
-	respondJSON(w, 200, map[string]interface{}{"success": true, "credentials": creds})
+	respondJSON(w, 200, map[string]any{"success": true, "credentials": creds})
 }
 
 // SaveCredential - POST /api/git-sync/credentials
@@ -90,18 +90,18 @@ func (h *GitReposHandler) SaveCredential(w http.ResponseWriter, r *http.Request)
 		Notes    string `json:"notes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Invalid request"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Invalid request"})
 		return
 	}
 	if req.Name == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "name is required"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "name is required"})
 		return
 	}
 	if req.Host == "" {
 		req.Host = "github.com"
 	}
 	if req.AuthType != "token" && req.AuthType != "ssh" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "auth_type must be token or ssh"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "auth_type must be token or ssh"})
 		return
 	}
 
@@ -113,7 +113,7 @@ func (h *GitReposHandler) SaveCredential(w http.ResponseWriter, r *http.Request)
 		if req.Token != "" && req.AuthType == "token" {
 			sealedToken, sErr := secrets.Seal(req.Token)
 			if sErr != nil {
-				respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to encrypt token"})
+				respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to encrypt token"})
 				return
 			}
 			_, execErr = h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, token=$4, ssh_key='', notes=$5 WHERE id=$6`,
@@ -121,7 +121,7 @@ func (h *GitReposHandler) SaveCredential(w http.ResponseWriter, r *http.Request)
 		} else if req.AuthType == "ssh" && req.SSHKey != "" {
 			sealedSSH, sErr := secrets.Seal(req.SSHKey)
 			if sErr != nil {
-				respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to encrypt SSH key"})
+				respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to encrypt SSH key"})
 				return
 			}
 			_, execErr = h.db.Exec(`UPDATE git_credentials SET name=$1, host=$2, auth_type=$3, token='', ssh_key=$4, notes=$5 WHERE id=$6`,
@@ -131,10 +131,10 @@ func (h *GitReposHandler) SaveCredential(w http.ResponseWriter, r *http.Request)
 				req.Name, req.Host, req.AuthType, req.Notes, *req.ID)
 		}
 		if execErr != nil {
-			respondJSON(w, 500, map[string]interface{}{"success": false, "error": execErr.Error()})
+			respondJSON(w, 500, map[string]any{"success": false, "error": execErr.Error()})
 			return
 		}
-		respondJSON(w, 200, map[string]interface{}{"success": true})
+		respondJSON(w, 200, map[string]any{"success": true})
 		return
 	}
 
@@ -148,23 +148,22 @@ func (h *GitReposHandler) SaveCredential(w http.ResponseWriter, r *http.Request)
 		sshKeyStore, sealErr = secrets.Seal(req.SSHKey)
 	}
 	if sealErr != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to encrypt credential"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to encrypt credential"})
 		return
 	}
 
 	var id int64
-	var dbErr error
-	dbErr = h.db.QueryRow(`INSERT INTO git_credentials (name, host, auth_type, token, ssh_key, notes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+	dbErr := h.db.QueryRow(`INSERT INTO git_credentials (name, host, auth_type, token, ssh_key, notes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
 		req.Name, req.Host, req.AuthType, tokenStore, sshKeyStore, req.Notes).Scan(&id)
 	if dbErr != nil {
 		if strings.Contains(dbErr.Error(), "unique constraint") || strings.Contains(dbErr.Error(), "duplicate key") {
-			respondJSON(w, 409, map[string]interface{}{"success": false, "error": "A credential with this name already exists"})
+			respondJSON(w, 409, map[string]any{"success": false, "error": "A credential with this name already exists"})
 		} else {
-			respondJSON(w, 500, map[string]interface{}{"success": false, "error": dbErr.Error()})
+			respondJSON(w, 500, map[string]any{"success": false, "error": dbErr.Error()})
 		}
 		return
 	}
-	respondJSON(w, 200, map[string]interface{}{"success": true, "id": id})
+	respondJSON(w, 200, map[string]any{"success": true, "id": id})
 }
 
 // TestCredential - POST /api/git-sync/credentials/test
@@ -174,21 +173,21 @@ func (h *GitReposHandler) TestCredential(w http.ResponseWriter, r *http.Request)
 		RepoURL      string `json:"repo_url"` // test against a specific repo
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Invalid request"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Invalid request"})
 		return
 	}
 	if req.RepoURL == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "repo_url required for test"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "repo_url required for test"})
 		return
 	}
 	if err := validateRepoURL(req.RepoURL); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, 400, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
 	cred, err := h.loadCredential(req.CredentialID)
 	if err != nil {
-		respondJSON(w, 404, map[string]interface{}{"success": false, "error": "Credential not found"})
+		respondJSON(w, 404, map[string]any{"success": false, "error": "Credential not found"})
 		return
 	}
 
@@ -203,14 +202,14 @@ func (h *GitReposHandler) TestCredential(w http.ResponseWriter, r *http.Request)
 	cmd.Env = append(os.Environ(), env...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		respondJSON(w, 200, map[string]interface{}{
+		respondJSON(w, 200, map[string]any{
 			"success": false,
 			"error":   "Connection failed: " + strings.TrimSpace(string(out)),
 			"hint":    credentialHint(cred.AuthType),
 		})
 		return
 	}
-	respondJSON(w, 200, map[string]interface{}{
+	respondJSON(w, 200, map[string]any{
 		"success": true,
 		"message": "Connection successful",
 		"refs":    strings.TrimSpace(string(out)),
@@ -221,14 +220,14 @@ func (h *GitReposHandler) TestCredential(w http.ResponseWriter, r *http.Request)
 func (h *GitReposHandler) DeleteCredential(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	if idStr == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "id required"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "id required"})
 		return
 	}
 	if _, err := h.db.Exec(`DELETE FROM git_credentials WHERE id = $1`, idStr); err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, 500, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondJSON(w, 200, map[string]interface{}{"success": true})
+	respondJSON(w, 200, map[string]any{"success": true})
 }
 
 // ListBranches - GET /api/git-sync/credentials/branches?id=N&url=...
@@ -238,11 +237,11 @@ func (h *GitReposHandler) ListBranches(w http.ResponseWriter, r *http.Request) {
 	credIDStr := r.URL.Query().Get("id")
 	repoURL := r.URL.Query().Get("url")
 	if repoURL == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "url is required"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "url is required"})
 		return
 	}
 	if err := validateRepoURL(repoURL); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, 400, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
@@ -261,7 +260,7 @@ func (h *GitReposHandler) ListBranches(w http.ResponseWriter, r *http.Request) {
 	cmd.Env = append(os.Environ(), env...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		respondJSON(w, 200, map[string]interface{}{
+		respondJSON(w, 200, map[string]any{
 			"success": false,
 			"error":   "Failed to list branches: " + strings.TrimSpace(string(out)),
 			"hint": credentialHint(func() string {
@@ -275,23 +274,23 @@ func (h *GitReposHandler) ListBranches(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse output: "abc123\trefs/heads/main"
-	var branches []map[string]interface{}
+	var branches []map[string]any
 	defaultBranch := "main"
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		parts := strings.SplitN(line, "\t", 2)
 		if len(parts) != 2 {
 			continue
 		}
 		ref := strings.TrimPrefix(strings.TrimSpace(parts[1]), "refs/heads/")
-		branches = append(branches, map[string]interface{}{
+		branches = append(branches, map[string]any{
 			"name":       ref,
 			"is_default": ref == defaultBranch,
 		})
 	}
 	if branches == nil {
-		branches = []map[string]interface{}{}
+		branches = []map[string]any{}
 	}
-	respondJSON(w, 200, map[string]interface{}{"success": true, "branches": branches})
+	respondJSON(w, 200, map[string]any{"success": true, "branches": branches})
 }
 
 // BrowseFiles - GET /api/git-sync/repos/browse?id=N&path=subdir
@@ -303,11 +302,11 @@ func (h *GitReposHandler) BrowseFiles(w http.ResponseWriter, r *http.Request) {
 
 	repo, err := h.loadRepo(idStr)
 	if err != nil {
-		respondJSON(w, 404, map[string]interface{}{"success": false, "error": "Repo not found"})
+		respondJSON(w, 404, map[string]any{"success": false, "error": "Repo not found"})
 		return
 	}
 	if _, err := os.Stat(filepath.Join(repo.LocalPath, ".git")); err != nil {
-		respondJSON(w, 400, map[string]interface{}{
+		respondJSON(w, 400, map[string]any{
 			"success": false,
 			"error":   "Repository not cloned yet - pull first to enable file browsing",
 		})
@@ -323,24 +322,24 @@ func (h *GitReposHandler) BrowseFiles(w http.ResponseWriter, r *http.Request) {
 		// filepath.Clean resolves ".." before we check the prefix
 		absTarget = filepath.Clean(filepath.Join(absBase, browsePath))
 		if !strings.HasPrefix(absTarget+string(filepath.Separator), absBase+string(filepath.Separator)) {
-			respondJSON(w, 400, map[string]interface{}{"success": false, "error": "path traversal detected"})
+			respondJSON(w, 400, map[string]any{"success": false, "error": "path traversal detected"})
 			return
 		}
 	}
 
 	info, err := os.Stat(absTarget)
 	if err != nil {
-		respondJSON(w, 404, map[string]interface{}{"success": false, "error": "path not found"})
+		respondJSON(w, 404, map[string]any{"success": false, "error": "path not found"})
 		return
 	}
 	if !info.IsDir() {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "path is not a directory"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "path is not a directory"})
 		return
 	}
 
 	entries, err := os.ReadDir(absTarget)
 	if err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "failed to read directory"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "failed to read directory"})
 		return
 	}
 
@@ -375,7 +374,7 @@ func (h *GitReposHandler) BrowseFiles(w http.ResponseWriter, r *http.Request) {
 		nodes = []fileNode{}
 	}
 
-	respondJSON(w, 200, map[string]interface{}{
+	respondJSON(w, 200, map[string]any{
 		"success": true,
 		"path":    browsePath,
 		"files":   nodes,
@@ -417,12 +416,12 @@ func (h *GitReposHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN git_credentials c ON r.auth_type = 'cred' AND r.auth_token = CAST(c.id AS TEXT)
 		ORDER BY r.name`)
 	if err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, 500, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	defer rows.Close()
 
-	var repos []map[string]interface{}
+	var repos []map[string]any
 	for rows.Next() {
 		var id, autoSync, syncInterval, enabled, credID int
 		var name, repoURL, branch, localPath, composePath,
@@ -436,14 +435,14 @@ func (h *GitReposHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		repos = append(repos, map[string]interface{}{
+		repos = append(repos, map[string]any{
 			"id": id, "name": name, "repo_url": repoURL, "branch": branch,
 			"local_path": localPath, "compose_path": composePath,
 			"auto_sync": autoSync == 1, "sync_interval": syncInterval,
 			"commit_name": commitName, "commit_email": commitEmail,
 			"last_sync_at": lastSyncAt, "last_commit": lastCommit, "last_error": lastError,
 			"enabled": enabled == 1, "cred_name": credName,
-			"cred_id": func() interface{} {
+			"cred_id": func() any {
 				if credID > 0 {
 					return credID
 				}
@@ -455,9 +454,9 @@ func (h *GitReposHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		log.Printf("GIT REPOS LIST ROWS ERROR: %v", err)
 	}
 	if repos == nil {
-		repos = []map[string]interface{}{}
+		repos = []map[string]any{}
 	}
-	respondJSON(w, 200, map[string]interface{}{"success": true, "repos": repos})
+	respondJSON(w, 200, map[string]any{"success": true, "repos": repos})
 }
 
 // SaveRepo - POST /api/git-sync/repos
@@ -476,19 +475,19 @@ func (h *GitReposHandler) SaveRepo(w http.ResponseWriter, r *http.Request) {
 		Enabled      bool   `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Invalid request"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Invalid request"})
 		return
 	}
 	if req.Name == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "name is required"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "name is required"})
 		return
 	}
 	if req.RepoURL == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "repo_url is required"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "repo_url is required"})
 		return
 	}
 	if err := validateRepoURL(req.RepoURL); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, 400, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	if req.Branch == "" {
@@ -501,7 +500,7 @@ func (h *GitReposHandler) SaveRepo(w http.ResponseWriter, r *http.Request) {
 	// root since local_path is computed from name (not stored yet)
 	placeholderRoot := config.GitStacksDir + "/" + sanitizeName(req.Name)
 	if _, err := validateComposePath(placeholderRoot, req.ComposePath); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "compose_path: " + err.Error()})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "compose_path: " + err.Error()})
 		return
 	}
 	if req.SyncInterval < 1 {
@@ -540,10 +539,10 @@ func (h *GitReposHandler) SaveRepo(w http.ResponseWriter, r *http.Request) {
 			req.Name, req.RepoURL, req.Branch, localPath,
 			req.ComposePath, autoSyncInt, req.SyncInterval, authType, authToken,
 			req.CommitName, req.CommitEmail, enabledInt, *req.ID); err != nil {
-			respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+			respondJSON(w, 500, map[string]any{"success": false, "error": err.Error()})
 			return
 		}
-		respondJSON(w, 200, map[string]interface{}{"success": true, "id": *req.ID})
+		respondJSON(w, 200, map[string]any{"success": true, "id": *req.ID})
 		return
 	}
 
@@ -557,20 +556,20 @@ func (h *GitReposHandler) SaveRepo(w http.ResponseWriter, r *http.Request) {
 		req.CommitName, req.CommitEmail, enabledInt).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-			respondJSON(w, 409, map[string]interface{}{"success": false, "error": "A sync with this name already exists"})
+			respondJSON(w, 409, map[string]any{"success": false, "error": "A sync with this name already exists"})
 		} else {
-			respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+			respondJSON(w, 500, map[string]any{"success": false, "error": err.Error()})
 		}
 		return
 	}
-	respondJSON(w, 200, map[string]interface{}{"success": true, "id": id})
+	respondJSON(w, 200, map[string]any{"success": true, "id": id})
 }
 
 // DeleteRepo - DELETE /api/git-sync/repos?id=N
 func (h *GitReposHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	if idStr == "" {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "id required"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "id required"})
 		return
 	}
 	// Optionally delete local clone too
@@ -579,10 +578,10 @@ func (h *GitReposHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WARN: git-repos: failed to fetch local_path for %s: %v", idStr, err)
 	}
 	if _, err := h.db.Exec(`DELETE FROM git_sync_repos WHERE id=$1`, idStr); err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": err.Error()})
+		respondJSON(w, 500, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondJSON(w, 200, map[string]interface{}{"success": true, "local_path": localPath})
+	respondJSON(w, 200, map[string]any{"success": true, "local_path": localPath})
 }
 
 // PullRepo - POST /api/git-sync/repos/pull?id=N
@@ -590,7 +589,7 @@ func (h *GitReposHandler) PullRepo(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	repo, err := h.loadRepo(idStr)
 	if err != nil {
-		respondJSON(w, 404, map[string]interface{}{"success": false, "error": "Repo not found"})
+		respondJSON(w, 404, map[string]any{"success": false, "error": "Repo not found"})
 		return
 	}
 
@@ -615,7 +614,7 @@ func (h *GitReposHandler) PullRepo(w http.ResponseWriter, r *http.Request) {
 			out, idStr); dbErr != nil {
 			log.Printf("GIT-REPOS: failed to save pull error for %s: %v", idStr, dbErr)
 		}
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": out})
+		respondJSON(w, 500, map[string]any{"success": false, "error": out})
 		return
 	}
 
@@ -625,7 +624,7 @@ func (h *GitReposHandler) PullRepo(w http.ResponseWriter, r *http.Request) {
 		log.Printf("GIT-REPOS: failed to update pull status for %s: %v", idStr, dbErr)
 	}
 	log.Printf("GIT-REPOS: Pulled %s - %s", repo.Name, commit)
-	respondJSON(w, 200, map[string]interface{}{"success": true, "commit": commit, "output": out})
+	respondJSON(w, 200, map[string]any{"success": true, "commit": commit, "output": out})
 }
 
 // PushRepo - POST /api/git-sync/repos/push?id=N
@@ -642,11 +641,11 @@ func (h *GitReposHandler) PushRepo(w http.ResponseWriter, r *http.Request) {
 
 	repo, err := h.loadRepo(idStr)
 	if err != nil {
-		respondJSON(w, 404, map[string]interface{}{"success": false, "error": "Repo not found"})
+		respondJSON(w, 404, map[string]any{"success": false, "error": "Repo not found"})
 		return
 	}
 	if _, err := os.Stat(filepath.Join(repo.LocalPath, ".git")); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Repository not cloned yet - pull first"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Repository not cloned yet - pull first"})
 		return
 	}
 
@@ -656,7 +655,7 @@ func (h *GitReposHandler) PushRepo(w http.ResponseWriter, r *http.Request) {
 	// Use unified CommitAndPush which handles identity, staging, and pull-rebase
 	pushErr := gitops.CommitAndPush(repo.LocalPath, env, req.Message, repo.CommitName, repo.CommitEmail, repo.Branch)
 	if pushErr != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": pushErr.Error(),
+		respondJSON(w, 500, map[string]any{"success": false, "error": pushErr.Error(),
 			"hint": "Check your repository permissions, identity settings, and network connection."})
 		return
 	}
@@ -667,7 +666,7 @@ func (h *GitReposHandler) PushRepo(w http.ResponseWriter, r *http.Request) {
 		log.Printf("GIT-REPOS: failed to update push status for %s: %v", idStr, dbErr)
 	}
 	log.Printf("GIT-REPOS: Pushed %s - %s", repo.Name, commit)
-	respondJSON(w, 200, map[string]interface{}{"success": true, "commit": commit})
+	respondJSON(w, 200, map[string]any{"success": true, "commit": commit})
 }
 
 // DeployRepo - POST /api/git-sync/repos/deploy?id=N
@@ -676,27 +675,27 @@ func (h *GitReposHandler) DeployRepo(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	repo, err := h.loadRepo(idStr)
 	if err != nil {
-		respondJSON(w, 404, map[string]interface{}{"success": false, "error": "Repo not found"})
+		respondJSON(w, 404, map[string]any{"success": false, "error": "Repo not found"})
 		return
 	}
 
 	composeFull, pathErr := validateComposePath(repo.LocalPath, repo.ComposePath)
 	if pathErr != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "compose_path: " + pathErr.Error()})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "compose_path: " + pathErr.Error()})
 		return
 	}
 	if _, err := os.Stat(composeFull); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false,
+		respondJSON(w, 400, map[string]any{"success": false,
 			"error": fmt.Sprintf("Compose file not found at %s - pull first", composeFull)})
 		return
 	}
 
 	out, err := cmdutil.RunSlow("docker", "compose", "-f", composeFull, "up", "-d", "--remove-orphans")
 	if err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": string(out)})
+		respondJSON(w, 500, map[string]any{"success": false, "error": string(out)})
 		return
 	}
-	respondJSON(w, 200, map[string]interface{}{"success": true, "output": string(out)})
+	respondJSON(w, 200, map[string]any{"success": true, "output": string(out)})
 }
 
 // ExportToRepo - POST /api/git-sync/repos/export?id=N
@@ -710,11 +709,11 @@ func (h *GitReposHandler) ExportToRepo(w http.ResponseWriter, r *http.Request) {
 
 	repo, err := h.loadRepo(idStr)
 	if err != nil {
-		respondJSON(w, 404, map[string]interface{}{"success": false, "error": "Repo not found"})
+		respondJSON(w, 404, map[string]any{"success": false, "error": "Repo not found"})
 		return
 	}
 	if _, err := os.Stat(filepath.Join(repo.LocalPath, ".git")); err != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "Repository not cloned yet - pull first"})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "Repository not cloned yet - pull first"})
 		return
 	}
 
@@ -725,12 +724,12 @@ func (h *GitReposHandler) ExportToRepo(w http.ResponseWriter, r *http.Request) {
 	} else {
 		out, err := cmdutil.RunFast("docker", "ps", "--format", "{{.Names}}")
 		if err != nil {
-			respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to list containers"})
+			respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to list containers"})
 			return
 		}
 		names := strings.Split(strings.TrimSpace(string(out)), "\n")
 		if len(names) == 0 || names[0] == "" {
-			respondJSON(w, 200, map[string]interface{}{"success": false, "error": "No running containers"})
+			respondJSON(w, 200, map[string]any{"success": false, "error": "No running containers"})
 			return
 		}
 		args = append(args, names...)
@@ -738,13 +737,13 @@ func (h *GitReposHandler) ExportToRepo(w http.ResponseWriter, r *http.Request) {
 
 	inspectOut, err := cmdutil.RunMedium("docker", args...)
 	if err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "docker inspect failed"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "docker inspect failed"})
 		return
 	}
 
-	var containers []map[string]interface{}
+	var containers []map[string]any
 	if err := json.Unmarshal(inspectOut, &containers); err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to parse inspect"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to parse inspect"})
 		return
 	}
 
@@ -755,16 +754,16 @@ func (h *GitReposHandler) ExportToRepo(w http.ResponseWriter, r *http.Request) {
 	// Write to repo
 	composeFull, pathErr := validateComposePath(repo.LocalPath, repo.ComposePath)
 	if pathErr != nil {
-		respondJSON(w, 400, map[string]interface{}{"success": false, "error": "compose_path: " + pathErr.Error()})
+		respondJSON(w, 400, map[string]any{"success": false, "error": "compose_path: " + pathErr.Error()})
 		return
 	}
 	os.MkdirAll(filepath.Dir(composeFull), 0755)
 	if err := os.WriteFile(composeFull, []byte(yaml), 0644); err != nil {
-		respondJSON(w, 500, map[string]interface{}{"success": false, "error": "Failed to write compose file"})
+		respondJSON(w, 500, map[string]any{"success": false, "error": "Failed to write compose file"})
 		return
 	}
 
-	respondJSON(w, 200, map[string]interface{}{
+	respondJSON(w, 200, map[string]any{
 		"success":  true,
 		"yaml":     yaml,
 		"path":     composeFull,
@@ -879,15 +878,6 @@ func runGitInDir(dir string, env []string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-func runGitGlobal(env []string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Env = append(os.Environ(), env...)
-	out, err := cmd.CombinedOutput()
-	return strings.TrimSpace(string(out)), err
-}
-
 func getHeadCommit(localPath string) string {
 	out, err := runGitInDir(localPath, nil, "rev-parse", "--short", "HEAD")
 	if err != nil {
@@ -955,12 +945,12 @@ func (h *GitReposHandler) StatusRepo(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	repo, err := h.loadRepo(idStr)
 	if err != nil {
-		respondJSON(w, 404, map[string]interface{}{"success": false, "error": "Repo not found"})
+		respondJSON(w, 404, map[string]any{"success": false, "error": "Repo not found"})
 		return
 	}
 
 	if _, err := os.Stat(filepath.Join(repo.LocalPath, ".git")); err != nil {
-		respondJSON(w, 200, map[string]interface{}{
+		respondJSON(w, 200, map[string]any{
 			"success": true,
 			"cloned":  false,
 			"message": "Repository not cloned yet - pull first",
@@ -980,7 +970,7 @@ func (h *GitReposHandler) StatusRepo(w http.ResponseWriter, r *http.Request) {
 
 	logOut, _ := runGitInDir(repo.LocalPath, nil, "log", "--oneline", "-5")
 	var recentCommits []string
-	for _, line := range strings.Split(strings.TrimSpace(logOut), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(logOut), "\n") {
 		if line != "" {
 			recentCommits = append(recentCommits, line)
 		}
@@ -995,7 +985,7 @@ func (h *GitReposHandler) StatusRepo(w http.ResponseWriter, r *http.Request) {
 		branchStatus = strings.TrimSpace(parts[0])
 	}
 
-	respondJSON(w, 200, map[string]interface{}{
+	respondJSON(w, 200, map[string]any{
 		"success":        true,
 		"cloned":         true,
 		"behind_count":   behindCount,

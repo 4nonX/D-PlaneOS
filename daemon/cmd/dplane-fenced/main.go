@@ -54,7 +54,7 @@ type request struct {
 type response struct {
 	OK    bool        `json:"ok"`
 	Error string      `json:"error,omitempty"`
-	Data  interface{} `json:"data,omitempty"`
+	Data  any `json:"data,omitempty"`
 }
 
 // fenceState tracks which /dev/sgN devices we currently hold reservations on.
@@ -149,7 +149,7 @@ func handleConn(conn net.Conn) {
 			}
 		}
 		state.mu.RUnlock()
-		writeResponse(conn, response{OK: true, Data: map[string]interface{}{
+		writeResponse(conn, response{OK: true, Data: map[string]any{
 			"key":     state.key.String(),
 			"devices": devs,
 		}})
@@ -243,7 +243,9 @@ func releaseAll() {
 }
 
 // fenceAllPoolDisks enumerates pool member disks and reserves any that are not
-// already tracked.
+// already tracked. If the fraction of failed reservations exceeds the configured
+// disk fault tolerance threshold the daemon treats this as a split-brain risk
+// and terminates, forcing administrator intervention.
 func fenceAllPoolDisks() {
 	disks, err := enumPoolDisks()
 	if err != nil {
@@ -258,14 +260,62 @@ func fenceAllPoolDisks() {
 	}
 	state.mu.RUnlock()
 
+	tolerancePct := readTolerancePct()
+
+	var failures, attempts int
 	for _, sg := range disks {
 		if already[sg] {
 			continue
 		}
+		attempts++
 		if err := fenceDevice(sg); err != nil {
+			failures++
 			log.Printf("fence %s: %v", sg, err)
 		}
 	}
+
+	if attempts == 0 {
+		return
+	}
+	failurePct := (failures * 100) / attempts
+	if failurePct > tolerancePct {
+		log.Fatalf(
+			"FENCE ABORT: %d/%d disk reservation(s) failed (%d%% > tolerance %d%%). "+
+				"Cannot guarantee exclusive pool ownership - terminating to prevent split-brain.",
+			failures, attempts, failurePct, tolerancePct,
+		)
+	} else if failures > 0 {
+		log.Printf("fence partial: %d/%d disks failed (%d%%), within tolerance %d%%",
+			failures, attempts, failurePct, tolerancePct)
+	}
+}
+
+const toleranceFile = "/var/lib/dplaneos/fence-tolerance"
+
+// tolerancePctCache holds the last successfully read tolerance value in memory.
+// If the config file is temporarily unavailable (e.g. ZFS dataset being exported),
+// we serve the in-memory value rather than silently reverting to a different default.
+var tolerancePctCache = 10 // safe default; overwritten on first successful read
+
+// readTolerancePct reads the fault tolerance percentage. On first call (and after
+// each successful read) it updates the in-memory cache. If the file is missing or
+// unreadable (e.g. ZFS dataset mid-export), the last-known-good value is returned.
+func readTolerancePct() int {
+	data, err := os.ReadFile(toleranceFile)
+	if err != nil {
+		// File unavailable - serve cached value to avoid unexpected behaviour
+		// during pool export when /var/lib/dplaneos/ may be unmounted.
+		return tolerancePctCache
+	}
+	var pct int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &pct); err != nil || pct < 0 {
+		return tolerancePctCache
+	}
+	if pct > 50 {
+		pct = 50
+	}
+	tolerancePctCache = pct // update cache on every successful read
+	return pct
 }
 
 // enumPoolDisks returns /dev/sgN paths for all current ZFS pool member disks.

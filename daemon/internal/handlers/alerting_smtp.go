@@ -46,16 +46,16 @@ func (h *AlertingHandler) GetSMTPConfig(w http.ResponseWriter, r *http.Request) 
 	var value string
 	err := h.db.QueryRow("SELECT value FROM settings WHERE key = $1", "smtp_config").Scan(&value)
 	if err != nil || value == "" {
-		respondOK(w, map[string]interface{}{"success": true, "configured": false})
+		respondOK(w, map[string]any{"success": true, "configured": false})
 		return
 	}
 	var cfg SMTPConfig
 	if json.Unmarshal([]byte(value), &cfg) != nil {
-		respondOK(w, map[string]interface{}{"success": true, "configured": false})
+		respondOK(w, map[string]any{"success": true, "configured": false})
 		return
 	}
 	cfg.Password = "***" // never expose
-	respondOK(w, map[string]interface{}{"success": true, "configured": true, "config": cfg})
+	respondOK(w, map[string]any{"success": true, "configured": true, "config": cfg})
 }
 
 // SaveSMTPConfig saves SMTP settings.
@@ -102,7 +102,7 @@ func (h *AlertingHandler) SaveSMTPConfig(w http.ResponseWriter, r *http.Request)
 		log.Printf("SMTP CONFIG SAVE ERROR: %v", err)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // TestSMTP sends a test email using the saved SMTP configuration.
@@ -134,10 +134,10 @@ func (h *AlertingHandler) TestSMTP(w http.ResponseWriter, r *http.Request) {
 		auth = smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)
 	}
 	if err := smtp.SendMail(addr, auth, cfg.From, strings.Split(cfg.To, ","), []byte(msg)); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "message": "Test email sent to " + cfg.To})
+	respondOK(w, map[string]any{"success": true, "message": "Test email sent to " + cfg.To})
 }
 
 // Global alerting handler for fire-and-forget calls
@@ -210,7 +210,7 @@ func (h *AlertingHandler) GetScrubSchedules(w http.ResponseWriter, r *http.Reque
 	var value string
 	err := h.db.QueryRow("SELECT value FROM settings WHERE key = $1", "scrub_schedules").Scan(&value)
 	if err != nil || value == "" {
-		respondOK(w, map[string]interface{}{"success": true, "schedules": []ScrubSchedule{}})
+		respondOK(w, map[string]any{"success": true, "schedules": []ScrubSchedule{}})
 		return
 	}
 	var schedules []ScrubSchedule
@@ -227,11 +227,11 @@ func (h *AlertingHandler) GetScrubSchedules(w http.ResponseWriter, r *http.Reque
 		if filtered == nil {
 			filtered = []ScrubSchedule{}
 		}
-		respondOK(w, map[string]interface{}{"success": true, "schedules": filtered})
+		respondOK(w, map[string]any{"success": true, "schedules": filtered})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true, "schedules": schedules})
+	respondOK(w, map[string]any{"success": true, "schedules": schedules})
 }
 
 // SaveScrubSchedules saves and installs scrub cron jobs
@@ -317,7 +317,7 @@ func (h *AlertingHandler) SaveScrubSchedules(w http.ResponseWriter, r *http.Requ
 	// Remove legacy cron file if it exists
 	os.Remove("/etc/cron.d/dplaneos-scrub")
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":   true,
 		"schedules": schedules,
 	})

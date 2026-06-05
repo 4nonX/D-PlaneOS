@@ -111,10 +111,10 @@ func (h *OIDCHandler) Info(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.loadConfig()
 	if err != nil {
 		// Not configured or DB error: tell the SPA OIDC is unavailable.
-		respondJSON(w, http.StatusOK, map[string]interface{}{"enabled": false})
+		respondJSON(w, http.StatusOK, map[string]any{"enabled": false})
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"enabled":      cfg.Enabled,
 		"button_label": cfg.ButtonLabel,
 	})
@@ -125,7 +125,7 @@ func (h *OIDCHandler) Info(w http.ResponseWriter, r *http.Request) {
 func (h *OIDCHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.loadConfig()
 	if err == sql.ErrNoRows {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"enabled": false})
+		respondJSON(w, http.StatusOK, map[string]any{"enabled": false})
 		return
 	}
 	if err != nil {
@@ -136,7 +136,7 @@ func (h *OIDCHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	if cfg.DefaultRoleID.Valid {
 		defaultRoleID = &cfg.DefaultRoleID.Int64
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"enabled":         cfg.Enabled,
 		"issuer":          cfg.Issuer,
 		"client_id":       cfg.ClientID,
@@ -253,7 +253,7 @@ func (h *OIDCHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 
 	actor := getUserFromRequest(r)
 	audit.LogAction("oidc", actor, "OIDC configuration updated", true, 0)
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true})
+	respondJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
 // ─── GET /api/auth/oidc/start ─ public ───────────────────────────────────────
@@ -492,7 +492,7 @@ func (h *OIDCHandler) Exchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"session_id": sessionID,
 		"username":   username,

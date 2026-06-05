@@ -47,7 +47,7 @@ func RunSMARTNow(w http.ResponseWriter, r *http.Request) {
 	
 	if err != nil {
 		audit.LogAction("smart_test_manual", user, fmt.Sprintf("Failed: %s %s: %s", testType, req.Device, string(output)), false, duration)
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("SMART test failed to start: %v", err),
 			"output":  string(output),
@@ -56,7 +56,7 @@ func RunSMARTNow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.LogAction("smart_test_manual", user, fmt.Sprintf("Started %s SMART test on %s", testType, req.Device), true, duration)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("SMART %s test started on %s.", testType, req.Device),
 		"output":  string(output),
@@ -92,7 +92,7 @@ func RunSMARTCronHook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.LogAction("smart_test_cron", "system", fmt.Sprintf("CRON Started %s SMART test on %s", testType, req.Device), true, 0)
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // SMARTSchedule represents a persisted SMART task
@@ -132,7 +132,7 @@ func ListSMARTSchedules(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WARN: smart schedules list rows: %v", err)
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":   true,
 		"schedules": schedules,
 	})
@@ -197,7 +197,7 @@ func AddSMARTSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.LogAction("smart_schedule_add", r.Header.Get("X-User"), fmt.Sprintf("Added %s test for %s at %s", req.Type, req.Device, cron), true, 0)
-	respondOK(w, map[string]interface{}{"success": true, "message": "Schedule added to GitOps state."})
+	respondOK(w, map[string]any{"success": true, "message": "Schedule added to GitOps state."})
 }
 
 // DeleteSMARTSchedule removes a SMART task from the GitOps state.yaml
@@ -250,5 +250,5 @@ func DeleteSMARTSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.LogAction("smart_schedule_delete", r.Header.Get("X-User"), fmt.Sprintf("Removed %s test for %s", testType, device), true, 0)
-	respondOK(w, map[string]interface{}{"success": true, "message": "Schedule removed from GitOps state."})
+	respondOK(w, map[string]any{"success": true, "message": "Schedule removed from GitOps state."})
 }

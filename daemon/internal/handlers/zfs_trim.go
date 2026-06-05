@@ -84,7 +84,7 @@ func GetTrimStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	statuses := parseTrimStatus(out, pool)
-	respondOK(w, map[string]interface{}{"success": true, "pools": statuses})
+	respondOK(w, map[string]any{"success": true, "pools": statuses})
 }
 
 func parseTrimStatus(out, filterPool string) []PoolTrimStatus {

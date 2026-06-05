@@ -21,7 +21,7 @@ import { toast } from '@/hooks/useToast'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 
-interface Target { iqn: string; zvol?: string; sessions?: number; size?: number }
+interface Target { iqn: string; zvol?: string; sessions?: number; size?: number; alua_enabled?: boolean }
 interface ACL    { iqn: string; initiator: string }
 
 function fmtSize(b?: number) { if (!b) return '-'; const u=['B','KB','MB','GB','TB']; const i=Math.min(Math.floor(Math.log(b)/Math.log(1024)),4); return `${(b/1024**i).toFixed(1)} ${u[i]}` }
@@ -43,12 +43,21 @@ export function ISCSIPage() {
 
   const [iqn, setIqn] = useState('iqn.2024-01.me.dplane:')
   const [zvol, setZvol] = useState('')
+  const [aluaEnabled, setAluaEnabled] = useState(false)
   const [editingIqn, setEditingIqn] = useState<string | null>(null)
+  const [aluaModal, setAluaModal] = useState<{ iqn: string; state: number } | null>(null)
+
+  const setAluaState = useMutation({
+    mutationFn: ({ targetIqn, state }: { targetIqn: string; state: number }) =>
+      api.post('/api/iscsi/targets/alua', { target_iqn: targetIqn, alua_state: state }),
+    onSuccess: () => { toast.success('ALUA state updated'); setAluaModal(null); qc.invalidateQueries({ queryKey: ['iscsi'] }) },
+    onError: (e: Error) => toast.error(e.message),
+  })
 
   const createTarget = useMutation({
     mutationFn: () => {
       const url = editingIqn ? '/api/iscsi/targets/update' : '/api/iscsi/targets'
-      return api.post(url, { iqn, zvol })
+      return api.post(url, { iqn, zvol, alua_enabled: aluaEnabled, alua_state: 0 })
     },
     onSuccess: () => { 
       toast.success(editingIqn ? 'Target updated' : 'Target created'); 
@@ -96,6 +105,7 @@ export function ISCSIPage() {
   const cancelEdit = () => {
     setIqn('iqn.2024-01.me.dplane:')
     setZvol('')
+    setAluaEnabled(false)
     setEditingIqn(null)
   }
 
@@ -145,11 +155,17 @@ export function ISCSIPage() {
                   <input value={zvol} onChange={e=>setZvol(e.target.value)} placeholder="tank/zvols/target0" className="input" style={{ fontFamily:'var(--font-mono)' }}/>
                 )}
               </label>
-              <div style={{ display:'flex', gap:8 }}>
-                {editingIqn && <button onClick={cancelEdit} className="btn btn-ghost">Cancel</button>}
-                <button onClick={()=>createTarget.mutate()} disabled={!iqn.trim()||!zvol.trim()||createTarget.isPending} className="btn btn-primary">
-                  <Icon name={editingIqn ? "save" : "add"} size={14}/>{createTarget.isPending?'Saving…':editingIqn?'Update':'Create'}
-                </button>
+              <div style={{ display:'flex', flexDirection:'column', gap:8, justifyContent:'flex-end' }}>
+                <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:'var(--text-xs)', color:'var(--text-secondary)', whiteSpace:'nowrap' }}>
+                  <input type="checkbox" checked={aluaEnabled} onChange={e=>setAluaEnabled(e.target.checked)} />
+                  ALUA (multi-path)
+                </label>
+                <div style={{ display:'flex', gap:8 }}>
+                  {editingIqn && <button onClick={cancelEdit} className="btn btn-ghost">Cancel</button>}
+                  <button onClick={()=>createTarget.mutate()} disabled={!iqn.trim()||!zvol.trim()||createTarget.isPending} className="btn btn-primary">
+                    <Icon name={editingIqn ? "save" : "add"} size={14}/>{createTarget.isPending?'Saving…':editingIqn?'Update':'Create'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -174,7 +190,12 @@ export function ISCSIPage() {
                     <td>
                       <div style={{ display:'flex', gap:6 }}>
                         <button onClick={()=>handleEdit(t)} className="btn btn-sm btn-ghost"><Icon name="edit" size={13}/>Edit</button>
-                        <button onClick={async ()=>{ if(await confirm({ title:`Delete target "${t.iqn}"?`, message:'All ACLs for this target will also be removed.', danger:true, confirmLabel:'Delete' })) deleteTarget.mutate(t.iqn) }} className="btn btn-sm btn-danger"><Icon name="delete" size={13}/>Delete</button>
+                        {t.alua_enabled && (
+                          <button onClick={()=>setAluaModal({ iqn: t.iqn, state: 0 })} className="btn btn-sm btn-ghost" title="Change ALUA path state">
+                            <Icon name="swap_horiz" size={13}/>ALUA
+                          </button>
+                        )}
+                        <button onClick={async ()=>{ if(await confirm({ title:`Delete target "${t.iqn}"?`, message:'All ACLs for this target will also be removed.', danger:true, confirmLabel:'Delete', confirmText: t.iqn.split(':').pop() ?? 'DELETE' })) deleteTarget.mutate(t.iqn) }} className="btn btn-sm btn-danger"><Icon name="delete" size={13}/>Delete</button>
                       </div>
                     </td>
                   </tr>
@@ -236,6 +257,40 @@ export function ISCSIPage() {
         </>
       )}
       <ConfirmDialog />
+
+      {/* ALUA State Modal */}
+      {aluaModal && (
+        <div className="modal-overlay" onClick={()=>setAluaModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{ maxWidth:400 }}>
+            <div style={{ fontWeight:700, marginBottom:8 }}>Change ALUA Path State</div>
+            <div style={{ fontSize:'var(--text-xs)', color:'var(--text-secondary)', marginBottom:16 }}>
+              <code style={{ fontFamily:'var(--font-mono)' }}>{aluaModal.iqn}</code>
+            </div>
+            <label className="field" style={{ marginBottom:16 }}>
+              <span className="field-label">New ALUA access state</span>
+              <select value={aluaModal.state} onChange={e=>setAluaModal(m=>m && ({ ...m, state: parseInt(e.target.value) }))} className="input" style={{ appearance:'none' }}>
+                <option value={0}>Active / Optimized (primary HA node)</option>
+                <option value={1}>Active / Non-Optimized (secondary path)</option>
+                <option value={2}>Standby (HA standby node)</option>
+                <option value={3}>Unavailable</option>
+              </select>
+            </label>
+            <div style={{ fontSize:'var(--text-xs)', color:'var(--text-tertiary)', marginBottom:16 }}>
+              During HA failover: set the primary to Active/Optimized (0) and the standby to Standby (2).
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+              <button onClick={()=>setAluaModal(null)} className="btn btn-ghost">Cancel</button>
+              <button
+                onClick={async ()=>{ if(await confirm({ title:'Change ALUA state?', message:`Set ${aluaModal.iqn} to state ${aluaModal.state}. Active sessions may be interrupted.`, danger: aluaModal.state >= 2, confirmLabel:'Apply' })) setAluaState.mutate({ targetIqn: aluaModal.iqn, state: aluaModal.state }) }}
+                disabled={setAluaState.isPending}
+                className="btn btn-primary"
+              >
+                {setAluaState.isPending ? 'Applying…' : 'Apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

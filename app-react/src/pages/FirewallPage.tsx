@@ -18,6 +18,7 @@ import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { toast } from '@/hooks/useToast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -203,6 +204,7 @@ export function FirewallPage() {
   const qc = useQueryClient()
   const [editingRule, setEditingRule] = useState<FirewallRule | null>(null)
   const [autoReconcile, setAutoReconcile] = useState(false)
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const diffQ = useQuery({
     queryKey: ['nixos', 'diff-intent'],
@@ -352,7 +354,7 @@ export function FirewallPage() {
                         onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-tertiary)')}>
                         <Icon name="edit" size={16} />
                       </button>
-                      <button onClick={() => rulesMut.mutate({ action: 'delete', rule_num: rule.id })}
+                      <button onClick={async () => { if (await confirm({ title: `Delete rule #${rule.id}?`, message: 'Traffic matching this rule will no longer be blocked or allowed.', danger: true, confirmLabel: 'Delete Rule' })) { rulesMut.mutate({ action: 'delete', rule_num: rule.id }) } }}
                         disabled={rulesMut.isPending}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 4, borderRadius: 'var(--radius-xs)', display: 'inline-flex' }}
                         onMouseEnter={e => (e.currentTarget.style.color = 'var(--error)')}
@@ -373,6 +375,7 @@ export function FirewallPage() {
           <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)' }}>Add a rule above to control traffic</div>
         </div>
       )}
+      <ConfirmDialog />
     </div>
   )
 }

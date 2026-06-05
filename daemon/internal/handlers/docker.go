@@ -70,13 +70,13 @@ func (h *DockerHandler) ListContainers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw := make([]map[string]interface{}, 0, len(containers))
+	raw := make([]map[string]any, 0, len(containers))
 	for _, c := range containers {
 		raw = append(raw, containerToMap(c))
 	}
 	stacks := groupContainersByStack(containers)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":          true,
 		"data":             raw,
 		"containers":       raw,
@@ -163,11 +163,11 @@ func (h *DockerHandler) ContainerAction(w http.ResponseWriter, r *http.Request) 
 //  Helpers
 // ─────────────────────────────────────────────
 
-func containerToMap(c dockerclient.Container) map[string]interface{} {
+func containerToMap(c dockerclient.Container) map[string]any {
 	// Build ports in both Docker API format (PascalCase) and frontend format (snake_case)
-	ports := make([]map[string]interface{}, 0, len(c.Ports))
+	ports := make([]map[string]any, 0, len(c.Ports))
 	for _, p := range c.Ports {
-		ports = append(ports, map[string]interface{}{
+		ports = append(ports, map[string]any{
 			// Docker API PascalCase (kept for any tooling that reads raw data)
 			"IP": p.IP, "PrivatePort": p.PrivatePort,
 			"PublicPort": p.PublicPort, "Type": p.Type,
@@ -178,7 +178,7 @@ func containerToMap(c dockerclient.Container) map[string]interface{} {
 		})
 	}
 	shortName := c.ShortName()
-	return map[string]interface{}{
+	return map[string]any{
 		// Docker API PascalCase originals
 		"Id": c.ID, "Names": c.Names, "Image": c.Image,
 		"ImageID": c.ImageID, "Command": c.Command,
@@ -198,9 +198,9 @@ func containerToMap(c dockerclient.Container) map[string]interface{} {
 	}
 }
 
-func groupContainersByStack(containers []dockerclient.Container) []map[string]interface{} {
+func groupContainersByStack(containers []dockerclient.Container) []map[string]any {
 	type stackEntry struct {
-		containers []map[string]interface{}
+		containers []map[string]any
 		originals  []dockerclient.Container
 	}
 	grouped := map[string]*stackEntry{}
@@ -212,7 +212,7 @@ func groupContainersByStack(containers []dockerclient.Container) []map[string]in
 		grouped[name].containers = append(grouped[name].containers, containerToMap(c))
 		grouped[name].originals = append(grouped[name].originals, c)
 	}
-	stacks := make([]map[string]interface{}, 0, len(grouped))
+	stacks := make([]map[string]any, 0, len(grouped))
 	for name, entry := range grouped {
 		running := 0
 		totalPorts := 0
@@ -222,7 +222,7 @@ func groupContainersByStack(containers []dockerclient.Container) []map[string]in
 			}
 			totalPorts += len(c.Ports)
 		}
-		stacks = append(stacks, map[string]interface{}{
+		stacks = append(stacks, map[string]any{
 			"name":               name,
 			"containers":         entry.containers,
 			"count":              len(entry.containers),
@@ -248,7 +248,7 @@ func (h *DockerHandler) PruneDocker(w http.ResponseWriter, r *http.Request) {
 	containers, images, volumes, spaceBytes, err := h.docker.PruneAll(ctx)
 	if err != nil {
 		audit.LogCommand(audit.LevelWarn, user, "docker_prune", nil, false, 0, err)
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
@@ -264,7 +264,7 @@ func (h *DockerHandler) PruneDocker(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.LogCommand(audit.LevelInfo, user, "docker_prune", nil, true, 0, nil)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":            true,
 		"containers_removed": containers,
 		"images_removed":     images,
@@ -312,7 +312,7 @@ func (h *DockerHandler) RemoveImage(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if len(blockers) > 0 {
-				respondOK(w, map[string]interface{}{
+				respondOK(w, map[string]any{
 					"success": false,
 					"error":   fmt.Sprintf("Image is in use by containers: %s. Stop and remove them first, or use force.", strings.Join(blockers, ", ")),
 				})
@@ -332,7 +332,7 @@ func (h *DockerHandler) RemoveImage(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if len(blockers) > 0 {
-				respondOK(w, map[string]interface{}{
+				respondOK(w, map[string]any{
 					"success": false,
 					"error":   fmt.Sprintf("Image is in use by containers: %s. Stop and remove them first, or use force.", strings.Join(blockers, ", ")),
 				})
@@ -348,11 +348,11 @@ func (h *DockerHandler) RemoveImage(w http.ResponseWriter, r *http.Request) {
 	audit.LogCommand(audit.LevelInfo, user, "docker_rmi", []string{req.ID}, err == nil, duration, err)
 
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true, "message": "Image removed"})
+	respondOK(w, map[string]any{"success": true, "message": "Image removed"})
 }
 
 // ListImages handles GET /api/docker/images
@@ -373,7 +373,7 @@ func (h *DockerHandler) ListImages(w http.ResponseWriter, r *http.Request) {
 	audit.LogCommand(audit.LevelInfo, user, "docker_images", nil, err == nil, duration, err)
 
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
@@ -389,7 +389,7 @@ func (h *DockerHandler) ListImages(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"images":  res,
 		"total":   len(res),

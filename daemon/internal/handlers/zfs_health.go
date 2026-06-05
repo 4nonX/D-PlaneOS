@@ -40,9 +40,9 @@ type PoolHealthDetail struct {
 func (h *ZFSHealthHandler) GetPoolHealth(w http.ResponseWriter, r *http.Request) {
 	output, err := executeCommand("zpool", []string{"status", "-p"})
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
-			"pools":   []interface{}{},
+			"pools":   []any{},
 			"error":   "Cannot read pool status",
 		})
 		return
@@ -50,7 +50,7 @@ func (h *ZFSHealthHandler) GetPoolHealth(w http.ResponseWriter, r *http.Request)
 
 	pools := parsePoolHealth(output)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"pools":   pools,
 		"count":   len(pools),
@@ -68,9 +68,9 @@ func (h *ZFSHealthHandler) GetIOStats(w http.ResponseWriter, r *http.Request) {
 		// Fallback to simpler format
 		output, err = executeCommand("zpool", []string{"iostat", "-v"})
 		if err != nil {
-			respondOK(w, map[string]interface{}{
+			respondOK(w, map[string]any{
 				"success": true,
-				"stats":   []interface{}{},
+				"stats":   []any{},
 			})
 			return
 		}
@@ -78,7 +78,7 @@ func (h *ZFSHealthHandler) GetIOStats(w http.ResponseWriter, r *http.Request) {
 
 	stats := parseIOStats(output)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"stats":   stats,
 	})
@@ -100,9 +100,9 @@ func (h *ZFSHealthHandler) GetPoolEvents(w http.ResponseWriter, r *http.Request)
 	})
 	if err != nil {
 		// zpool events not available on all systems
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
-			"events":  []interface{}{},
+			"events":  []any{},
 			"note":    "Pool events not available on this system",
 		})
 		return
@@ -110,7 +110,7 @@ func (h *ZFSHealthHandler) GetPoolEvents(w http.ResponseWriter, r *http.Request)
 
 	events := parsePoolEvents(output, count)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"events":  events,
 		"count":   len(events),
@@ -123,15 +123,15 @@ func (h *ZFSHealthHandler) GetSMARTHealth(w http.ResponseWriter, r *http.Request
 	// Get list of disks from zpool
 	zpoolOutput, err := executeCommand("zpool", []string{"status"})
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
-			"disks":   []interface{}{},
+			"disks":   []any{},
 		})
 		return
 	}
 
 	disks := extractDiskDevices(zpoolOutput)
-	var smartData []map[string]interface{}
+	var smartData []map[string]any
 
 	for _, disk := range disks {
 		devicePath := "/dev/" + disk
@@ -139,16 +139,16 @@ func (h *ZFSHealthHandler) GetSMARTHealth(w http.ResponseWriter, r *http.Request
 			"-a", "-j", devicePath,
 		})
 		if err != nil {
-			smartData = append(smartData, map[string]interface{}{
+			smartData = append(smartData, map[string]any{
 				"device": disk,
 				"error":  "SMART data unavailable",
 			})
 			continue
 		}
 
-		var smartJSON map[string]interface{}
+		var smartJSON map[string]any
 		if err := json.Unmarshal([]byte(output), &smartJSON); err != nil {
-			smartData = append(smartData, map[string]interface{}{
+			smartData = append(smartData, map[string]any{
 				"device":  disk,
 				"raw":     output,
 			})
@@ -156,7 +156,7 @@ func (h *ZFSHealthHandler) GetSMARTHealth(w http.ResponseWriter, r *http.Request
 		}
 
 		// Extract key health indicators
-		result := map[string]interface{}{
+		result := map[string]any{
 			"device": disk,
 		}
 
@@ -166,7 +166,7 @@ func (h *ZFSHealthHandler) GetSMARTHealth(w http.ResponseWriter, r *http.Request
 		if temp, ok := smartJSON["temperature"]; ok {
 			result["temperature"] = temp
 			// NVMe/SSD temperature warnings
-			if tempMap, ok := temp.(map[string]interface{}); ok {
+			if tempMap, ok := temp.(map[string]any); ok {
 				if current, ok := tempMap["current"].(float64); ok {
 					if current >= 70 {
 						result["temp_warning"] = "critical"
@@ -192,7 +192,7 @@ func (h *ZFSHealthHandler) GetSMARTHealth(w http.ResponseWriter, r *http.Request
 		smartData = append(smartData, result)
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"disks":   smartData,
 		"count":   len(smartData),
@@ -323,8 +323,8 @@ func calculatePoolRisk(pool *PoolHealthDetail) string {
 }
 
 // parseIOStats parses zpool iostat output
-func parseIOStats(output string) []map[string]interface{} {
-	var stats []map[string]interface{}
+func parseIOStats(output string) []map[string]any {
+	var stats []map[string]any
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
 	for _, line := range lines {
@@ -333,7 +333,7 @@ func parseIOStats(output string) []map[string]interface{} {
 		}
 		fields := strings.Fields(line)
 		if len(fields) >= 6 {
-			stats = append(stats, map[string]interface{}{
+			stats = append(stats, map[string]any{
 				"device":    fields[0],
 				"alloc":     fields[1],
 				"free":      fields[2],

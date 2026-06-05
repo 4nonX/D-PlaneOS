@@ -44,7 +44,7 @@ func (h *DockerHandler) ContainerLogs(w http.ResponseWriter, r *http.Request) {
 		Tail:   lines,
 	})
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success": false,
 			"error":   err.Error(),
 			"logs":    "",
@@ -52,7 +52,7 @@ func (h *DockerHandler) ContainerLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":   true,
 		"container": containerName,
 		"logs":      logs,

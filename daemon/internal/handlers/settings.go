@@ -41,7 +41,7 @@ func (h *SettingsHandler) GetTelegramConfig(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	if err == sql.ErrNoRows {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"has_token": false, "chat_id": "", "enabled": false,
 		})
 		return
@@ -50,7 +50,7 @@ func (h *SettingsHandler) GetTelegramConfig(w http.ResponseWriter, r *http.Reque
 		respondErrorSimple(w, "Failed to get config", http.StatusInternalServerError)
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"has_token": sealedToken != "",
 		"chat_id":   chatID,
 		"enabled":   enabledInt == 1,
@@ -140,7 +140,7 @@ func (h *SettingsHandler) TestTelegramConfig(w http.ResponseWriter, r *http.Requ
 
 	if err := sendTelegramTest(tokenToTest, chatIDToTest); err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"success": false,
 			"message": "Test failed: " + err.Error(),
 		})
@@ -148,7 +148,7 @@ func (h *SettingsHandler) TestTelegramConfig(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"message": "Test message sent successfully.",
 	})
@@ -157,7 +157,7 @@ func (h *SettingsHandler) TestTelegramConfig(w http.ResponseWriter, r *http.Requ
 // sendTelegramTest sends a test message directly with the provided credentials.
 func sendTelegramTest(botToken, chatID string) error {
 	url := "https://api.telegram.org/bot" + botToken + "/sendMessage"
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"chat_id":    chatID,
 		"text":       "DPlaneOS Telegram Test\n\nYour alert configuration is working correctly.",
 		"parse_mode": "Markdown",
@@ -171,7 +171,7 @@ func sendTelegramTest(botToken, chatID string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Telegram API error %d: %s", resp.StatusCode, string(b))
+		return fmt.Errorf("telegram API error %d: %s", resp.StatusCode, string(b))
 	}
 	return nil
 }

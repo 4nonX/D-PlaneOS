@@ -240,11 +240,11 @@ func (bl *BufferedLogger) Flush() error {
 }
 
 // GetStats returns buffer statistics
-func (bl *BufferedLogger) GetStats() map[string]interface{} {
+func (bl *BufferedLogger) GetStats() map[string]any {
 	bl.bufferMutex.Lock()
 	defer bl.bufferMutex.Unlock()
 
-	return map[string]interface{}{
+	return map[string]any{
 		"buffer_size":     len(bl.buffer),
 		"max_buffer":      bl.maxBuffer,
 		"flush_interval":  bl.flushInterval.String(),

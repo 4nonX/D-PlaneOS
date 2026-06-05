@@ -279,7 +279,7 @@ func GetFTPStatus(w http.ResponseWriter, r *http.Request) {
 	if installed {
 		active = ftpServiceActive()
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":   true,
 		"installed": installed,
 		"active":    active,
@@ -293,7 +293,7 @@ func GetFTPConfig(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, "Failed to load FTP config", http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "config": cfg})
+	respondOK(w, map[string]any{"success": true, "config": cfg})
 }
 
 // UpdateFTPConfig PUT /api/ftp/config
@@ -312,7 +312,7 @@ func UpdateFTPConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ftpInstalled() {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"warning": "vsftpd is not installed. Config saved but service not started.",
 		})
@@ -320,17 +320,17 @@ func UpdateFTPConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := applyFTPConfig(cfg); err != nil {
 		log.Printf("applyFTPConfig: %v", err)
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"warning": "Config saved but service apply failed: " + err.Error(),
 		})
 		return
 	}
-	audit.LogActivity(r.Header.Get("X-User"), "ftp_config_update", map[string]interface{}{
+	audit.LogActivity(r.Header.Get("X-User"), "ftp_config_update", map[string]any{
 		"enabled": cfg.Enabled,
 		"mode":    cfg.Mode,
 	})
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // StartFTP POST /api/ftp/start
@@ -344,7 +344,7 @@ func StartFTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	audit.LogActivity(r.Header.Get("X-User"), "ftp_start", nil)
-	respondOK(w, map[string]interface{}{"success": true, "active": true})
+	respondOK(w, map[string]any{"success": true, "active": true})
 }
 
 // StopFTP POST /api/ftp/stop
@@ -358,7 +358,7 @@ func StopFTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	audit.LogActivity(r.Header.Get("X-User"), "ftp_stop", nil)
-	respondOK(w, map[string]interface{}{"success": true, "active": false})
+	respondOK(w, map[string]any{"success": true, "active": false})
 }
 
 // RestartFTP POST /api/ftp/restart
@@ -372,5 +372,5 @@ func RestartFTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	audit.LogActivity(r.Header.Get("X-User"), "ftp_restart", nil)
-	respondOK(w, map[string]interface{}{"success": true, "active": true})
+	respondOK(w, map[string]any{"success": true, "active": true})
 }

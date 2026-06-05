@@ -67,7 +67,6 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 			)
 			err := libzfs.SnapshotCreate(snapshotName)
 			if err != nil {
-				steps = append(steps, UpdateStep{"zfs_snapshot", false, err.Error()})
 				j.Fail(fmt.Sprintf("Failed to create safety snapshot: %v", err))
 				return
 			}
@@ -83,7 +82,6 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 			defer cancelDetect()
 			detail, err := dockerClient.Inspect(ctxDetect, req.ContainerName)
 			if err != nil {
-				steps = append(steps, UpdateStep{"detect_image", false, err.Error()})
 				j.Fail("Could not detect container image. Provide 'image' field.")
 				return
 			}
@@ -94,7 +92,7 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 		defer cancelPull()
 		if err := dockerClient.PullImage(ctxPull, image); err != nil {
 			steps = append(steps, UpdateStep{"pull", false, err.Error()})
-			j.Done(map[string]interface{}{
+			j.Done(map[string]any{
 				"success":     false,
 				"steps":       steps,
 				"error":       fmt.Sprintf("Failed to pull image: %v", err),
@@ -110,7 +108,7 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 		defer cancelInspect()
 		if _, err := dockerClient.Inspect(ctxInspect, req.ContainerName); err != nil {
 			steps = append(steps, UpdateStep{"inspect", false, err.Error()})
-			j.Done(map[string]interface{}{
+			j.Done(map[string]any{
 				"success":     false,
 				"steps":       steps,
 				"error":       "Failed to inspect container config",
@@ -129,7 +127,7 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 			ctxRecover, cancelRecover := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancelRecover()
 			_ = dockerClient.Start(ctxRecover, req.ContainerName)
-			j.Done(map[string]interface{}{
+			j.Done(map[string]any{
 				"success":     false,
 				"steps":       steps,
 				"error":       "Failed to stop container, restarted original",
@@ -145,7 +143,7 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 		defer cancelStart()
 		if err := dockerClient.Start(ctxStart, req.ContainerName); err != nil {
 			steps = append(steps, UpdateStep{"start", false, err.Error()})
-			j.Done(map[string]interface{}{
+			j.Done(map[string]any{
 				"success": false,
 				"steps":   steps,
 				"error": fmt.Sprintf("Container failed to start after update. "+
@@ -171,7 +169,7 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 		if hcErr != nil || !running {
 			steps = append(steps, UpdateStep{"health_check", false,
 				fmt.Sprintf("container not healthy after %ds: %v", hcTimeout, hcErr)})
-			j.Done(map[string]interface{}{
+			j.Done(map[string]any{
 				"success": false,
 				"steps":   steps,
 				"error": fmt.Sprintf("Container not healthy after update (waited %ds). "+
@@ -186,7 +184,7 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 		audit.LogCommand(audit.LevelInfo, "system", "docker_safe_update",
 			[]string{req.ContainerName, image}, true, time.Since(startTime), nil)
 
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"success":     true,
 			"steps":       steps,
 			"snapshot":    snapshotName,
@@ -194,7 +192,7 @@ func (h *DockerHandler) SafeUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 
-	respondOK(w, map[string]interface{}{"job_id": id})
+	respondOK(w, map[string]any{"job_id": id})
 }
 
 type UpdateStep struct {
@@ -243,13 +241,13 @@ func (h *DockerHandler) PullImage(w http.ResponseWriter, r *http.Request) {
 			j.Fail(fmt.Sprintf("Pull failed: %v", err))
 			return
 		}
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"image":       image,
 			"duration_ms": duration.Milliseconds(),
 		})
 	})
 
-	respondOK(w, map[string]interface{}{"job_id": id})
+	respondOK(w, map[string]any{"job_id": id})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -280,14 +278,14 @@ func (h *DockerHandler) RemoveContainer(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 	dockerClient := dockerclient.New()
 	if err := dockerClient.Remove(ctx, req.ContainerName, req.Force, req.RemoveVolumes); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   err.Error(),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Container %s removed", req.ContainerName),
 	})
@@ -304,27 +302,26 @@ func (h *DockerHandler) ContainerStats(w http.ResponseWriter, r *http.Request) {
 		"stats", "--no-stream", "--format",
 		`{"name":"{{.Name}}","cpu":"{{.CPUPerc}}","memory":"{{.MemUsage}}","mem_perc":"{{.MemPerc}}","net_io":"{{.NetIO}}","block_io":"{{.BlockIO}}","pids":"{{.PIDs}}"}`)
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":    true,
-			"containers": []interface{}{},
+			"containers": []any{},
 			"error":      "Docker stats unavailable",
 		})
 		return
 	}
 
-	var stats []map[string]interface{}
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	for _, line := range lines {
+	var stats []map[string]any
+	for line := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
 		if line == "" {
 			continue
 		}
-		var s map[string]interface{}
+		var s map[string]any
 		if err := json.Unmarshal([]byte(line), &s); err == nil {
 			stats = append(stats, s)
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":    true,
 		"containers": stats,
 		"count":      len(stats),
@@ -374,13 +371,13 @@ func (h *DockerHandler) ComposeUp(w http.ResponseWriter, r *http.Request) {
 			j.Fail(fmt.Sprintf("%v\n%s", err, string(output)))
 			return
 		}
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"output":      string(output),
 			"duration_ms": duration.Milliseconds(),
 		})
 	})
 
-	respondOK(w, map[string]interface{}{"job_id": id})
+	respondOK(w, map[string]any{"job_id": id})
 }
 
 // ComposeDown stops a docker-compose stack
@@ -413,10 +410,10 @@ func (h *DockerHandler) ComposeDown(w http.ResponseWriter, r *http.Request) {
 			j.Fail(fmt.Sprintf("%v\n%s", err, string(output)))
 			return
 		}
-		j.Done(map[string]interface{}{"output": string(output)})
+		j.Done(map[string]any{"output": string(output)})
 	})
 
-	respondOK(w, map[string]interface{}{"job_id": id})
+	respondOK(w, map[string]any{"job_id": id})
 }
 
 // ComposeStatus shows status of a docker-compose stack
@@ -432,27 +429,26 @@ func (h *DockerHandler) ComposeStatus(w http.ResponseWriter, r *http.Request) {
 	output, err := cmdutil.RunFast("docker",
 		"compose", "-f", path+"/docker-compose.yml", "ps", "--format", "json")
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":  true,
-			"services": []interface{}{},
+			"services": []any{},
 			"error":    "Compose stack not found or not running",
 		})
 		return
 	}
 
-	var services []map[string]interface{}
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	for _, line := range lines {
+	var services []map[string]any
+	for line := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
 		if line == "" {
 			continue
 		}
-		var s map[string]interface{}
+		var s map[string]any
 		if err := json.Unmarshal([]byte(line), &s); err == nil {
 			services = append(services, s)
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":  true,
 		"services": services,
 		"count":    len(services),

@@ -1,0 +1,17 @@
+graphify-out/
+daemon/vendor/
+app/assets/
+app-react/node_modules/
+app-react/.stitch/
+.github/
+daemon/out.txt
+daemon/test_results/
+daemon/test_output/
+daemon/test_raw/
+daemon/test_ha/
+daemon/test_final/
+daemon/compile_errors/
+disk_files.txt
+repo_files.txt
+old_ci.yml
+app/index.html

@@ -52,7 +52,7 @@ func GetSMBVFSConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if combined == "" {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":      true,
 			"time_machine": false,
 			"shadow_copy":  false,
@@ -61,7 +61,7 @@ func GetSMBVFSConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":      true,
 		"time_machine": strings.Contains(combined, "vfs_fruit"),
 		"shadow_copy":  strings.Contains(combined, "shadow_copy2"),
@@ -133,7 +133,7 @@ func SetSMBVFSConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"success":     true,
 		"share":       req.ShareName,
 		"vfs_objects": vfsObjects,
@@ -185,7 +185,7 @@ func CreateVLAN(w http.ResponseWriter, r *http.Request) {
 		VLANID:     req.VlanID,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
@@ -207,7 +207,7 @@ func CreateVLAN(w http.ResponseWriter, r *http.Request) {
 		persistStaticIP(ifName, req.IP, "", nil)
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":   true,
 		"interface": ifName,
 		"vlan_id":   req.VlanID,
@@ -231,11 +231,11 @@ func DeleteVLAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := netlinkx.LinkDel(req.Interface); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 	persistVLANDelete(req.Interface)
-	respondOK(w, map[string]interface{}{"success": true, "deleted": req.Interface})
+	respondOK(w, map[string]any{"success": true, "deleted": req.Interface})
 }
 
 // ListVLANs lists all VLAN interfaces
@@ -243,21 +243,21 @@ func DeleteVLAN(w http.ResponseWriter, r *http.Request) {
 func ListVLANs(w http.ResponseWriter, r *http.Request) {
 	links, err := netlinkx.LinkList()
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": true, "vlans": []interface{}{}})
+		respondOK(w, map[string]any{"success": true, "vlans": []any{}})
 		return
 	}
-	vlans := make([]map[string]interface{}, 0)
+	vlans := make([]map[string]any, 0)
 	for _, l := range links {
 		// VLAN interfaces are conventionally named PARENT.VLANID (e.g. eth0.100)
 		if strings.Contains(l.Name, ".") {
-			vlans = append(vlans, map[string]interface{}{
+			vlans = append(vlans, map[string]any{
 				"name":  l.Name,
 				"index": l.Index,
 				"flags": l.Flags.String(),
 			})
 		}
 	}
-	respondOK(w, map[string]interface{}{"success": true, "vlans": vlans})
+	respondOK(w, map[string]any{"success": true, "vlans": vlans})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -296,7 +296,7 @@ func CreateBond(w http.ResponseWriter, r *http.Request) {
 		Type:     netlinkx.LinkTypeBond,
 		BondMode: req.Mode,
 	}); err != nil {
-		respondOK(w, map[string]interface{}{"success": false, "error": err.Error()})
+		respondOK(w, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
 
@@ -330,7 +330,7 @@ func CreateBond(w http.ResponseWriter, r *http.Request) {
 		persistStaticIP(req.Name, req.IP, "", nil)
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"name":    req.Name,
 		"mode":    req.Mode,
@@ -351,7 +351,7 @@ func GetNTPStatus(w http.ResponseWriter, r *http.Request) {
 		// Fallback: chronyc
 		output, err = executeCommandWithTimeout(TimeoutFast, "chronyc", []string{"tracking"})
 		if err != nil {
-			respondOK(w, map[string]interface{}{
+			respondOK(w, map[string]any{
 				"success": true,
 				"synced":  false,
 				"error":   "Cannot query NTP status",
@@ -363,7 +363,7 @@ func GetNTPStatus(w http.ResponseWriter, r *http.Request) {
 	synced := strings.Contains(output, "NTPSynchronized=yes") ||
 		strings.Contains(output, "Leap status     : Normal")
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"synced":  synced,
 		"details": strings.TrimSpace(output),
@@ -405,7 +405,7 @@ func SetNTPServers(w http.ResponseWriter, r *http.Request) {
 	// Persist to Nix fragment (NixOS: networking.timeServers)
 	persistNTP(req.Servers)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"servers": req.Servers,
 	})
@@ -462,7 +462,7 @@ func ListBonds(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"bonds":   bonds,
 	})
@@ -509,7 +509,7 @@ func DeleteBond(w http.ResponseWriter, r *http.Request) {
 	// Remove from persistence layers
 	persistBondDelete(name)
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "bond deleted",
 	})

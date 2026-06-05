@@ -72,5 +72,5 @@ func (h *SystemBackupHandler) RestoreBackup(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true, "message": "Database restored successfully"})
+	respondOK(w, map[string]any{"success": true, "message": "Database restored successfully"})
 }

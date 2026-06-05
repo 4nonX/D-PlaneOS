@@ -1142,7 +1142,7 @@ function SchedulesTab({ datasets, remotes, confirm }: { datasets: ZFSDataset[]; 
 // ReplicationPage
 // ---------------------------------------------------------------------------
 
-type Tab = 'replicate' | 'schedules' | 'peers'
+type Tab = 'replicate' | 'schedules' | 'peers' | 'restore' | 'retention'
 
 export function ReplicationPage() {
   const [tab, setTab] = useState<Tab>('peers')
@@ -1164,9 +1164,11 @@ export function ReplicationPage() {
   const remotes  = remotesQ.data?.remotes ?? []
 
   const TABS: { id: Tab; label: string; icon: string }[] = [
-    { id: 'peers',     label: 'Peers',     icon: 'device_hub' },
-    { id: 'schedules', label: 'Schedules', icon: 'schedule'   },
-    { id: 'replicate', label: 'Replicate', icon: 'sync_alt'   },
+    { id: 'peers',     label: 'Peers',     icon: 'device_hub'  },
+    { id: 'schedules', label: 'Schedules', icon: 'schedule'    },
+    { id: 'replicate', label: 'Replicate', icon: 'sync_alt'    },
+    { id: 'restore',   label: 'Restore',   icon: 'restore'     },
+    { id: 'retention', label: 'Retention', icon: 'auto_delete' },
   ]
 
   return (
@@ -1214,7 +1216,220 @@ export function ReplicationPage() {
         </>
       )}
 
+      {tab === 'restore' && (
+        remotesQ.isLoading ? <Skeleton height={300} /> :
+        <RestoreForm remotes={remotes} />
+      )}
+
+      {tab === 'retention' && <RetentionTab />}
+
       <ConfirmDialog />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// RestoreForm - pull a snapshot from a remote peer (disaster recovery)
+// ---------------------------------------------------------------------------
+function RestoreForm({ remotes }: { remotes: Remote[] }) {
+  const [remoteId, setRemoteId]         = useState(remotes[0]?.id ?? '')
+  const [remoteSnap, setRemoteSnap]     = useState('')
+  const [localDataset, setLocalDataset] = useState('')
+  const [force, setForce]               = useState(false)
+  const [jobId, setJobId]               = useState<string | null>(null)
+  const jobQ = useJob(jobId)
+  const job = jobQ?.data
+
+  const restore = useMutation({
+    mutationFn: () => api.post<{ success: boolean; job_id: string }>('/api/replication/restore', {
+      remote_id: remoteId,
+      remote_snapshot: remoteSnap.trim(),
+      local_dataset: localDataset.trim(),
+      force,
+    }),
+    onSuccess: d => { if (d.job_id) setJobId(d.job_id) },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <div className="card" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Restore from Remote Backup</div>
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: 20 }}>
+        Pull a snapshot from a peer into a local dataset. Use this to recover data after loss or to clone a remote dataset.
+        The remote sends, local receives. Specify an exact snapshot path as it appears on the remote (e.g. <code style={{ fontFamily: 'var(--font-mono)' }}>backuppool/data@snap-2025</code>).
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <label className="field">
+          <span className="field-label">Source Peer</span>
+          <select value={remoteId} onChange={e => setRemoteId(e.target.value)} className="input" style={{ appearance: 'none' }}>
+            {remotes.map(r => <option key={r.id} value={r.id}>{r.name} ({r.host})</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span className="field-label">Remote Snapshot (full path)</span>
+          <input value={remoteSnap} onChange={e => setRemoteSnap(e.target.value)}
+            placeholder="backuppool/data@snap-2025-01-15"
+            className="input" style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }} />
+        </label>
+        <label className="field">
+          <span className="field-label">Local Destination Dataset</span>
+          <input value={localDataset} onChange={e => setLocalDataset(e.target.value)}
+            placeholder="tank/restored-data"
+            className="input" style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }} />
+        </label>
+        <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 22 }}>
+          <input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)} />
+          <span className="field-label" style={{ margin: 0 }}>Force (-F): destroy conflicting local snapshots to force receive</span>
+        </label>
+      </div>
+
+      {force && (
+        <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', marginBottom: 14, fontSize: 'var(--text-xs)', color: 'var(--error)' }}>
+          Force mode will destroy local snapshots newer than the incoming stream on the destination dataset. Data loss is permanent.
+        </div>
+      )}
+
+      <button onClick={() => restore.mutate()} disabled={!remoteId || !remoteSnap.trim() || !localDataset.trim() || restore.isPending || (job != null && job.status === 'running')}
+        className="btn btn-primary" style={{ background: 'var(--primary)' }}>
+        <Icon name="restore" size={15} />{restore.isPending ? 'Starting…' : 'Start Restore'}
+      </button>
+
+      {jobId && (
+        <div style={{ marginTop: 16 }}>
+          <JobStatusBanner jobId={jobId} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// RetentionTab - snapshot retention policy management
+// ---------------------------------------------------------------------------
+interface RetentionPolicy {
+  id: string
+  dataset: string
+  prefix: string
+  keep_hourly: number
+  keep_daily: number
+  keep_weekly: number
+  keep_monthly: number
+  keep_yearly: number
+  enabled: boolean
+}
+
+function RetentionTab() {
+  const qc = useQueryClient()
+  const { confirm, ConfirmDialog: RetConfirmDialog } = useConfirm()
+  const [editing, setEditing] = useState<Partial<RetentionPolicy> | null>(null)
+
+  const q = useQuery({
+    queryKey: ['replication', 'retention'],
+    queryFn: ({ signal }) => api.get<{ success: boolean; policies: RetentionPolicy[] }>('/api/replication/retention', signal),
+  })
+
+  const save = useMutation({
+    mutationFn: (p: Partial<RetentionPolicy> & { action: string }) => api.post('/api/replication/retention', { action: p.action, policy: p }),
+    onSuccess: () => { toast.success('Saved'); setEditing(null); qc.invalidateQueries({ queryKey: ['replication', 'retention'] }) },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const policies = q.data?.policies ?? []
+  const blank: Partial<RetentionPolicy> = { dataset: '', prefix: 'auto-', keep_hourly: 24, keep_daily: 7, keep_weekly: 4, keep_monthly: 12, keep_yearly: 0, enabled: true }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontWeight: 700 }}>Snapshot Retention Policies</div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
+            Automatically prune old local snapshots by time bucket. Only snapshots matching the prefix are pruned; manual snapshots are never touched.
+            Retention runs after each replication cycle - remote copies are preserved independently.
+          </div>
+        </div>
+        <button onClick={() => setEditing({ ...blank })} className="btn btn-primary">
+          <Icon name="add" size={14} />New Policy
+        </button>
+      </div>
+
+      {q.isLoading && <Skeleton height={120} />}
+      {q.isError && <ErrorState error={q.error} />}
+
+      {!q.isLoading && policies.length === 0 && (
+        <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-tertiary)', background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)' }}>
+          No retention policies configured. Without policies, snapshots accumulate indefinitely and will eventually fill the pool.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {policies.map(p => (
+          <div key={p.id} className="card" style={{ borderRadius: 'var(--radius-lg)', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, opacity: p.enabled ? 1 : 0.5 }}>
+            <Icon name="auto_delete" size={20} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', fontWeight: 600 }}>{p.dataset}</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
+                prefix: <code style={{ fontFamily: 'var(--font-mono)' }}>{p.prefix || '(all auto)'}</code>
+                {' · '}
+                {[
+                  p.keep_hourly  && `${p.keep_hourly}h`,
+                  p.keep_daily   && `${p.keep_daily}d`,
+                  p.keep_weekly  && `${p.keep_weekly}w`,
+                  p.keep_monthly && `${p.keep_monthly}mo`,
+                  p.keep_yearly  && `${p.keep_yearly}yr`,
+                ].filter(Boolean).join(' / ') || 'no limits'}
+                {' · '}{p.enabled ? <span style={{ color: 'var(--success)' }}>enabled</span> : <span style={{ color: 'var(--text-tertiary)' }}>disabled</span>}
+              </div>
+            </div>
+            <button onClick={() => setEditing({ ...p })} className="btn btn-sm btn-ghost"><Icon name="edit" size={13} />Edit</button>
+            <button onClick={async () => {
+              if (await confirm({ title: `Delete retention policy for "${p.dataset}"?`, danger: true, confirmLabel: 'Delete' }))
+                save.mutate({ action: 'delete', id: p.id } as any)
+            }} className="btn btn-sm btn-danger"><Icon name="delete" size={13} />Delete</button>
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div className="modal-overlay" onClick={() => setEditing(null)}>
+          <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, marginBottom: 16 }}>{editing.id ? 'Edit Policy' : 'New Retention Policy'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <label className="field" style={{ gridColumn: '1 / -1' }}>
+                <span className="field-label">Dataset (exact name)</span>
+                <input value={editing.dataset ?? ''} onChange={e => setEditing(p => ({ ...p, dataset: e.target.value }))}
+                  placeholder="tank/data" className="input" style={{ fontFamily: 'var(--font-mono)' }} />
+              </label>
+              <label className="field" style={{ gridColumn: '1 / -1' }}>
+                <span className="field-label">Snapshot prefix to prune (leave blank for all)</span>
+                <input value={editing.prefix ?? ''} onChange={e => setEditing(p => ({ ...p, prefix: e.target.value }))}
+                  placeholder="auto-" className="input" style={{ fontFamily: 'var(--font-mono)' }} />
+              </label>
+              {([['keep_hourly','Hourly'],['keep_daily','Daily'],['keep_weekly','Weekly'],['keep_monthly','Monthly'],['keep_yearly','Yearly']] as const).map(([k, label]) => (
+                <label key={k} className="field">
+                  <span className="field-label">Keep {label} (0 = unlimited)</span>
+                  <input type="number" min={0} value={(editing as any)[k] ?? 0}
+                    onChange={e => setEditing(p => ({ ...p, [k]: parseInt(e.target.value) || 0 }))}
+                    className="input" />
+                </label>
+              ))}
+              <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <input type="checkbox" checked={editing.enabled ?? true} onChange={e => setEditing(p => ({ ...p, enabled: e.target.checked }))} />
+                <span className="field-label" style={{ margin: 0 }}>Enabled</span>
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setEditing(null)} className="btn btn-ghost">Cancel</button>
+              <button onClick={() => save.mutate({ action: editing.id ? 'update' : 'create', ...editing } as any)}
+                disabled={!editing.dataset?.trim() || save.isPending}
+                className="btn btn-primary">
+                {save.isPending ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <RetConfirmDialog />
     </div>
   )
 }

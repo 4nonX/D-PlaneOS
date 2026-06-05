@@ -23,7 +23,7 @@ import (
 func StartZEDListener(
 	ctx context.Context,
 	socketPath string,
-	broadcast func(eventType string, data interface{}, level string),
+	broadcast func(eventType string, data any, level string),
 	dispatchAlert func(event, pool, msg string),
 	refreshPoolHealth func(),
 ) {
@@ -76,7 +76,7 @@ func StartZEDListener(
 
 func handleZEDConnection(
 	conn net.Conn,
-	broadcast func(eventType string, data interface{}, level string),
+	broadcast func(eventType string, data any, level string),
 	dispatchAlert func(event, pool, msg string),
 	refreshPoolHealth func(),
 ) {
@@ -140,7 +140,7 @@ func handleZEDConnection(
 // free of direct I/O side-effects beyond GetPoolScanLine.
 func zedTypedDispatch(
 	pool, subclass, state, level string,
-	broadcast func(string, interface{}, string),
+	broadcast func(string, any, string),
 	refreshPoolHealth func(),
 ) {
 	switch subclass {
@@ -148,38 +148,38 @@ func zedTypedDispatch(
 	// ── Scrub ────────────────────────────────────────────────────────────────
 
 	case "scrub_start":
-		broadcast("scrub_started", map[string]interface{}{"pool": pool}, "info")
+		broadcast("scrub_started", map[string]any{"pool": pool}, "info")
 		go zedFastProgressPoll(pool, "scrub_progress", broadcast)
 
 	case "scrub_finish":
-		broadcast("scrub_completed", map[string]interface{}{"pool": pool}, "info")
+		broadcast("scrub_completed", map[string]any{"pool": pool}, "info")
 		refreshPoolHealth()
 
 	case "scrub_abort":
-		broadcast("scrub_aborted", map[string]interface{}{"pool": pool}, "warning")
+		broadcast("scrub_aborted", map[string]any{"pool": pool}, "warning")
 
 	// ── Resilver ─────────────────────────────────────────────────────────────
 
 	case "resilver_start":
-		broadcast("resilver_started", map[string]interface{}{"pool": pool}, "info")
+		broadcast("resilver_started", map[string]any{"pool": pool}, "info")
 		go zedFastProgressPoll(pool, "resilver_progress", broadcast)
 
 	case "resilver_finish":
-		broadcast("resilver_completed", map[string]interface{}{"pool": pool}, "info")
+		broadcast("resilver_completed", map[string]any{"pool": pool}, "info")
 		refreshPoolHealth()
 
 	// ── TRIM ─────────────────────────────────────────────────────────────────
 
 	case "trim_start":
-		broadcast("trim_started", map[string]interface{}{"pool": pool}, "info")
+		broadcast("trim_started", map[string]any{"pool": pool}, "info")
 		go zedTrimProgressPoll(pool, broadcast)
 
 	case "trim_finish":
-		broadcast("trim_completed", map[string]interface{}{"pool": pool}, "info")
+		broadcast("trim_completed", map[string]any{"pool": pool}, "info")
 		refreshPoolHealth()
 
 	case "trim_abort":
-		broadcast("trim_aborted", map[string]interface{}{"pool": pool}, "warning")
+		broadcast("trim_aborted", map[string]any{"pool": pool}, "warning")
 
 	// ── State changes and device events ──────────────────────────────────────
 
@@ -195,28 +195,28 @@ func zedTypedDispatch(
 		refreshPoolHealth()
 
 	case "vdev_clear":
-		broadcast("vdev_errors_cleared", map[string]interface{}{"pool": pool}, "info")
+		broadcast("vdev_errors_cleared", map[string]any{"pool": pool}, "info")
 		refreshPoolHealth()
 
 	case "vdev_online":
-		broadcast("vdev_recovered", map[string]interface{}{"pool": pool}, "info")
+		broadcast("vdev_recovered", map[string]any{"pool": pool}, "info")
 		refreshPoolHealth()
 
 	case "pool_import":
-		broadcast("pool_imported", map[string]interface{}{"pool": pool}, "info")
+		broadcast("pool_imported", map[string]any{"pool": pool}, "info")
 		refreshPoolHealth()
 
 	// ── Data loss and system errors ───────────────────────────────────────────
 
 	case "data_loss":
-		broadcast("zfs.data_loss", map[string]interface{}{
+		broadcast("zfs.data_loss", map[string]any{
 			"pool":  pool,
 			"state": state,
 		}, "error")
 		refreshPoolHealth()
 
 	case "deadman":
-		broadcast("zfs.deadman", map[string]interface{}{
+		broadcast("zfs.deadman", map[string]any{
 			"pool":  pool,
 			"state": state,
 		}, "error")
@@ -226,14 +226,14 @@ func zedTypedDispatch(
 	// frontend can show a non-modal notification without polling the audit log.
 
 	case "io_failure":
-		broadcast("zfs.io_error", map[string]interface{}{
+		broadcast("zfs.io_error", map[string]any{
 			"pool":  pool,
 			"state": state,
 			"kind":  "io",
 		}, level)
 
 	case "checksum_failure":
-		broadcast("zfs.io_error", map[string]interface{}{
+		broadcast("zfs.io_error", map[string]any{
 			"pool":  pool,
 			"state": state,
 			"kind":  "checksum",
@@ -244,7 +244,7 @@ func zedTypedDispatch(
 // zedTrimProgressPoll polls zpool status every 2 seconds while a TRIM is in
 // flight, broadcasting progress events. It exits when the operation finishes
 // or times out; the ZED trim_finish event provides the completion broadcast.
-func zedTrimProgressPoll(pool string, broadcast func(string, interface{}, string)) {
+func zedTrimProgressPoll(pool string, broadcast func(string, any, string)) {
 	const pollInterval = 2 * time.Second
 	const maxRuntime = 12 * time.Hour
 
@@ -262,7 +262,7 @@ func zedTrimProgressPoll(pool string, broadcast func(string, interface{}, string
 			return
 		}
 
-		broadcast("trim_progress", map[string]interface{}{
+		broadcast("trim_progress", map[string]any{
 			"pool":         pool,
 			"percent_done": parsed.PercentDone,
 			"eta":          parsed.ETA,
@@ -277,7 +277,7 @@ func zedTrimProgressPoll(pool string, broadcast func(string, interface{}, string
 // and broadcasts scan progress events while the operation is in flight.
 // It exits silently when the operation finishes; the ZED finish event provides
 // the completion broadcast, so this function does not emit one itself.
-func zedFastProgressPoll(pool, eventType string, broadcast func(string, interface{}, string)) {
+func zedFastProgressPoll(pool, eventType string, broadcast func(string, any, string)) {
 	const pollInterval = 2 * time.Second
 	const maxRuntime = 48 * time.Hour
 
@@ -296,7 +296,7 @@ func zedFastProgressPoll(pool, eventType string, broadcast func(string, interfac
 			return
 		}
 
-		broadcast(eventType, map[string]interface{}{
+		broadcast(eventType, map[string]any{
 			"pool":         pool,
 			"percent_done": parsed.PercentDone,
 			"eta":          parsed.ETA,

@@ -45,16 +45,29 @@ type ISCSIACL struct {
 	CHAPUser     string `json:"chap_user,omitempty"`
 }
 
+// ALUAState is the ALUA target port group access state for an iSCSI target.
+// Values per SPC-5 §6.9.4 and Linux LIO configfs documentation.
+type ALUAState int
+
+const (
+	ALUAActiveOptimized    ALUAState = 0 // Active/Optimized  - primary HA node
+	ALUAActiveNonOptimized ALUAState = 1 // Active/Non-Optimized - secondary path
+	ALUAStandby            ALUAState = 2 // Standby  - HA standby node
+	ALUAUnavailable        ALUAState = 3 // Unavailable
+)
+
 // ISCSICreateRequest is the request body for creating a target
 type ISCSICreateRequest struct {
 	IQN         string `json:"iqn"`
-	BackingDev  string `json:"backing_dev"`  // ZFS zvol path e.g. /dev/zvol/tank/lun0
+	BackingDev  string `json:"backing_dev"` // ZFS zvol path e.g. /dev/zvol/tank/lun0
 	PortalIP    string `json:"portal_ip"`
 	PortalPort  int    `json:"portal_port"`
 	RequireCHAP bool   `json:"require_chap"` // When true, enables CHAP authentication on the TPG.
 	// When false (default), the TPG uses ACL-only access control.
 	// WARNING: false means unauthenticated access - only set false in
 	// isolated networks where initiator IQN spoofing is not a concern.
+	ALUAEnabled bool      `json:"alua_enabled,omitempty"` // Enable ALUA (TPGS) on this target
+	ALUAState   ALUAState `json:"alua_state,omitempty"`   // Initial ALUA access state
 }
 
 // ISCSIACLRequest is the request body for adding/removing an ACL
@@ -91,7 +104,7 @@ func GetISCSITargets(w http.ResponseWriter, r *http.Request) {
 
 	// Parse plain text output into target list
 	targets := parseTargetcliLS(out)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"targets": targets,
 	})
@@ -167,13 +180,26 @@ func CreateISCSITarget(w http.ResponseWriter, r *http.Request) {
 	}
 	runTargetcli(tpgPath, "enable") //nolint
 
+	// ALUA (Asymmetric Logical Unit Access / TPGS) configuration.
+	// When enabled, LIO exposes a Target Port Group so multi-path initiators can
+	// determine which controller owns the active path and fall back gracefully on HA
+	// failover. The primary node should use ALUAActiveOptimized (0); the standby
+	// node should use ALUAStandby (2).
+	if req.ALUAEnabled {
+		if err := configureALUA(tpgPath, req.ALUAState); err != nil {
+			// ALUA is best-effort - log the failure but do not tear down the target.
+			fmt.Printf("ALUA CONFIG WARNING: %v - target created without ALUA\n", err)
+		}
+	}
+
 	// Save config
 	runTargetcli("/", "saveconfig") //nolint
 
-	respondOK(w, map[string]interface{}{
-		"success": true,
-		"message": "iSCSI target created",
-		"iqn":     req.IQN,
+	respondOK(w, map[string]any{
+		"success":      true,
+		"message":      "iSCSI target created",
+		"iqn":          req.IQN,
+		"alua_enabled": req.ALUAEnabled,
 	})
 }
 
@@ -223,7 +249,7 @@ func UpdateISCSITarget(w http.ResponseWriter, r *http.Request) {
 	// Save config
 	runTargetcli("/", "saveconfig") //nolint
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "iSCSI target updated",
 		"iqn":     req.IQN,
@@ -245,7 +271,7 @@ func DeleteISCSITarget(w http.ResponseWriter, r *http.Request) {
 	}
 	runTargetcli("/", "saveconfig") //nolint
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "target deleted",
 	})
@@ -268,7 +294,7 @@ func GetISCSIACLs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	acls := parseACLs(out)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"acls":    acls,
 	})
@@ -305,7 +331,7 @@ func AddISCSIACL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	runTargetcli("/", "saveconfig") //nolint
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "ACL added",
 	})
@@ -335,7 +361,7 @@ func DeleteISCSIACL(w http.ResponseWriter, r *http.Request) {
 	}
 	runTargetcli("/", "saveconfig") //nolint
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": "ACL removed",
 	})
@@ -352,9 +378,9 @@ func GetISCSIStatus(w http.ResponseWriter, r *http.Request) {
 		targetCount = strings.Count(ls, "iqn.")
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":      true,
-		"service":      map[string]interface{}{"active": active},
+		"service":      map[string]any{"active": active},
 		"target_count": targetCount,
 	})
 }
@@ -400,13 +426,62 @@ func sanitizeForTargetcli(iqn string) string {
 	return name
 }
 
+// SetISCSIALUAState changes the ALUA access state for a target's TPG.
+// This is called during HA failover to flip the standby node from Standby (2)
+// to Active/Optimized (0) and the former primary to Standby (2).
+//
+// POST /api/iscsi/targets/alua
+func SetISCSIALUAState(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TargetIQN string    `json:"target_iqn"`
+		ALUAState ALUAState `json:"alua_state"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondErrorSimple(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if err := validateIQN(req.TargetIQN); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid target", err)
+		return
+	}
+
+	tpgPath := fmt.Sprintf("/iscsi/%s/tpg1", req.TargetIQN)
+	if err := configureALUA(tpgPath, req.ALUAState); err != nil {
+		respondErrorSimple(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	runTargetcli("/", "saveconfig") //nolint
+
+	respondOK(w, map[string]any{
+		"success":    true,
+		"alua_state": int(req.ALUAState),
+	})
+}
+
+// configureALUA enables TPGS on a TPG and sets the ALUA access state.
+// LIO exposes ALUA via targetcli's "alua" subtree. The default_tg_pt_gp group
+// is created automatically; we set its alua_access_state to the requested value.
+func configureALUA(tpgPath string, state ALUAState) error {
+	// Enable Target Port Group Support on the TPG.
+	if _, err := runTargetcli(tpgPath, "set", "attribute", "alua_support=1"); err != nil {
+		return fmt.Errorf("enable ALUA on %s: %w", tpgPath, err)
+	}
+	// Set the access state on the default_tg_pt_gp ALUA group.
+	aluaPath := fmt.Sprintf("%s/alua/default_tg_pt_gp", tpgPath)
+	stateStr := fmt.Sprintf("alua_access_state=%d", int(state))
+	if _, err := runTargetcli(aluaPath, "set", stateStr); err != nil {
+		return fmt.Errorf("set ALUA state on %s: %w", aluaPath, err)
+	}
+	return nil
+}
+
 // GetISCSIZvolList returns ZFS zvols suitable for iSCSI backing
 // GET /api/iscsi/zvols
 func GetISCSIZvolList(w http.ResponseWriter, r *http.Request) {
 	out, err := executeCommandWithTimeout(TimeoutFast, "zfs",
 		[]string{"list", "-t", "volume", "-H", "-o", "name,volsize"})
 	if err != nil {
-		respondOK(w, map[string]interface{}{"success": true, "zvols": []interface{}{}})
+		respondOK(w, map[string]any{"success": true, "zvols": []any{}})
 		return
 	}
 
@@ -422,7 +497,7 @@ func GetISCSIZvolList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"zvols":   zvols,
 	})

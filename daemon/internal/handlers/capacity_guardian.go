@@ -59,9 +59,9 @@ func (h *CapacityGuardianHandler) GetCapacityStatus(w http.ResponseWriter, r *ht
 		"list", "-Hp", "-o", "name,size,alloc,free,capacity",
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
-			"pools":   []interface{}{},
+			"pools":   []any{},
 			"error":   "Cannot read pool capacity",
 		})
 		return
@@ -106,7 +106,7 @@ func (h *CapacityGuardianHandler) GetCapacityStatus(w http.ResponseWriter, r *ht
 		})
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"pools":   pools,
 		"count":   len(pools),
@@ -127,7 +127,7 @@ func (h *CapacityGuardianHandler) SetupReserve(w http.ResponseWriter, r *http.Re
 		"list", "-Hp", "-o", "size", pool,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   "Cannot read pool size",
 		})
@@ -136,7 +136,7 @@ func (h *CapacityGuardianHandler) SetupReserve(w http.ResponseWriter, r *http.Re
 
 	totalBytes, _ := strconv.ParseInt(strings.TrimSpace(output), 10, 64)
 	if totalBytes == 0 {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   "Cannot determine pool size",
 		})
@@ -155,7 +155,7 @@ func (h *CapacityGuardianHandler) SetupReserve(w http.ResponseWriter, r *http.Re
 			"create", reserveDataset,
 		})
 		if err != nil {
-			respondOK(w, map[string]interface{}{
+			respondOK(w, map[string]any{
 				"success": false,
 				"error":   fmt.Sprintf("Cannot create reserve dataset: %v", err),
 			})
@@ -168,14 +168,14 @@ func (h *CapacityGuardianHandler) SetupReserve(w http.ResponseWriter, r *http.Re
 		"set", fmt.Sprintf("reservation=%s", reserveStr), reserveDataset,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Cannot set reservation: %v", err),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":       true,
 		"pool":          pool,
 		"reserve_bytes": reserveBytes,
@@ -205,14 +205,14 @@ func (h *CapacityGuardianHandler) ReleaseReserve(w http.ResponseWriter, r *http.
 		"destroy", reserveDataset,
 	})
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("Cannot release reserve: %v", err),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Emergency reserve released on %s - you now have extra space for cleanup", pool),
 	})

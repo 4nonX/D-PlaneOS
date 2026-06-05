@@ -8,7 +8,7 @@
 //	        j.Fail(err.Error())
 //	        return
 //	    }
-//	    j.Done(map[string]interface{}{"output": string(output)})
+//	    j.Done(map[string]any{"output": string(output)})
 //	})
 //	// Return id to the caller immediately; they poll GET /api/jobs/{id}
 package jobs
@@ -20,10 +20,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var broadcastCallback func(event string, data interface{}, level string)
+var broadcastCallback func(event string, data any, level string)
 
 // SetBroadcastCallback sets a global repository for job status broadcasts.
-func SetBroadcastCallback(cb func(event string, data interface{}, level string)) {
+func SetBroadcastCallback(cb func(event string, data any, level string)) {
 	broadcastCallback = cb
 }
 
@@ -36,17 +36,24 @@ const (
 
 // Job holds state for one background operation.
 type Job struct {
-	ID         string                 `json:"id"`
-	Type       string                 `json:"type"`
-	Status     string                 `json:"status"`
-	Result     map[string]interface{} `json:"result,omitempty"`
-	Error      string                 `json:"error,omitempty"`
-	Logs       []string               `json:"logs,omitempty"` // streaming progress lines
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Status   string `json:"status"`
+	// Credentials carries the identity of the user or API token that initiated the job.
+	// The job goroutine can inspect these to enforce per-operation authorization checks
+	// without needing to thread a request context through the call stack.
+	UserID   int64  `json:"user_id,omitempty"`
+	Username string `json:"username,omitempty"`
+	Role     string `json:"role,omitempty"`
+
+	Result map[string]any `json:"result,omitempty"`
+	Error  string                 `json:"error,omitempty"`
+	Logs   []string               `json:"logs,omitempty"` // streaming progress lines
 	// LatestProgress is the most recent structured progress (e.g. zfs send -P).
 	// Copied into JobSnapshot.Progress for GET /api/jobs/{id} (poll without WebSocket).
-	LatestProgress map[string]interface{}
-	StartedAt      time.Time `json:"started_at"`
-	FinishedAt     *time.Time             `json:"finished_at,omitempty"`
+	LatestProgress map[string]any
+	StartedAt      time.Time  `json:"started_at"`
+	FinishedAt     *time.Time `json:"finished_at,omitempty"`
 
 	mu sync.Mutex
 }
@@ -65,7 +72,7 @@ func (j *Job) Log(line string) {
 
 	// Broadcast line to WebSocket listeners (Real-time Observable)
 	if broadcastCallback != nil {
-		go broadcastCallback("job.log", map[string]interface{}{
+		go broadcastCallback("job.log", map[string]any{
 			"job_id": j.ID,
 			"line":   line,
 		}, "info")
@@ -73,14 +80,14 @@ func (j *Job) Log(line string) {
 }
 
 // Progress stores the latest structured progress and broadcasts via WebSocket.
-func (j *Job) Progress(data interface{}) {
-	var copyMap map[string]interface{}
+func (j *Job) Progress(data any) {
+	var copyMap map[string]any
 	switch m := data.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		if len(m) == 0 {
 			return
 		}
-		copyMap = make(map[string]interface{}, len(m))
+		copyMap = make(map[string]any, len(m))
 		for k, v := range m {
 			copyMap[k] = v
 		}
@@ -88,7 +95,7 @@ func (j *Job) Progress(data interface{}) {
 		if len(m) == 0 {
 			return
 		}
-		copyMap = make(map[string]interface{}, len(m))
+		copyMap = make(map[string]any, len(m))
 		for k, v := range m {
 			copyMap[k] = v
 		}
@@ -100,7 +107,7 @@ func (j *Job) Progress(data interface{}) {
 	j.mu.Unlock()
 
 	if broadcastCallback != nil {
-		go broadcastCallback("job.progress", map[string]interface{}{
+		go broadcastCallback("job.progress", map[string]any{
 			"job_id": j.ID,
 			"data":   copyMap,
 		}, "info")
@@ -108,7 +115,7 @@ func (j *Job) Progress(data interface{}) {
 }
 
 // Done marks the job as completed with a result payload.
-func (j *Job) Done(result map[string]interface{}) {
+func (j *Job) Done(result map[string]any) {
 	j.mu.Lock()
 	j.Status = StatusDone
 	j.Result = result
@@ -118,7 +125,7 @@ func (j *Job) Done(result map[string]interface{}) {
 	j.mu.Unlock()
 
 	if broadcastCallback != nil {
-		go broadcastCallback("job.completed", map[string]interface{}{
+		go broadcastCallback("job.completed", map[string]any{
 			"job_id":   j.ID,
 			"job_type": j.Type,
 			"success":  true,
@@ -139,7 +146,7 @@ func (j *Job) Fail(errMsg string) {
 	j.mu.Unlock()
 
 	if broadcastCallback != nil {
-		go broadcastCallback("job.failed", map[string]interface{}{
+		go broadcastCallback("job.failed", map[string]any{
 			"job_id":   j.ID,
 			"job_type": j.Type,
 			"success":  false,
@@ -153,10 +160,13 @@ type JobSnapshot struct {
 	ID         string                 `json:"id"`
 	Type       string                 `json:"type"`
 	Status     string                 `json:"status"`
-	Result     map[string]interface{} `json:"result,omitempty"`
+	UserID     int64                  `json:"user_id,omitempty"`
+	Username   string                 `json:"username,omitempty"`
+	Role       string                 `json:"role,omitempty"`
+	Result     map[string]any `json:"result,omitempty"`
 	Error      string                 `json:"error,omitempty"`
 	Logs       []string               `json:"logs,omitempty"`
-	Progress   map[string]interface{} `json:"progress,omitempty"`
+	Progress   map[string]any `json:"progress,omitempty"`
 	StartedAt  time.Time              `json:"started_at"`
 	FinishedAt *time.Time             `json:"finished_at,omitempty"`
 }
@@ -167,9 +177,9 @@ func (j *Job) Snapshot() JobSnapshot {
 	defer j.mu.Unlock()
 	logsCopy := make([]string, len(j.Logs))
 	copy(logsCopy, j.Logs)
-	var progCopy map[string]interface{}
+	var progCopy map[string]any
 	if len(j.LatestProgress) > 0 {
-		progCopy = make(map[string]interface{}, len(j.LatestProgress))
+		progCopy = make(map[string]any, len(j.LatestProgress))
 		for k, v := range j.LatestProgress {
 			progCopy[k] = v
 		}
@@ -178,6 +188,9 @@ func (j *Job) Snapshot() JobSnapshot {
 		ID:         j.ID,
 		Type:       j.Type,
 		Status:     j.Status,
+		UserID:     j.UserID,
+		Username:   j.Username,
+		Role:       j.Role,
 		Result:     j.Result,
 		Error:      j.Error,
 		Logs:       logsCopy,
@@ -199,10 +212,21 @@ type jobStore struct {
 
 // Start creates a job, launches fn in a goroutine, and returns the job ID.
 func Start(jobType string, fn func(j *Job)) string {
+	return StartWithCreds(jobType, 0, "", "", fn)
+}
+
+// StartWithCreds creates a job tagged with the caller's identity.
+// The job goroutine can read j.UserID, j.Username, and j.Role to enforce
+// per-operation authorization without threading a request context through
+// every call site.
+func StartWithCreds(jobType string, userID int64, username, role string, fn func(j *Job)) string {
 	j := &Job{
 		ID:        uuid.New().String(),
 		Type:      jobType,
 		Status:    StatusRunning,
+		UserID:    userID,
+		Username:  username,
+		Role:      role,
 		StartedAt: time.Now(),
 	}
 

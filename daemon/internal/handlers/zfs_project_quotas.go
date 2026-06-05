@@ -60,7 +60,7 @@ func GetProjectQuotas(w http.ResponseWriter, r *http.Request) {
 			quotas[i].Used = used
 		}
 	}
-	respondOK(w, map[string]interface{}{"success": true, "quotas": quotas})
+	respondOK(w, map[string]any{"success": true, "quotas": quotas})
 }
 
 // SetProjectQuota handles POST /api/zfs/quota/project

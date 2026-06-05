@@ -289,7 +289,7 @@ function UsersTab() {
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => setEditUser(u)} className="btn btn-ghost" title="Edit user"><Icon name="edit" size={14} /></button>
                       <button onClick={() => setResetUser(u)} className="btn btn-ghost" title="Reset password" style={{ color: 'var(--warning, #f59e0b)' }}><Icon name="lock_reset" size={14} /></button>
-                      <button onClick={async () => { if (await confirm({ title: `Delete "${u.username}"?`, message: 'This user will be permanently removed.', danger: true, confirmLabel: 'Delete' })) deleteUser.mutate(u.id) }} className="btn btn-danger"><Icon name="delete" size={14} /></button>
+                      <button onClick={async () => { if (await confirm({ title: `Delete "${u.username}"?`, message: 'This user will be permanently removed.', danger: true, confirmLabel: 'Delete', confirmText: u.username })) deleteUser.mutate(u.id) }} className="btn btn-danger"><Icon name="delete" size={14} /></button>
                     </div>
                   </td>
                 </tr>

@@ -85,14 +85,14 @@ func (h *GitOpsHandler) Stop() {
 func (h *GitOpsHandler) Status(w http.ResponseWriter, r *http.Request) {
 	result := h.detector.LastResult()
 	if result == nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"status":  "pending",
 			"message": "First drift check has not completed yet - try again in a moment",
 		})
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":       true,
 		"drifted":       result.Drifted,
 		"checked_at":    result.CheckedAt.Format(time.RFC3339),
@@ -158,7 +158,7 @@ func (h *GitOpsHandler) Plan(w http.ResponseWriter, r *http.Request) {
 		uiChanges = []planChange{}
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":       true,
 		"plan":          plan,
 		"changes":       uiChanges,
@@ -174,7 +174,7 @@ func (h *GitOpsHandler) Plan(w http.ResponseWriter, r *http.Request) {
 func (h *GitOpsHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	// Enforce global reconciliation lock (Safety Phase 12.1)
 	if !gitops.TryLock() {
-		respondJSON(w, 423, map[string]interface{}{
+		respondJSON(w, 423, map[string]any{
 			"success": false,
 			"error":   "A reconciliation is already in progress. Please wait for the current operation to finish.",
 		})
@@ -208,7 +208,7 @@ func (h *GitOpsHandler) Apply(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !allApproved {
-			respondOK(w, map[string]interface{}{
+			respondOK(w, map[string]any{
 				"success":       false,
 				"error":         "plan contains BLOCKED items that require explicit approval",
 				"unapproved":    unapproved,
@@ -226,7 +226,7 @@ func (h *GitOpsHandler) Apply(w http.ResponseWriter, r *http.Request) {
 				ambiguousItems = append(ambiguousItems, fmt.Sprintf("%s/%s: %s", item.Kind, item.Name, item.BlockReason))
 			}
 		}
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":         false,
 			"error":           "plan contains AMBIGUOUS states that require manual resolution",
 			"ambiguous":       ambiguousItems,
@@ -245,7 +245,7 @@ func (h *GitOpsHandler) Apply(w http.ResponseWriter, r *http.Request) {
 
 	if applyErr != nil {
 		log.Printf("GITOPS APPLY ERROR: %v", applyErr)
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   applyErr.Error(),
 			"applied": result.Applied,
@@ -260,7 +260,7 @@ func (h *GitOpsHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	h.approvalsMu.Unlock()
 
 	log.Printf("GITOPS APPLY: success - %d items in %s", len(result.Applied), result.Duration)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"applied":     result.Applied,
 		"count":       len(result.Applied),
@@ -314,7 +314,7 @@ func (h *GitOpsHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !found {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false,
 			"error":   fmt.Sprintf("%s/%s is not currently BLOCKED in the plan - re-evaluate before approving", req.Kind, req.Name),
 		})
@@ -337,7 +337,7 @@ func (h *GitOpsHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("GITOPS APPROVE: %s/%s approved - reason: %q", req.Kind, req.Name, req.Reason)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":      true,
 		"approved":     key,
 		"block_reason": blockReason,
@@ -350,7 +350,7 @@ func (h *GitOpsHandler) Approve(w http.ResponseWriter, r *http.Request) {
 // Check triggers an immediate drift check and returns the result.
 func (h *GitOpsHandler) Check(w http.ResponseWriter, r *http.Request) {
 	result := h.detector.CheckNow()
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":      true,
 		"drifted":      result.Drifted,
 		"checked_at":   result.CheckedAt.Format(time.RFC3339),
@@ -366,7 +366,7 @@ func (h *GitOpsHandler) GetState(w http.ResponseWriter, r *http.Request) {
 	content, err := os.ReadFile(h.stateYAMLPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			respondOK(w, map[string]interface{}{
+			respondOK(w, map[string]any{
 				"success": true,
 				"exists":  false,
 				"content": defaultStateYAML(),
@@ -376,7 +376,7 @@ func (h *GitOpsHandler) GetState(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "cannot read state.yaml", err)
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"exists":  true,
 		"content": string(content),
@@ -405,7 +405,7 @@ func (h *GitOpsHandler) PutState(w http.ResponseWriter, r *http.Request) {
 
 	// Validate before writing - fail closed
 	if _, err := gitops.ParseStateYAML(req.Content); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":  false,
 			"valid":    false,
 			"error":    err.Error(),
@@ -416,7 +416,7 @@ func (h *GitOpsHandler) PutState(w http.ResponseWriter, r *http.Request) {
 
 	// dry_run: validate only, return success without writing
 	if req.DryRun {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": true,
 			"valid":   true,
 			"message": "state.yaml is valid (dry run - not written)",
@@ -447,7 +447,7 @@ func (h *GitOpsHandler) PutState(w http.ResponseWriter, r *http.Request) {
 	// Trigger an immediate check so the UI reflects the new state
 	go h.detector.CheckNow()
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"valid":   true,
 		"path":    h.stateYAMLPath,
@@ -503,7 +503,7 @@ func (h *GitOpsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	s.SyncProtection = protection == 1
 	s.SyncSystem = system == 1
 
-	respondOK(w, map[string]interface{}{"success": true, "settings": s})
+	respondOK(w, map[string]any{"success": true, "settings": s})
 }
 
 // ── PUT /api/gitops/settings ──────────────────────────────────────────────────
@@ -554,7 +554,7 @@ func (h *GitOpsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("GITOPS: Settings updated - enabled=%v repo=%d", req.Enabled, req.RepoID)
-	respondOK(w, map[string]interface{}{"success": true, "message": "Settings updated"})
+	respondOK(w, map[string]any{"success": true, "message": "Settings updated"})
 }
 
 // ── POST /api/gitops/sync ───────────────────────────────────────────────────
@@ -564,7 +564,7 @@ func (h *GitOpsHandler) SyncNow(w http.ResponseWriter, r *http.Request) {
 	// 1. Trigger Drift Check (which pulls)
 	result := h.detector.CheckNow()
 	if result.Error != "" {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false, 
 			"error": "Pull failed: " + result.Error,
 		})
@@ -573,14 +573,14 @@ func (h *GitOpsHandler) SyncNow(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Commit All current state
 	if err := gitops.CommitAll(h.db); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success": false, 
 			"error": "Commit/Push failed: " + err.Error(),
 		})
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true, 
 		"message": "Manual sync completed successfully",
 	})
@@ -613,11 +613,11 @@ func (h *GitOpsHandler) stampApprovals(plan *gitops.Plan) {
 }
 
 // planSummary returns a compact map suitable for the status endpoint.
-func planSummary(plan *gitops.Plan) map[string]interface{} {
+func planSummary(plan *gitops.Plan) map[string]any {
 	if plan == nil {
 		return nil
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"create_count":    plan.CreateCount,
 		"modify_count":    plan.ModifyCount,
 		"delete_count":    plan.DeleteCount,
@@ -712,7 +712,7 @@ func (h *GitOpsHandler) Capture(w http.ResponseWriter, r *http.Request) {
 	go h.detector.CheckNow()
 
 	summary := gitops.SummarizeManagedResources(merged, live)
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":    true,
 		"captured":   req.Categories,
 		"summary":    summary,
@@ -747,7 +747,7 @@ func (h *GitOpsHandler) ManagedSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"summary": gitops.SummarizeManagedResources(desired, live),
 	})

@@ -12,10 +12,20 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"dplaned/internal/jobs"
 	"github.com/gorilla/mux"
+)
+
+// replActiveMu guards replActiveSet, which tracks dataset+peer pairs currently
+// being replicated. This prevents two concurrent schedules (or a schedule and a
+// manual trigger) from sending to the same destination simultaneously, which would
+// corrupt the remote ZFS stream.
+var (
+	replActiveMu  sync.Mutex
+	replActiveSet = map[string]bool{}
 )
 
 var errScheduleNotFound = errors.New("schedule not found")
@@ -78,18 +88,6 @@ func loadReplicationSchedules() ([]ReplicationSchedule, error) {
 	return schedules, nil
 }
 
-func saveReplicationSchedules(schedules []ReplicationSchedule) error {
-	replStateMu.Lock()
-	defer replStateMu.Unlock()
-
-	os.MkdirAll(ConfigDir, 0755)
-	data, err := json.MarshalIndent(schedules, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(configPath(replScheduleFile), data, 0644)
-}
-
 // atomicModifySchedules holds replStateMu exclusively across the full
 // load-modify-save cycle, eliminating TOCTOU races between concurrent requests.
 func atomicModifySchedules(fn func([]ReplicationSchedule) ([]ReplicationSchedule, error)) error {
@@ -125,7 +123,7 @@ func (h *ReplicationScheduleHandler) HandleListReplicationSchedules(w http.Respo
 		respondErrorSimple(w, "Failed to load schedules: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respondOK(w, map[string]interface{}{"success": true, "schedules": schedules})
+	respondOK(w, map[string]any{"success": true, "schedules": schedules})
 }
 
 // HandleCreateReplicationSchedule serves POST /api/replication/schedules
@@ -168,7 +166,7 @@ func (h *ReplicationScheduleHandler) HandleCreateReplicationSchedule(w http.Resp
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true, "schedule": s})
+	respondOK(w, map[string]any{"success": true, "schedule": s})
 	gitops.CommitAllAsync(h.db)
 }
 
@@ -245,7 +243,7 @@ func (h *ReplicationScheduleHandler) HandleUpdateReplicationSchedule(w http.Resp
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 	gitops.CommitAllAsync(h.db)
 }
 
@@ -283,7 +281,7 @@ func (h *ReplicationScheduleHandler) HandleDeleteReplicationSchedule(w http.Resp
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 	gitops.CommitAllAsync(h.db)
 }
 
@@ -333,7 +331,7 @@ func (h *ReplicationScheduleHandler) HandleRunReplicationScheduleNow(w http.Resp
 		log.Printf("WARN: HandleRunReplicationScheduleNow: failed to persist running status for %s: %v", id, err)
 	}
 
-	respondOK(w, map[string]interface{}{"success": true, "job_id": jobID})
+	respondOK(w, map[string]any{"success": true, "job_id": jobID})
 }
 
 // launchReplicationJob starts an async replication job and returns the job ID.
@@ -341,6 +339,24 @@ func (h *ReplicationScheduleHandler) HandleRunReplicationScheduleNow(w http.Resp
 // then executes the ZFS send pipeline.
 func launchReplicationJob(s ReplicationSchedule) string {
 	return jobs.Start("replication_schedule", func(j *jobs.Job) {
+		// Conflict guard: prevent two jobs from sending to the same source+remote
+		// simultaneously (concurrent ZFS recv on same dataset corrupts the stream).
+		lockKey := s.SourceDataset + "|" + s.RemoteID
+		replActiveMu.Lock()
+		if replActiveSet[lockKey] {
+			replActiveMu.Unlock()
+			j.Fail(fmt.Sprintf("replication conflict: another job is already running for %s → remote %s; skipping to avoid stream corruption", s.SourceDataset, s.RemoteID))
+			updateScheduleStatus(s.ID, "skipped", j.ID, "")
+			return
+		}
+		replActiveSet[lockKey] = true
+		replActiveMu.Unlock()
+		defer func() {
+			replActiveMu.Lock()
+			delete(replActiveSet, lockKey)
+			replActiveMu.Unlock()
+		}()
+
 		// Step 1: Resolve peer
 		if s.RemoteID == "" {
 			j.Fail("No peer configured for this schedule - edit the schedule and select a peer")
@@ -452,7 +468,7 @@ func launchReplicationJob(s ReplicationSchedule) string {
 				if resumeErr != nil {
 					j.Log(fmt.Sprintf("Resume failed (%v) - falling through to full send", resumeErr))
 				} else {
-					j.Done(map[string]interface{}{
+					j.Done(map[string]any{
 						"snapshot": snapshot,
 						"remote":   fmt.Sprintf("%s:%s", sshTarget, remoteDataset),
 						"peer":     remote.Name,
@@ -472,18 +488,41 @@ func launchReplicationJob(s ReplicationSchedule) string {
 		if s.Compress {
 			sendArgs = append(sendArgs, "-c")
 		}
+
+		useIncremental := false
 		if s.Incremental && s.LastReplicatedSnapshot != "" && isValidSnapshotName(s.LastReplicatedSnapshot) {
-			// Verify the base snapshot still exists - it may have been pruned since last replication
-			_, snapCheckErr := executeCommandWithTimeout(TimeoutFast, "zfs",
+			// Verify the base snapshot still exists locally.
+			_, localCheckErr := executeCommandWithTimeout(TimeoutFast, "zfs",
 				[]string{"list", "-t", "snapshot", "-H", "-o", "name", s.LastReplicatedSnapshot})
-			if snapCheckErr != nil {
-				j.Log(fmt.Sprintf("WARN: incremental base %q no longer exists - falling back to full send", s.LastReplicatedSnapshot))
+			if localCheckErr != nil {
+				j.Log(fmt.Sprintf("WARN: local incremental base %q no longer exists - falling back to full send", s.LastReplicatedSnapshot))
 			} else {
-				sendArgs = append(sendArgs, "-i", s.LastReplicatedSnapshot)
-				j.Log(fmt.Sprintf("Incremental send: base=%s -> %s", s.LastReplicatedSnapshot, snapshot))
+				// Remote chain validation: verify the base snapshot also exists on the remote.
+				// If it was deleted there (e.g. remote rollback, manual pruning) an incremental
+				// send would fail mid-stream and leave the remote dataset in an inconsistent state.
+				baseSnapName := strings.SplitN(s.LastReplicatedSnapshot, "@", 2)
+				remoteBase := ""
+				if len(baseSnapName) == 2 {
+					remoteBase = remoteDataset + "@" + baseSnapName[1]
+				}
+				remoteListArgs := append([]string{}, sshArgs...)
+				remoteListArgs = append(remoteListArgs, sshTarget,
+					"zfs", "list", "-H", "-t", "snapshot", "-o", "name", remoteBase)
+				_, remoteCheckErr := executeCommandWithTimeout(TimeoutMedium, "ssh", remoteListArgs)
+				if remoteCheckErr != nil {
+					j.Log(fmt.Sprintf("WARN: incremental base %q not found on remote - falling back to full send (remote chain broken)", remoteBase))
+				} else {
+					useIncremental = true
+					sendArgs = append(sendArgs, "-i", s.LastReplicatedSnapshot)
+					j.Log(fmt.Sprintf("Incremental send: base=%s -> %s", s.LastReplicatedSnapshot, snapshot))
+				}
 			}
 		} else if s.Incremental {
 			j.Log("Incremental requested but no prior snapshot recorded - sending full stream")
+		}
+
+		if !useIncremental && s.Incremental {
+			j.Log("Sending full stream (incremental base unavailable)")
 		}
 		sendArgs = append(sendArgs, snapshot)
 
@@ -494,20 +533,36 @@ func launchReplicationJob(s ReplicationSchedule) string {
 
 		j.Log(fmt.Sprintf("Replicating %s -> %s:%s", snapshot, sshTarget, remoteDataset))
 
-		_, execErr := execPipedZFSSend(
-			j,
-			sendArgs,
-			sshArgs, sshTarget,
-			[]string{"recv", "-s", "-F", remoteDataset},
-			rateLimit,
-		)
+		// Retry loop: retry up to 2 times on transient network failures.
+		// Exponential back-off: 30s, 120s.
+		const maxRetries = 2
+		var execErr error
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			if attempt > 0 {
+				backoff := time.Duration(attempt*attempt) * 30 * time.Second
+				j.Log(fmt.Sprintf("Retry %d/%d in %v...", attempt, maxRetries, backoff))
+				time.Sleep(backoff)
+			}
+			_, execErr = execPipedZFSSend(
+				j,
+				sendArgs,
+				sshArgs, sshTarget,
+				[]string{"recv", "-s", "-F", remoteDataset},
+				rateLimit,
+			)
+			if execErr == nil {
+				break
+			}
+			j.Log(fmt.Sprintf("Attempt %d failed: %v", attempt+1, execErr))
+		}
+
 		if execErr != nil {
-			j.Fail(fmt.Sprintf("Replication failed: %v", execErr))
+			j.Fail(fmt.Sprintf("Replication failed after %d attempts: %v", maxRetries+1, execErr))
 			updateScheduleStatus(s.ID, "failed", j.ID, "")
 			return
 		}
 
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"snapshot": snapshot,
 			"remote":   fmt.Sprintf("%s:%s", sshTarget, remoteDataset),
 			"peer":     remote.Name,
@@ -537,7 +592,11 @@ func updateScheduleStatus(schedID, status, jobID, lastSnapshot string) {
 		return
 	}
 
-	DispatchAlert("info", "replication.schedule_updated", schedID,
+	alertLevel := "info"
+	if status == "failed" {
+		alertLevel = "warning"
+	}
+	DispatchAlert(alertLevel, "replication.schedule_updated", schedID,
 		fmt.Sprintf("Schedule %s status updated to %s", schedID, status))
 }
 
@@ -599,7 +658,9 @@ func TriggerPostSnapshotReplication(dataset string) {
 // ============================================================
 
 // StartReplicationMonitor starts a background ticker that checks replication
-// schedules every 5 minutes and fires any that are due.
+// schedules every 5 minutes and fires any that are due. It also runs snapshot
+// retention policies after each tick so that local snapshots are pruned once
+// the remote backup is confirmed current.
 func StartReplicationMonitor() {
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
@@ -607,9 +668,14 @@ func StartReplicationMonitor() {
 
 		for range ticker.C {
 			runDueReplicationSchedules()
+			// Run retention after replication so we only prune locally once the
+			// remote copy is current. Running after every tick (not just after
+			// successful jobs) is intentional: pruning is idempotent and the policy
+			// handles the "what if remote is stale" case via the keep counts.
+			RunRetentionPolicies()
 		}
 	}()
-	log.Println("Replication schedule monitor started (checks every 5 min)")
+	log.Println("Replication schedule monitor started (checks every 5 min, retention after each tick)")
 }
 
 // runDueReplicationSchedules checks all enabled schedules and fires any that are

@@ -169,7 +169,7 @@ func (h *ColdTierHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 	if mounts == nil {
 		mounts = []ColdTierMount{}
 	}
-	respondOK(w, map[string]interface{}{"success": true, "mounts": mounts})
+	respondOK(w, map[string]any{"success": true, "mounts": mounts})
 }
 
 // HandleCreate POST /api/storage/cold-tier
@@ -247,13 +247,13 @@ func (h *ColdTierHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		); err != nil {
 			log.Printf("cold_tier: update mounted status: %v", err)
 		}
-		j.Done(map[string]interface{}{"mounted": true, "mount_point": mountPoint})
+		j.Done(map[string]any{"mounted": true, "mount_point": mountPoint})
 	})
 
-	audit.LogActivity(r.Header.Get("X-User"), "cold_tier_create", map[string]interface{}{
+	audit.LogActivity(r.Header.Get("X-User"), "cold_tier_create", map[string]any{
 		"name": req.Name, "remote": req.Remote, "mount_point": mountPoint,
 	})
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":     true,
 		"mount":       m,
 		"job_id":      jobID,
@@ -293,10 +293,10 @@ func (h *ColdTierHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.LogActivity(r.Header.Get("X-User"), "cold_tier_delete", map[string]interface{}{
+	audit.LogActivity(r.Header.Get("X-User"), "cold_tier_delete", map[string]any{
 		"name": m.Name, "mount_point": m.MountPoint,
 	})
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // HandleMount POST /api/storage/cold-tier/{id}/mount
@@ -318,7 +318,7 @@ func (h *ColdTierHandler) HandleMount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isMounted(m.MountPoint) {
-		respondOK(w, map[string]interface{}{"success": true, "message": "Already mounted"})
+		respondOK(w, map[string]any{"success": true, "message": "Already mounted"})
 		return
 	}
 
@@ -331,10 +331,10 @@ func (h *ColdTierHandler) HandleMount(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.db.Exec("UPDATE cold_tier_mounts SET mounted=1, last_mount_at=NOW() WHERE id=$1", m.ID); err != nil {
 			j.Log(fmt.Sprintf("Warning: failed to update mount state in DB: %v", err))
 		}
-		j.Done(map[string]interface{}{"mounted": true})
+		j.Done(map[string]any{"mounted": true})
 	})
 
-	respondOK(w, map[string]interface{}{"success": true, "job_id": jobID})
+	respondOK(w, map[string]any{"success": true, "job_id": jobID})
 }
 
 // HandleUnmount POST /api/storage/cold-tier/{id}/unmount
@@ -358,7 +358,7 @@ func (h *ColdTierHandler) HandleUnmount(w http.ResponseWriter, r *http.Request) 
 		if _, err := h.db.Exec("UPDATE cold_tier_mounts SET mounted=0 WHERE id=$1", m.ID); err != nil {
 			log.Printf("cold_tier: clear stale mounted flag for %s: %v", m.Name, err)
 		}
-		respondOK(w, map[string]interface{}{"success": true, "message": "Not currently mounted"})
+		respondOK(w, map[string]any{"success": true, "message": "Not currently mounted"})
 		return
 	}
 
@@ -370,10 +370,10 @@ func (h *ColdTierHandler) HandleUnmount(w http.ResponseWriter, r *http.Request) 
 	if _, err := h.db.Exec("UPDATE cold_tier_mounts SET mounted=0 WHERE id=$1", m.ID); err != nil {
 		log.Printf("cold_tier: clear mounted flag for %s: %v", m.Name, err)
 	}
-	audit.LogActivity(r.Header.Get("X-User"), "cold_tier_unmount", map[string]interface{}{
+	audit.LogActivity(r.Header.Get("X-User"), "cold_tier_unmount", map[string]any{
 		"name": m.Name,
 	})
-	respondOK(w, map[string]interface{}{"success": true})
+	respondOK(w, map[string]any{"success": true})
 }
 
 // HandleUsage POST /api/storage/cold-tier/{id}/usage
@@ -412,7 +412,7 @@ func (h *ColdTierHandler) HandleUsage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fields := strings.Fields(lines[1])
-		result := map[string]interface{}{"raw": string(out)}
+		result := map[string]any{"raw": string(out)}
 		if len(fields) >= 3 {
 			result["used"] = fields[0]
 			result["available"] = fields[1]
@@ -421,7 +421,7 @@ func (h *ColdTierHandler) HandleUsage(w http.ResponseWriter, r *http.Request) {
 		j.Done(result)
 	})
 
-	respondOK(w, map[string]interface{}{"success": true, "job_id": jobID})
+	respondOK(w, map[string]any{"success": true, "job_id": jobID})
 }
 
 // ReMountAll is called at daemon startup to restore mounts that were active

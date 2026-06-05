@@ -45,7 +45,7 @@ import (
 // diskEventBroadcaster is the interface we need from the WS hub.
 // *websocket.MonitorHub satisfies this.
 type diskEventBroadcaster interface {
-	Broadcast(eventType string, data interface{}, level string)
+	Broadcast(eventType string, data any, level string)
 }
 
 // diskEventHub is set via SetDiskEventHub from main.go.
@@ -350,8 +350,8 @@ func checkAndSuggestReplacement(newDisk DiskInfo) {
 	log.Printf("DISK EVENT: new disk /dev/%s may replace %d faulted vdev(s) - broadcasting suggestion",
 		newDisk.Name, len(candidates))
 
-	diskEventHub.Broadcast("diskReplacementAvailable", map[string]interface{}{
-		"new_disk": map[string]interface{}{
+	diskEventHub.Broadcast("diskReplacementAvailable", map[string]any{
+		"new_disk": map[string]any{
 			"dev":   "/dev/" + newDisk.Name,
 			"by_id": newDisk.ByIDPath,
 			"model": newDisk.Model,
@@ -395,7 +395,7 @@ func handleDiskRemoved(devName string, req diskEventRequest) {
 
 // ── Broadcast helpers ─────────────────────────────────────────────────────────
 
-func broadcastDiskEvent(eventType string, data interface{}, level string) {
+func broadcastDiskEvent(eventType string, data any, level string) {
 	if diskEventHub == nil {
 		return
 	}

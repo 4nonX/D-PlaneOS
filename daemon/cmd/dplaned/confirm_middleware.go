@@ -25,7 +25,7 @@ func confirmRoute(operation string, targetFn func(*http.Request) string, next ht
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("X-Confirm-Token")
 		if token == "" {
-			writeConfirmJSON(w, http.StatusForbidden, map[string]interface{}{
+			writeConfirmJSON(w, http.StatusForbidden, map[string]any{
 				"error": "confirmation token required for this operation",
 				"code":  "confirm_required",
 			})
@@ -34,7 +34,7 @@ func confirmRoute(operation string, targetFn func(*http.Request) string, next ht
 
 		user, ok := middleware.GetUserFromContext(r)
 		if !ok || user == nil {
-			writeConfirmJSON(w, http.StatusUnauthorized, map[string]interface{}{
+			writeConfirmJSON(w, http.StatusUnauthorized, map[string]any{
 				"error": "unauthorized",
 			})
 			return
@@ -46,7 +46,7 @@ func confirmRoute(operation string, targetFn func(*http.Request) string, next ht
 			var err error
 			body, err = io.ReadAll(io.LimitReader(r.Body, 1<<20))
 			if err != nil {
-				writeConfirmJSON(w, http.StatusBadRequest, map[string]interface{}{
+				writeConfirmJSON(w, http.StatusBadRequest, map[string]any{
 					"error": "failed to read request body",
 				})
 				return
@@ -59,7 +59,7 @@ func confirmRoute(operation string, targetFn func(*http.Request) string, next ht
 		r.Body = io.NopCloser(bytes.NewReader(body))
 
 		if !security.ConsumeConfirmToken(token, operation, target, user.ID) {
-			writeConfirmJSON(w, http.StatusForbidden, map[string]interface{}{
+			writeConfirmJSON(w, http.StatusForbidden, map[string]any{
 				"error": "invalid, expired, or already-used confirmation token",
 				"code":  "confirm_invalid",
 			})
@@ -73,7 +73,7 @@ func confirmRoute(operation string, targetFn func(*http.Request) string, next ht
 // jsonField returns a targetFn that extracts a named string field from the JSON request body.
 func jsonField(field string) func(*http.Request) string {
 	return func(r *http.Request) string {
-		var m map[string]interface{}
+		var m map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
 			return ""
 		}
@@ -98,7 +98,7 @@ func constTarget(s string) func(*http.Request) string {
 	return func(*http.Request) string { return s }
 }
 
-func writeConfirmJSON(w http.ResponseWriter, status int, v interface{}) {
+func writeConfirmJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v) //nolint:errcheck

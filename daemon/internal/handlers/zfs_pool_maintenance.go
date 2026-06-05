@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -9,10 +11,89 @@ import (
 
 var maintPoolRe = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
 
+// poolDependencyCheck returns a human-readable list of active dependencies that
+// block destruction or forced export of a pool. It checks:
+//   - Datasets with active mountpoints in /proc/mounts
+//   - NFS exports whose path lives under the pool
+//   - SMB shares whose path lives under the pool
+//
+// An empty slice means the pool has no active dependencies.
+func poolDependencyCheck(db *sql.DB, poolName string) ([]string, error) {
+	// Enumerate all dataset mountpoints for this pool.
+	out, err := executeCommandWithTimeout(TimeoutFast, "zfs",
+		[]string{"list", "-H", "-r", "-o", "name,mountpoint", poolName})
+	if err != nil {
+		return nil, fmt.Errorf("zfs list: %w", err)
+	}
+
+	// Build a set of active mountpoints (those actually present in /proc/mounts).
+	mountsOut, _ := executeCommandWithTimeout(TimeoutFast, "cat", []string{"/proc/mounts"})
+	activeMounts := map[string]bool{}
+	for line := range strings.SplitSeq(mountsOut, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			activeMounts[fields[1]] = true
+		}
+	}
+
+	var activePaths []string
+	for line := range strings.SplitSeq(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[1] == "-" || fields[1] == "none" {
+			continue
+		}
+		if activeMounts[fields[1]] {
+			activePaths = append(activePaths, fields[1])
+		}
+	}
+
+	if db == nil {
+		return activePaths, nil
+	}
+
+	// Check NFS exports under this pool.
+	rows, err := db.Query(`SELECT path FROM nfs_exports WHERE enabled = 1`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var path string
+			if rows.Scan(&path) == nil && strings.HasPrefix(path, "/") {
+				for _, mp := range activePaths {
+					if path == mp || strings.HasPrefix(path, mp+"/") {
+						activePaths = append(activePaths, "NFS export: "+path)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// Check SMB shares under this pool.
+	rows2, err := db.Query(`SELECT path FROM smb_shares WHERE enabled = 1`)
+	if err == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var path string
+			if rows2.Scan(&path) == nil {
+				for _, mp := range activePaths {
+					if path == mp || strings.HasPrefix(path, mp+"/") {
+						activePaths = append(activePaths, "SMB share: "+path)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return activePaths, nil
+}
+
 // HandlePoolDestroy handles POST /api/zfs/pools/destroy
-func HandlePoolDestroy(w http.ResponseWriter, r *http.Request) {
+// Now a method on ZFSHandler to access the database for dependency checks.
+func (h *ZFSHandler) HandlePoolDestroy(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name string `json:"name"`
+		Name  string `json:"name"`
+		Force bool   `json:"force"` // must be explicitly true to bypass dependency check
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
@@ -22,6 +103,23 @@ func HandlePoolDestroy(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, "invalid pool name", http.StatusBadRequest)
 		return
 	}
+
+	// Dependency check: refuse to destroy a pool that has active mounts or shares.
+	// force=true bypasses this - it is the caller's responsibility to have stopped
+	// all services first. The confirmRoute wrapper ensures the operator typed the
+	// pool name before the request even reaches here.
+	if !req.Force {
+		deps, err := poolDependencyCheck(h.db, req.Name)
+		if err == nil && len(deps) > 0 {
+			respondJSON(w, http.StatusConflict, map[string]any{
+				"success":      false,
+				"error":        "pool has active dependencies; stop all shares and services first, or use force=true",
+				"dependencies": deps,
+			})
+			return
+		}
+	}
+
 	if _, err := executeCommandWithTimeout(TimeoutSlow, "zpool", []string{"destroy", req.Name}); err != nil {
 		respondErrorSimple(w, "Failed to destroy pool: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -81,7 +179,7 @@ func GetCheckpointStatus(w http.ResponseWriter, r *http.Request) {
 	if statuses == nil {
 		statuses = []PoolCheckpointStatus{}
 	}
-	respondOK(w, map[string]interface{}{"success": true, "checkpoints": statuses})
+	respondOK(w, map[string]any{"success": true, "checkpoints": statuses})
 }
 
 // CreateCheckpoint handles POST /api/zfs/checkpoint
@@ -187,7 +285,7 @@ func GetPoolFeatures(w http.ResponseWriter, r *http.Request) {
 	if features == nil {
 		features = []PoolFeature{}
 	}
-	respondOK(w, map[string]interface{}{"success": true, "pool": pool, "features": features})
+	respondOK(w, map[string]any{"success": true, "pool": pool, "features": features})
 }
 
 // SetMultihost handles POST /api/zfs/pool/multihost
@@ -233,7 +331,7 @@ func GetDDTStats(w http.ResponseWriter, r *http.Request) {
 	}
 	// Return the raw dedup stats section parsed per-pool
 	pools := parseDDTStats(out)
-	respondOK(w, map[string]interface{}{"success": true, "pools": pools})
+	respondOK(w, map[string]any{"success": true, "pools": pools})
 }
 
 type DDTPoolStats struct {

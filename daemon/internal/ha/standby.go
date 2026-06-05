@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -80,22 +81,38 @@ func exportAllPools() error {
 // A node that cannot cleanly export its pools MUST be considered unsafe.
 // Rebooting is preferable to allowing it to continue and potentially write
 // to a pool that the new primary has already imported.
+//
+// CRITICAL: Do NOT call sync() before rebooting. If pool export is stuck in
+// D-state (uninterruptible kernel sleep on a hung bus or SCSI device), sync()
+// will join the same D-state queue and this function will never reach reboot.
+// The -f flag on reboot already instructs the kernel to skip sync and reboot
+// immediately. Calling sync() defeats this entirely.
 func ForceSelfReboot() {
+	// Lock this goroutine to its OS thread so the reboot syscall is issued
+	// from a thread that cannot be pre-empted or migrated by the Go scheduler
+	// even if other goroutines are blocked in cgo D-state calls.
+	runtime.LockOSThread()
+
 	log.Printf("HA STONITH: SELF-REBOOT - pool export failed; rebooting to prevent split-brain data corruption")
 
-	// Log to syslog before reboot since this process will not continue.
-	exec.Command("logger", "-t", "dplaneos-ha", //nolint:errcheck
+	// Log to syslog. Use a non-blocking fire-and-forget; if syslog is
+	// unavailable (e.g. hung filesystem) we must not block here.
+	go exec.Command("logger", "-t", "dplaneos-ha", //nolint:errcheck
 		"STONITH: self-reboot initiated - pool export timed out or failed").Run()
 
-	// Flush filesystem buffers, then reboot.
-	exec.Command("sync").Run() //nolint:errcheck
-	if err := exec.Command("reboot", "-f").Run(); err != nil {
-		log.Printf("HA STONITH: reboot -f failed (%v); trying systemctl reboot", err)
+	// Primary: direct kernel syscall (Linux: syscall.Reboot / LINUX_REBOOT_CMD_RESTART).
+	// Implemented in standby_reboot_linux.go. Bypasses all userspace - no fork,
+	// no exec, no filesystem I/O. Most reliable path under OS pressure.
+	if err := kernelReboot(); err != nil {
+		// Fallback: exec reboot -f. The -f flag explicitly skips sync.
+		// DO NOT add sync() before this - see function comment above.
+		log.Printf("HA STONITH: kernel reboot syscall failed (%v); falling back to reboot -f", err)
+		exec.Command("reboot", "-f").Run() //nolint:errcheck
 		exec.Command("systemctl", "reboot", "--force").Run() //nolint:errcheck
 	}
 
-	// If somehow still running, block indefinitely to prevent any
-	// further writes to shared storage.
-	log.Printf("HA STONITH: WARNING - reboot did not complete; blocking to prevent storage writes")
+	// If somehow still running (e.g. reboot syscall was vetoed by a security
+	// module), block indefinitely to prevent any further writes to shared storage.
+	log.Printf("HA STONITH: WARNING - reboot did not complete; blocking all goroutines to prevent storage writes")
 	select {}
 }

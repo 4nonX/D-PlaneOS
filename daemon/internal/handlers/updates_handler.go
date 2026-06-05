@@ -44,14 +44,14 @@ func HandleUpdatesCheck(w http.ResponseWriter, r *http.Request) {
 
 		audit.LogCommand(audit.LevelInfo, user, "apt_update_check", nil, true, time.Since(start), nil)
 
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"packages":      packages,
 			"package_count": len(packages),
 			"duration_ms":   time.Since(start).Milliseconds(),
 		})
 	})
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"job_id":  jobID,
 	})
@@ -76,13 +76,13 @@ func HandleUpdatesApply(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"output":      string(out),
 			"duration_ms": duration.Milliseconds(),
 		})
 	})
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"job_id":  jobID,
 	})
@@ -110,7 +110,7 @@ func HandleUpdatesApplySecurity(w http.ResponseWriter, r *http.Request) {
 				j.Fail("unattended-upgrades failed: " + runErr.Error() + "\n" + string(out))
 				return
 			}
-			j.Done(map[string]interface{}{
+			j.Done(map[string]any{
 				"output":      string(out),
 				"duration_ms": duration.Milliseconds(),
 				"method":      "unattended-upgrades",
@@ -127,7 +127,7 @@ func HandleUpdatesApplySecurity(w http.ResponseWriter, r *http.Request) {
 
 		secPkgs := filterSecurityPackages(string(listOut))
 		if len(secPkgs) == 0 {
-			j.Done(map[string]interface{}{
+			j.Done(map[string]any{
 				"output":      "No security packages to upgrade.",
 				"duration_ms": time.Since(start).Milliseconds(),
 				"method":      "apt-get-filtered",
@@ -147,7 +147,7 @@ func HandleUpdatesApplySecurity(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		j.Done(map[string]interface{}{
+		j.Done(map[string]any{
 			"output":      string(out),
 			"duration_ms": duration.Milliseconds(),
 			"method":      "apt-get-filtered",
@@ -155,7 +155,7 @@ func HandleUpdatesApplySecurity(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success": true,
 		"job_id":  jobID,
 	})
@@ -171,7 +171,7 @@ func HandleDaemonVersion(w http.ResponseWriter, r *http.Request) {
 	resp, err := client.Get("https://api.github.com/repos/4nonX/DPlaneOS/releases/latest")
 	if err != nil {
 		log.Printf("[updates] GitHub version check failed: %v", err)
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":          false,
 			"current_version":  current,
 			"latest_version":   "",
@@ -185,7 +185,7 @@ func HandleDaemonVersion(w http.ResponseWriter, r *http.Request) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":          false,
 			"current_version":  current,
 			"latest_version":   "",
@@ -201,7 +201,7 @@ func HandleDaemonVersion(w http.ResponseWriter, r *http.Request) {
 		HTMLURL string `json:"html_url"`
 	}
 	if err := json.Unmarshal(body, &release); err != nil {
-		respondOK(w, map[string]interface{}{
+		respondOK(w, map[string]any{
 			"success":          false,
 			"current_version":  current,
 			"latest_version":   "",
@@ -215,7 +215,7 @@ func HandleDaemonVersion(w http.ResponseWriter, r *http.Request) {
 	latest := strings.TrimPrefix(release.TagName, "v")
 	currentTrimmed := strings.TrimPrefix(current, "v")
 
-	respondOK(w, map[string]interface{}{
+	respondOK(w, map[string]any{
 		"success":          true,
 		"current_version":  current,
 		"latest_version":   release.TagName,

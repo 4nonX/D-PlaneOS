@@ -216,7 +216,7 @@ func listJobs() []*CloudSyncJob {
 
 // HandleCloudSyncJobs is the GET handler for /api/cloud-sync/jobs.
 func HandleCloudSyncJobs(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"jobs":    listJobs(),
 	})
@@ -280,7 +280,7 @@ func (h *CloudSyncHandler) HandleCloudSync(w http.ResponseWriter, r *http.Reques
 func (h *CloudSyncHandler) getStatus(w http.ResponseWriter) {
 	_, err := exec.LookPath("rclone")
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success":          true,
 			"rclone_available": false,
 			"message":          "rclone not installed. Run: apt install rclone",
@@ -292,7 +292,7 @@ func (h *CloudSyncHandler) getStatus(w http.ResponseWriter) {
 	ver := strings.Split(strings.TrimSpace(string(out)), "\n")[0]
 
 	remotes := h.getRcloneRemotes()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":          true,
 		"rclone_available": true,
 		"version":          ver,
@@ -302,7 +302,7 @@ func (h *CloudSyncHandler) getStatus(w http.ResponseWriter) {
 }
 
 func (h *CloudSyncHandler) getProviders(w http.ResponseWriter) {
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":   true,
 		"providers": supportedProviders,
 	})
@@ -348,7 +348,7 @@ func (h *CloudSyncHandler) listRemotes(w http.ResponseWriter) {
 		remotes = append(remotes, remoteInfo{Name: name, Type: remoteType})
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"remotes": remotes,
 	})
@@ -356,7 +356,7 @@ func (h *CloudSyncHandler) listRemotes(w http.ResponseWriter) {
 
 // listJobsHandler serves ?action=jobs on the main cloud-sync endpoint.
 func (h *CloudSyncHandler) listJobsHandler(w http.ResponseWriter) {
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"jobs":    listJobs(),
 	})
@@ -401,7 +401,7 @@ func (h *CloudSyncHandler) createRemote(w http.ResponseWriter, r *http.Request) 
 	}
 
 	audit.LogAction("cloud_sync", user, fmt.Sprintf("Created remote '%s' (type: %s)", req.Name, req.Type), true, 0)
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Remote '%s' created", req.Name),
 	})
@@ -441,7 +441,7 @@ func (h *CloudSyncHandler) updateRemote(w http.ResponseWriter, r *http.Request) 
 	}
 
 	audit.LogAction("cloud_sync", user, fmt.Sprintf("Updated remote '%s'", req.Name), true, 0)
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Remote '%s' updated", req.Name),
 	})
@@ -465,7 +465,7 @@ func (h *CloudSyncHandler) testRemote(w http.ResponseWriter, r *http.Request) {
 
 	out, err := runRclone("lsd", "--max-depth", "1", remoteName+":")
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success":   true,
 			"connected": false,
 			"error":     strings.TrimSpace(string(out)),
@@ -473,7 +473,7 @@ func (h *CloudSyncHandler) testRemote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":   true,
 		"connected": true,
 		"message":   "Connection successful",
@@ -503,7 +503,7 @@ func (h *CloudSyncHandler) deleteRemote(w http.ResponseWriter, r *http.Request) 
 	}
 
 	audit.LogAction("cloud_sync", user, fmt.Sprintf("Deleted remote '%s'", remoteName), true, 0)
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": fmt.Sprintf("Remote '%s' deleted", remoteName),
 	})
@@ -595,7 +595,7 @@ func (h *CloudSyncHandler) runSync(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		j.Done(map[string]interface{}{"output": strings.TrimSpace(string(out))})
+		j.Done(map[string]any{"output": strings.TrimSpace(string(out))})
 		updateCloudJob(cjID, func(cj *CloudSyncJob) {
 			cj.Status = jobs.StatusDone
 			cj.FinishedAt = &now
@@ -606,7 +606,7 @@ func (h *CloudSyncHandler) runSync(w http.ResponseWriter, r *http.Request) {
 		cj.JobID = jobID
 	})
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":      true,
 		"job_id":       jobID,
 		"cloud_job_id": cjID,

@@ -407,8 +407,8 @@ func createPool(dp DesiredPool) error {
 
 func modifyPool(name string, changes []string) error {
 	for _, change := range changes {
-		if strings.HasPrefix(change, "zpool-set:") {
-			rest := strings.TrimSpace(strings.TrimPrefix(change, "zpool-set:"))
+		if rest, ok := strings.CutPrefix(change, "zpool-set:"); ok {
+			rest = strings.TrimSpace(rest)
 			eq := strings.Index(rest, "=")
 			if eq <= 0 || eq >= len(rest)-1 {
 				log.Printf("GITOPS: skip malformed zpool-set change %q", change)
@@ -497,7 +497,7 @@ func destroyPool(name string) error {
 	// This is belt-and-suspenders - the BLOCKED check should have caught this.
 	out, err := cmdutil.RunZFS("zfs", "list", "-H", "-o", "name,used", "-r", name)
 	if err == nil {
-		for _, line := range strings.Split(string(out), "\n") {
+		for line := range strings.SplitSeq(string(out), "\n") {
 			fields := strings.Fields(line)
 			if len(fields) >= 2 && fields[0] != name {
 				usedBytes, err := GetDatasetUsedBytes(fields[0])
@@ -505,7 +505,7 @@ func destroyPool(name string) error {
 					return fmt.Errorf(
 						"SAFETY ABORT: pool %q contains dataset %q with %s of data (err: %v) - "+
 							"destroy cancelled even though BLOCKED was approved. "+
-							"Manually destroy the dataset first.",
+							"Manually destroy the dataset first",
 						name, fields[0], HumaniseBytes(usedBytes), err,
 					)
 				}
@@ -581,12 +581,10 @@ func createDataset(name string, ds *DesiredDataset) error {
 		// returns while the sender goroutine is still live.
 		var closeOnce sync.Once
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_ = sendCmd.Wait()
 			closeOnce.Do(func() { pw.Close() })
-		}()
+		})
 
 		recvErr := recvCmd.Wait()
 		wg.Wait() // ensure sender goroutine has exited before returning
@@ -665,7 +663,7 @@ func deleteDataset(name string) error {
 	if err != nil || used > 0 {
 		return fmt.Errorf(
 			"SAFETY ABORT: dataset %q has %s of data (err: %v) - destroy cancelled. "+
-				"This should have been BLOCKED. Please report this as a bug.",
+				"This should have been BLOCKED. Please report this as a bug",
 			name, HumaniseBytes(used), err,
 		)
 	}
@@ -718,7 +716,7 @@ func deleteShare(db *sql.DB, smbConfPath, name string) error {
 	if HasActiveSMBConnections(name) {
 		return fmt.Errorf(
 			"SAFETY ABORT: share %q has active connections at execute time - "+
-				"delete cancelled even though plan said safe. Client connected after plan was evaluated.",
+				"delete cancelled even though plan said safe. Client connected after plan was evaluated",
 			name,
 		)
 	}
@@ -842,7 +840,7 @@ func reloadNFS(exportsPath string, db *sql.DB) {
 			continue
 		}
 		// Format: path client(options)
-		sb.WriteString(fmt.Sprintf("%s %s(%s)\n", path, clients, options))
+		fmt.Fprintf(&sb, "%s %s(%s)\n", path, clients, options)
 	}
  
 	tmpPath := exportsPath + ".gitops.tmp"
@@ -878,15 +876,15 @@ func reloadSamba(smbConfPath string, db *sql.DB) {
 		if err := rows.Scan(&name, &path, &roInt, &validUsers, &comment, &gokInt); err != nil {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("[%s]\n   path = %s\n", name, path))
+		fmt.Fprintf(&sb, "[%s]\n   path = %s\n", name, path)
 		if roInt == 1 {
 			sb.WriteString("   read only = yes\n")
 		}
 		if validUsers != "" {
-			sb.WriteString(fmt.Sprintf("   valid users = %s\n", validUsers))
+			fmt.Fprintf(&sb, "   valid users = %s\n", validUsers)
 		}
 		if comment != "" {
-			sb.WriteString(fmt.Sprintf("   comment = %s\n", comment))
+			fmt.Fprintf(&sb, "   comment = %s\n", comment)
 		}
 		if gokInt == 1 {
 			sb.WriteString("   guest ok = yes\n")
@@ -912,17 +910,15 @@ func reloadSamba(smbConfPath string, db *sql.DB) {
 func parseChangeString(s string) (prop, newVal string, err error) {
 	// Format: "compression: lz4 → zstd"
 	const arrow = " → "
-	arrowIdx := strings.Index(s, arrow)
-	if arrowIdx < 0 {
+	before, after, ok := strings.Cut(s, arrow)
+	if !ok {
 		return "", "", fmt.Errorf("no arrow in change string: %q", s)
 	}
-	colonIdx := strings.Index(s, ": ")
-	if colonIdx < 0 {
+	prop, _, ok = strings.Cut(before, ": ")
+	if !ok {
 		return "", "", fmt.Errorf("no colon in change string: %q", s)
 	}
-	prop = strings.TrimSpace(s[:colonIdx])
-	newVal = strings.TrimSpace(s[arrowIdx+len(arrow):])
-	return prop, newVal, nil
+	return strings.TrimSpace(prop), strings.TrimSpace(after), nil
 }
 
 // datasetPropName maps friendly diff names to ZFS property names.

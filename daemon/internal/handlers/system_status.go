@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"dplaned/internal/cmdutil"
+	"dplaned/internal/scram"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -49,8 +50,7 @@ func (h *SystemStatusHandler) HandleStatus(w http.ResponseWriter, r *http.Reques
 		// Don't fail the entire health check for pool list timeout
 		log.Printf("WARN: zpool list: %v", err)
 	} else {
-		pools := strings.Split(strings.TrimSpace(string(poolOutput)), "\n")
-		for _, p := range pools {
+		for p := range strings.SplitSeq(strings.TrimSpace(string(poolOutput)), "\n") {
 			if p != "" {
 				poolCount++
 			}
@@ -60,7 +60,7 @@ func (h *SystemStatusHandler) HandleStatus(w http.ResponseWriter, r *http.Reques
 	// ECC RAM detection - non-blocking, advisory only
 	ecc := detectECCRAM()
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true, "version": h.version, "setup_complete": setupDone > 0,
 		"has_users": userCount > 0, "has_pools": poolCount > 0,
 		"first_run":       setupDone == 0 && userCount <= 1,
@@ -90,7 +90,7 @@ func (h *SystemStatusHandler) HandleSetupComplete(w http.ResponseWriter, r *http
 		return
 	}
 	if _, err := h.db.Exec(`INSERT INTO system_config (key, value) VALUES ('setup_complete', '1') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`); err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Failed to mark setup complete"})
+		respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Failed to mark setup complete"})
 		return
 	}
 	if body.Hostname != "" {
@@ -113,7 +113,7 @@ func (h *SystemStatusHandler) HandleSetupComplete(w http.ResponseWriter, r *http
 		// Persist to Nix fragment (NixOS: time.timeZone)
 		persistTimezone(body.Timezone)
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "message": "Setup completed"})
+	respondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Setup completed"})
 }
 
 func (h *SystemStatusHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +144,7 @@ func (h *SystemStatusHandler) HandleProfile(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		log.Printf("WARN: uname: %v", err)
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "profile": map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{"success": true, "profile": map[string]any{
 		"hostname": hostname, "timezone": timezone, "description": description,
 		"version": h.version, "kernel": strings.TrimSpace(string(kernel)),
 		"arch": runtime.GOARCH, "os": runtime.GOOS, "uptime": int(time.Since(h.startTime).Seconds()),
@@ -208,8 +208,7 @@ func (h *SystemStatusHandler) HandlePreflight(w http.ResponseWriter, r *http.Req
 	// Data Readiness (v6 compliance)
 	mountCheck := check{"Data Readiness", "pass", "System ready"}
 	if mountOut, err := cmdutil.RunFast("zfs", "get", "-H", "-o", "name,value", "mounted"); err == nil {
-		lines := strings.Split(strings.TrimSpace(string(mountOut)), "\n")
-		for _, line := range lines {
+		for line := range strings.SplitSeq(strings.TrimSpace(string(mountOut)), "\n") {
 			parts := strings.Fields(line)
 			if len(parts) == 2 {
 				name := parts[0]
@@ -234,7 +233,7 @@ func (h *SystemStatusHandler) HandlePreflight(w http.ResponseWriter, r *http.Req
 			overall = "warn"
 		}
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "status": overall, "checks": checks})
+	respondJSON(w, http.StatusOK, map[string]any{"success": true, "status": overall, "checks": checks})
 }
 
 func (h *SystemStatusHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
@@ -262,7 +261,7 @@ func (h *SystemStatusHandler) HandleSettings(w http.ResponseWriter, r *http.Requ
 			respondErrorSimple(w, "Failed to read settings", http.StatusInternalServerError)
 			return
 		}
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "settings": settings})
+		respondJSON(w, http.StatusOK, map[string]any{"success": true, "settings": settings})
 	case http.MethodPost:
 		var body map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -287,7 +286,7 @@ func (h *SystemStatusHandler) HandleSettings(w http.ResponseWriter, r *http.Requ
 			}
 			persistTimezone(tz)
 		}
-		respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "message": fmt.Sprintf("%d settings saved", len(body))})
+		respondJSON(w, http.StatusOK, map[string]any{"success": true, "message": fmt.Sprintf("%d settings saved", len(body))})
 	default:
 		respondErrorSimple(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -371,7 +370,7 @@ func (h *SystemStatusHandler) HandleZFSGateStatus(w http.ResponseWriter, r *http
 	const markerPath = "/run/dplaneos/zfs-ready"
 	_, err := os.Stat(markerPath)
 	gateReady := err == nil
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"gate_ready": gateReady,
 		"marker":     markerPath,
@@ -397,7 +396,7 @@ func (h *SystemStatusHandler) HandleIPMISensors(w http.ResponseWriter, r *http.R
 	// Check ipmitool availability
 	ipmitoolPath, err := exec.LookPath("ipmitool")
 	if err != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"available": false,
 			"reason":    "ipmitool not installed",
 			"sensors":   []IPMISensor{},
@@ -412,7 +411,7 @@ func (h *SystemStatusHandler) HandleIPMISensors(w http.ResponseWriter, r *http.R
 	out, err := cmd.Output()
 	if err != nil {
 		// BMC not accessible (e.g. consumer hardware, VM)
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"available": false,
 			"reason":    "BMC not accessible: " + err.Error(),
 			"sensors":   []IPMISensor{},
@@ -421,7 +420,7 @@ func (h *SystemStatusHandler) HandleIPMISensors(w http.ResponseWriter, r *http.R
 	}
 
 	sensors := parseIPMISdr(string(out))
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"available": true,
 		"sensors":   sensors,
 	})
@@ -431,7 +430,7 @@ func (h *SystemStatusHandler) HandleIPMISensors(w http.ResponseWriter, r *http.R
 // Format: Name             | Value      | Status
 func parseIPMISdr(output string) []IPMISensor {
 	var sensors []IPMISensor
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -512,7 +511,7 @@ func (h *SystemStatusHandler) HandleSetupAdmin(w http.ResponseWriter, r *http.Re
 	// Gate: only allow if setup is NOT yet complete (Pre-check, Finding 26)
 	tx, err := h.db.Begin()
 	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Internal error"})
+		respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Internal error"})
 		return
 	}
 	defer tx.Rollback()
@@ -525,11 +524,11 @@ func (h *SystemStatusHandler) HandleSetupAdmin(w http.ResponseWriter, r *http.Re
 
 	var setupDone int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM system_config WHERE key = 'setup_complete' AND value = '1'`).Scan(&setupDone); err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Internal error"})
+		respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Internal error"})
 		return
 	}
 	if setupDone > 0 {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+		respondJSON(w, http.StatusForbidden, map[string]any{
 			"success": false, "error": "Setup already completed",
 		})
 		return
@@ -540,75 +539,88 @@ func (h *SystemStatusHandler) HandleSetupAdmin(w http.ResponseWriter, r *http.Re
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+		respondJSON(w, http.StatusBadRequest, map[string]any{
 			"success": false, "error": "Invalid request body",
 		})
 		return
 	}
 
 	if req.Username == "" || req.Password == "" {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+		respondJSON(w, http.StatusBadRequest, map[string]any{
 			"success": false, "error": "Username and password are required",
 		})
 		return
 	}
 	if len(req.Password) < 8 {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+		respondJSON(w, http.StatusBadRequest, map[string]any{
 			"success": false, "error": "Password must be at least 8 characters",
 		})
 		return
 	}
 
-	// Hash the password
+	// Hash the password with bcrypt and derive SCRAM-SHA-512 keys.
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
 			"success": false, "error": "Failed to hash password",
 		})
 		return
 	}
+	scramKeys, err := scram.Derive(req.Password)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]any{
+			"success": false, "error": "Internal error",
+		})
+		return
+	}
+	saltB64 := scram.EncodeBase64(scramKeys.Salt)
+	storedKeyB64 := scram.EncodeBase64(scramKeys.StoredKey)
+	serverKeyB64 := scram.EncodeBase64(scramKeys.ServerKey)
 
 	// First, check if there's any user with an admin role (Finding 26)
 	var adminCount int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Internal error"})
+		respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Internal error"})
 		return
 	}
 
 	if adminCount > 0 {
 		// Admin already exists, update the specific seeded 'admin' account or return error
 		result, err := tx.Exec(
-			`UPDATE users SET password_hash = $1, username = $2, must_change_password = 0 WHERE username = 'admin'`,
-			string(hash), req.Username,
+			`UPDATE users SET password_hash = $1, username = $2, must_change_password = 0,
+			 scram_salt = $3, scram_iterations = $4, scram_stored_key = $5, scram_server_key = $6
+			 WHERE username = 'admin'`,
+			string(hash), req.Username, saltB64, scramKeys.Iterations, storedKeyB64, serverKeyB64,
 		)
 		if err != nil {
-			respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Update failed"})
+			respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Update failed"})
 			return
 		}
 		if rows, _ := result.RowsAffected(); rows == 0 {
 			// If we arrived here, an admin exists but it's not named 'admin' (already renamed)
-			respondJSON(w, http.StatusForbidden, map[string]interface{}{"success": false, "error": "Admin credentials already configured"})
+			respondJSON(w, http.StatusForbidden, map[string]any{"success": false, "error": "Admin credentials already configured"})
 			return
 		}
 	} else {
 		// No admin exists at all - insert fresh
 		_, err = tx.Exec(
-			`INSERT INTO users (username, password_hash, email, role, active) VALUES ($1, $2, 'admin@localhost', 'admin', 1)`,
-			req.Username, string(hash),
+			`INSERT INTO users (username, password_hash, scram_salt, scram_iterations, scram_stored_key, scram_server_key, email, role, active)
+			 VALUES ($1, $2, $3, $4, $5, $6, 'admin@localhost', 'admin', 1)`,
+			req.Username, string(hash), saltB64, scramKeys.Iterations, storedKeyB64, serverKeyB64,
 		)
 		if err != nil {
-			respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Creation failed"})
+			respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Creation failed"})
 			return
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Failed to commit setup"})
+		respondJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "Failed to commit setup"})
 		return
 	}
 
 	log.Printf("SETUP: admin credentials configured for user '%s'", req.Username)
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true, "message": "Admin credentials configured",
 	})
 }
