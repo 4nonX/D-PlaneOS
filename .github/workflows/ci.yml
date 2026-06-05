@@ -106,7 +106,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y gcc libc6-dev postgresql-client gcc-aarch64-linux-gnu qemu-user-static libc6-arm64-cross \
-            zfsutils-linux libzfs-dev
+            zfsutils-linux libzfslinux-dev pkg-config
 
       - name: Run Go Tests
         working-directory: daemon
