@@ -4,6 +4,11 @@
 # ==============================================================================
 set -e
 
+# Ensure ZFS tools are reachable via sudo. On Ubuntu, sudo uses its own
+# secure_path which may not include /usr/sbin where zfs/zpool live.
+echo 'Defaults env_keep += "PATH"' | sudo tee /etc/sudoers.d/ci-path >/dev/null
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
 # --- UTILITIES ---
 ok()   { echo -e "  \033[0;32m✓\033[0m $1"; }
 warn() { echo -e "  \033[0;33m!\033[0m $1"; }

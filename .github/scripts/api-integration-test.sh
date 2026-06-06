@@ -1,9 +1,11 @@
 #!/bin/bash
 set -e  # fail fast during setup; turned off before the test suite begins
 
-# Ensure ZFS tools are on the PATH when invoked via sudo.
-# On Ubuntu the ZFS binaries live in /usr/sbin which is not always included
-# in the secure_path used by sudo when it is invoked without a full path.
+# Ensure ZFS tools are reachable via sudo. On Ubuntu, sudo uses its own
+# secure_path which may not include /usr/sbin where zfs/zpool live.
+# Preserving PATH through sudo is the correct solution: tell sudoers to
+# keep the current PATH variable rather than replacing it with secure_path.
+echo 'Defaults env_keep += "PATH"' | sudo tee /etc/sudoers.d/ci-path >/dev/null
 export PATH="/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 # --- SETUP ---
