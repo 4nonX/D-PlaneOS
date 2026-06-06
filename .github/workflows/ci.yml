@@ -574,7 +574,7 @@ jobs:
   # ════════════════════════════════════════════════════════════════════════════
   release:
     name: Build & Publish Release
-    needs: [validate, integration, convergence, storage-failure, ha-failover-logic, ha-promotion-zfs, ha-vm-cluster]
+    needs: [validate, integration, convergence, storage-failure, ha-failover-logic, ha-promotion-zfs, ha-vm-cluster, iso, iso-arm]
     if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     permissions:
@@ -650,10 +650,10 @@ jobs:
           echo "arm64_sha=${ARM64_TARBALL}.sha256" >> $GITHUB_OUTPUT
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
 
       - name: Install syft
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610  # v0
 
       - name: Sign tarballs and generate SBOMs
         env:
@@ -667,6 +667,23 @@ jobs:
 
           syft scan "$AMD64" -o spdx-json="${AMD64}.sbom.json"
           syft scan "$ARM64" -o spdx-json="${ARM64}.sbom.json"
+
+      - name: Download ISO artifacts from build jobs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: iso-*
+          merge-multiple: true
+          path: iso-artifacts
+
+      - name: Sign ISOs and generate SBOMs
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          for ISO in iso-artifacts/*.iso; do
+            [ -f "$ISO" ] || continue
+            cosign sign-blob --yes "$ISO" --bundle "${ISO}.bundle"
+            syft scan "$ISO" -o spdx-json="${ISO}.sbom.json"
+          done
 
       - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
@@ -684,6 +701,10 @@ jobs:
             ${{ steps.meta.outputs.arm64_sha }}
             ${{ steps.meta.outputs.arm64_tarball }}.bundle
             ${{ steps.meta.outputs.arm64_tarball }}.sbom.json
+            iso-artifacts/*.iso
+            iso-artifacts/*.sha256
+            iso-artifacts/*.bundle
+            iso-artifacts/*.sbom.json
           draft: true
           prerelease: false
           make_latest: false
@@ -774,35 +795,13 @@ jobs:
           echo "iso_name=${ISO_NAME}" >> $GITHUB_OUTPUT
           echo "iso_sha=${ISO_NAME}.sha256" >> $GITHUB_OUTPUT
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
-      - name: Install syft
-        uses: anchore/sbom-action/download-syft@v0
-
-      - name: Sign ISO and generate SBOM
-        env:
-          COSIGN_EXPERIMENTAL: "1"
-        run: |
-          ISO="${{ steps.package.outputs.iso_name }}"
-          cosign sign-blob --yes "$ISO" --bundle "${ISO}.bundle"
-          syft scan "$ISO" -o spdx-json="${ISO}.sbom.json"
-          echo "iso_bundle=${ISO}.bundle" >> $GITHUB_OUTPUT
-          echo "iso_sbom=${ISO}.sbom.json" >> $GITHUB_OUTPUT
-        id: sign
-
-      - name: Attach ISO to GitHub Release
-        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+      - name: Upload ISO artifact for signing in release job
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          files: |
+          name: iso-amd64
+          path: |
             ${{ steps.package.outputs.iso_name }}
             ${{ steps.package.outputs.iso_sha }}
-            ${{ steps.sign.outputs.iso_bundle }}
-            ${{ steps.sign.outputs.iso_sbom }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ════════════════════════════════════════════════════════════════════════════
   # STAGE 5B: ISO ARM64 - Combined installer for aarch64 clusters
@@ -893,33 +892,11 @@ jobs:
           echo "iso_name=${ISO_NAME}" >> $GITHUB_OUTPUT
           echo "iso_sha=${ISO_NAME}.sha256" >> $GITHUB_OUTPUT
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
-      - name: Install syft
-        uses: anchore/sbom-action/download-syft@v0
-
-      - name: Sign ISO and generate SBOM
-        env:
-          COSIGN_EXPERIMENTAL: "1"
-        run: |
-          ISO="${{ steps.package.outputs.iso_name }}"
-          cosign sign-blob --yes "$ISO" --bundle "${ISO}.bundle"
-          syft scan "$ISO" -o spdx-json="${ISO}.sbom.json"
-          echo "iso_bundle=${ISO}.bundle" >> $GITHUB_OUTPUT
-          echo "iso_sbom=${ISO}.sbom.json" >> $GITHUB_OUTPUT
-        id: sign
-
-      - name: Attach arm64 ISO to GitHub Release
-        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+      - name: Upload arm64 ISO artifact for signing in release job
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          files: |
+          name: iso-arm64
+          path: |
             ${{ steps.package.outputs.iso_name }}
             ${{ steps.package.outputs.iso_sha }}
-            ${{ steps.sign.outputs.iso_bundle }}
-            ${{ steps.sign.outputs.iso_sbom }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
