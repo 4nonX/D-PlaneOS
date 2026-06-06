@@ -471,7 +471,9 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gcc libc6-dev postgresql-client python3-bcrypt curl ipmitool
+          sudo apt-get install -y gcc libc6-dev postgresql-client python3-bcrypt curl ipmitool \
+            zfsutils-linux
+          sudo modprobe zfs
 
       - name: Build arm64 CGO daemon
         working-directory: daemon
@@ -488,7 +490,6 @@ jobs:
         env:
           CI_PASS: "CiAdmin1!Test"
           DATABASE_DSN: "postgres://dplaneos:dplaneos@localhost:5432/dplaneos?sslmode=disable"
-          SKIP_ZFS_TESTS: "1"
         run: |
           chmod +x .github/scripts/api-integration-test.sh
           bash .github/scripts/api-integration-test.sh
