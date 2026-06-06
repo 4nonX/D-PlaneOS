@@ -1,4 +1,4 @@
-name: DPlaneOS Unified CI/CD
+﻿name: DPlaneOS Unified CI/CD
 
 on:
   push:
@@ -821,8 +821,19 @@ jobs:
 
           # Generate SBOM from the Nix closure (not the opaque ISO image).
           # See .github/scripts/generate-iso-sbom.py for full rationale.
-          STORE_PATH=$(readlink -f result)
-          nix path-info -r "$STORE_PATH" --json | python3 .github/scripts/generate-iso-sbom.py "$ISO_NAME" > "${ISO_NAME}.sbom.json"
+          # The result symlink points to the ISO image file, whose Nix closure
+          # is just the ISO derivation itself - the squashfs content is embedded,
+          # not tracked as store dependencies. Query the system toplevel that was
+          # baked into the squashfs; its closure is the full package inventory.
+          # nix eval --raw coerces the derivation to its outPath (/nix/store/...).
+          # The store paths are already present (built during nix build .#iso above)
+          # so this is just a metadata lookup, not a rebuild.
+          SYSTEM_PATH=$(nix eval --raw ".#nixosConfigurations.dplaneos-for-iso.config.system.build.toplevel" 2>&1)
+          echo "System toplevel: $SYSTEM_PATH"
+          if [[ "$SYSTEM_PATH" != /nix/store/* ]]; then
+            echo "ERROR: could not resolve dplaneos-for-iso toplevel: $SYSTEM_PATH"; exit 1
+          fi
+          nix path-info -r "$SYSTEM_PATH" --json | python3 .github/scripts/generate-iso-sbom.py "$ISO_NAME" > "${ISO_NAME}.sbom.json"
           echo "SBOM: $(python3 -c "import json; d=json.load(open('${ISO_NAME}.sbom.json')); print(len(d['packages']),'packages')" 2>/dev/null)"
           echo "iso_sbom=${ISO_NAME}.sbom.json" >> $GITHUB_OUTPUT
 
@@ -924,8 +935,16 @@ jobs:
           echo "iso_name=${ISO_NAME}" >> $GITHUB_OUTPUT
           echo "iso_sha=${ISO_NAME}.sha256" >> $GITHUB_OUTPUT
 
-          STORE_PATH=$(readlink -f result)
-          nix path-info -r "$STORE_PATH" --json | python3 .github/scripts/generate-iso-sbom.py "$ISO_NAME" > "${ISO_NAME}.sbom.json"
+          # The result symlink points to the ISO image file, whose Nix closure
+          # is just the ISO derivation itself - the squashfs content is embedded,
+          # not tracked as store dependencies. Query the system toplevel that was
+          # baked into the squashfs; its closure is the full package inventory.
+          SYSTEM_PATH=$(nix eval --raw ".#nixosConfigurations.dplaneos-arm.config.system.build.toplevel" 2>&1)
+          echo "System toplevel: $SYSTEM_PATH"
+          if [[ "$SYSTEM_PATH" != /nix/store/* ]]; then
+            echo "ERROR: could not resolve dplaneos-arm toplevel: $SYSTEM_PATH"; exit 1
+          fi
+          nix path-info -r "$SYSTEM_PATH" --json | python3 .github/scripts/generate-iso-sbom.py "$ISO_NAME" > "${ISO_NAME}.sbom.json"
           echo "SBOM: $(python3 -c "import json; d=json.load(open('${ISO_NAME}.sbom.json')); print(len(d['packages']),'packages')" 2>/dev/null)"
           echo "iso_sbom=${ISO_NAME}.sbom.json" >> $GITHUB_OUTPUT
 
