@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 Upgrade from: v14.0.0 - Schema migration required (migration 00008 adds `ha_cluster_config` table for runtime-configurable HA timing; applied automatically at startup). No breaking API changes. No breaking configuration changes.
 
-This release addresses the operational maturity gaps identified by the sysadmin, nerd, support technician, and TrueNAS convert perspectives: the monitoring island (no scrape endpoint), hardcoded HA timing constants, opaque technical error messages, and the absence of an honest integration guide. The foundation is unchanged; this release closes the last-mile-of-utility gap.
+This release addresses the operational maturity gaps identified, the monitoring island (no scrape endpoint), hardcoded HA timing constants, opaque technical error messages, and the absence of an honest integration guide. The foundation is unchanged; this release closes the last-mile-of-utility gap.
 
 ### Added
 
