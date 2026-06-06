@@ -821,7 +821,8 @@ jobs:
 
           # Generate SBOM from the Nix closure (not the opaque ISO image).
           # See .github/scripts/generate-iso-sbom.py for full rationale.
-          nix path-info -r ./result --json | python3 .github/scripts/generate-iso-sbom.py "$ISO_NAME" > "${ISO_NAME}.sbom.json"
+          STORE_PATH=$(readlink -f result)
+          nix path-info -r "$STORE_PATH" --json | python3 .github/scripts/generate-iso-sbom.py "$ISO_NAME" > "${ISO_NAME}.sbom.json"
           echo "SBOM: $(python3 -c "import json; d=json.load(open('${ISO_NAME}.sbom.json')); print(len(d['packages']),'packages')" 2>/dev/null)"
           echo "iso_sbom=${ISO_NAME}.sbom.json" >> $GITHUB_OUTPUT
 
@@ -923,7 +924,8 @@ jobs:
           echo "iso_name=${ISO_NAME}" >> $GITHUB_OUTPUT
           echo "iso_sha=${ISO_NAME}.sha256" >> $GITHUB_OUTPUT
 
-          nix path-info -r ./result --json | python3 .github/scripts/generate-iso-sbom.py "$ISO_NAME" > "${ISO_NAME}.sbom.json"
+          STORE_PATH=$(readlink -f result)
+          nix path-info -r "$STORE_PATH" --json | python3 .github/scripts/generate-iso-sbom.py "$ISO_NAME" > "${ISO_NAME}.sbom.json"
           echo "SBOM: $(python3 -c "import json; d=json.load(open('${ISO_NAME}.sbom.json')); print(len(d['packages']),'packages')" 2>/dev/null)"
           echo "iso_sbom=${ISO_NAME}.sbom.json" >> $GITHUB_OUTPUT
 
