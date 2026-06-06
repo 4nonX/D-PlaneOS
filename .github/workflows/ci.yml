@@ -675,14 +675,38 @@ jobs:
           merge-multiple: true
           path: iso-artifacts
 
-      - name: Sign ISOs and generate SBOMs
+      - name: Sign ISOs
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
           for ISO in iso-artifacts/*.iso; do
             [ -f "$ISO" ] || continue
             cosign sign-blob --yes "$ISO" --bundle "${ISO}.bundle"
-            syft scan "$ISO" -o spdx-json="${ISO}.sbom.json"
+          done
+
+      - name: Scan all SBOMs for CVEs (grype)
+        run: |
+          # Install grype - the SBOM consumer that makes generation meaningful.
+          # A generated SBOM that is never scanned attests to nothing actionable.
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+          echo "=== Tarball SBOMs ==="
+          for SBOM in *.sbom.json; do
+            [ -f "$SBOM" ] || continue
+            echo "Scanning $SBOM..."
+            grype "sbom:$SBOM" --output table --fail-on critical || {
+              echo "CRITICAL CVEs found in $SBOM - see table above"
+              exit 1
+            }
+          done
+          echo "=== ISO closure SBOMs ==="
+          for SBOM in iso-artifacts/*.sbom.json; do
+            [ -f "$SBOM" ] || continue
+            PKG_COUNT=$(python3 -c "import json; d=json.load(open('$SBOM')); print(len(d['packages']))" 2>/dev/null || echo "?")
+            echo "Scanning $SBOM ($PKG_COUNT packages)..."
+            grype "sbom:$SBOM" --output table --fail-on critical || {
+              echo "CRITICAL CVEs found in $SBOM - see table above"
+              exit 1
+            }
           done
 
       - name: Publish GitHub Release
@@ -785,7 +809,7 @@ jobs:
           nix build .#iso --print-build-logs
           ls -lh result/iso/
 
-      - name: Package ISO
+      - name: Package ISO and generate closure SBOM
         id: package
         run: |
           VERSION="${{ steps.version.outputs.version }}"
@@ -795,6 +819,50 @@ jobs:
           echo "iso_name=${ISO_NAME}" >> $GITHUB_OUTPUT
           echo "iso_sha=${ISO_NAME}.sha256" >> $GITHUB_OUTPUT
 
+          # Generate SBOM from the Nix closure, not the opaque ISO image.
+          # syft scan on the .iso blob returns ~1KB describing one file.
+          # nix path-info -r gives every transitive store path with NAR hashes:
+          # the complete package inventory of what is baked into the squashfs.
+          # This produces an SBOM that can actually be scanned for CVEs.
+          nix path-info -r result --json | python3 - "$ISO_NAME" > "${ISO_NAME}.sbom.json" << 'PYEOF'
+import json, sys, datetime
+
+with open('/dev/stdin') as f:
+    data = json.load(f)
+
+iso_label = sys.argv[1] if len(sys.argv) > 1 else "DPlaneOS Installer ISO"
+packages = []
+for i, (path, info) in enumerate(data.items()):
+    filename = path.split("/")[-1]
+    # Store path format: /nix/store/<hash>-<name>[-<version>]
+    parts = filename.split("-", 1)
+    name = parts[1] if len(parts) > 1 else filename
+    nar_hash = info.get("narHash", "")
+    pkg = {
+        "SPDXID": f"SPDXRef-Pkg-{i}",
+        "name": name,
+        "downloadLocation": "https://cache.nixos.org",
+        "filesAnalyzed": False,
+        "checksums": [{"algorithm": "SHA256", "checksumValue": nar_hash.replace("sha256:", "").replace(":", "")}] if nar_hash else [],
+        "comment": f"nix store path: {path}"
+    }
+    packages.append(pkg)
+
+doc = {
+    "spdxVersion": "SPDX-2.3",
+    "dataLicense": "CC0-1.0",
+    "SPDXID": "SPDXRef-DOCUMENT",
+    "name": iso_label,
+    "documentNamespace": f"https://github.com/4nonX/DPlaneOS/sbom/{datetime.datetime.utcnow().isoformat()}Z",
+    "documentDescribes": [p["SPDXID"] for p in packages[:1]],
+    "packages": packages
+}
+print(json.dumps(doc, indent=2))
+PYEOF
+          SBOM_SIZE=$(wc -c < "${ISO_NAME}.sbom.json")
+          echo "SBOM size: $SBOM_SIZE bytes ($(wc -l < "${ISO_NAME}.sbom.json") lines, $(python3 -c "import json; d=json.load(open('${ISO_NAME}.sbom.json')); print(len(d['packages']),'packages')" 2>/dev/null || echo '?'))"
+          echo "iso_sbom=${ISO_NAME}.sbom.json" >> $GITHUB_OUTPUT
+
       - name: Upload ISO artifact for signing in release job
         uses: actions/upload-artifact@v4
         with:
@@ -802,6 +870,7 @@ jobs:
           path: |
             ${{ steps.package.outputs.iso_name }}
             ${{ steps.package.outputs.iso_sha }}
+            ${{ steps.package.outputs.iso_sbom }}
 
   # ════════════════════════════════════════════════════════════════════════════
   # STAGE 5B: ISO ARM64 - Combined installer for aarch64 clusters
@@ -882,7 +951,7 @@ jobs:
           nix build .#iso --print-build-logs
           ls -lh result/iso/
 
-      - name: Package arm64 ISO
+      - name: Package arm64 ISO and generate closure SBOM
         id: package
         run: |
           VERSION="${{ steps.version.outputs.version }}"
@@ -892,6 +961,44 @@ jobs:
           echo "iso_name=${ISO_NAME}" >> $GITHUB_OUTPUT
           echo "iso_sha=${ISO_NAME}.sha256" >> $GITHUB_OUTPUT
 
+          nix path-info -r result --json | python3 - "$ISO_NAME" > "${ISO_NAME}.sbom.json" << 'PYEOF'
+import json, sys, datetime
+
+with open('/dev/stdin') as f:
+    data = json.load(f)
+
+iso_label = sys.argv[1] if len(sys.argv) > 1 else "DPlaneOS Installer ISO"
+packages = []
+for i, (path, info) in enumerate(data.items()):
+    filename = path.split("/")[-1]
+    parts = filename.split("-", 1)
+    name = parts[1] if len(parts) > 1 else filename
+    nar_hash = info.get("narHash", "")
+    pkg = {
+        "SPDXID": f"SPDXRef-Pkg-{i}",
+        "name": name,
+        "downloadLocation": "https://cache.nixos.org",
+        "filesAnalyzed": False,
+        "checksums": [{"algorithm": "SHA256", "checksumValue": nar_hash.replace("sha256:", "").replace(":", "")}] if nar_hash else [],
+        "comment": f"nix store path: {path}"
+    }
+    packages.append(pkg)
+
+doc = {
+    "spdxVersion": "SPDX-2.3",
+    "dataLicense": "CC0-1.0",
+    "SPDXID": "SPDXRef-DOCUMENT",
+    "name": iso_label,
+    "documentNamespace": f"https://github.com/4nonX/DPlaneOS/sbom/{datetime.datetime.utcnow().isoformat()}Z",
+    "documentDescribes": [p["SPDXID"] for p in packages[:1]],
+    "packages": packages
+}
+print(json.dumps(doc, indent=2))
+PYEOF
+          SBOM_SIZE=$(wc -c < "${ISO_NAME}.sbom.json")
+          echo "SBOM size: $SBOM_SIZE bytes ($(python3 -c "import json; d=json.load(open('${ISO_NAME}.sbom.json')); print(len(d['packages']),'packages')" 2>/dev/null || echo '?'))"
+          echo "iso_sbom=${ISO_NAME}.sbom.json" >> $GITHUB_OUTPUT
+
       - name: Upload arm64 ISO artifact for signing in release job
         uses: actions/upload-artifact@v4
         with:
@@ -899,4 +1006,5 @@ jobs:
           path: |
             ${{ steps.package.outputs.iso_name }}
             ${{ steps.package.outputs.iso_sha }}
+            ${{ steps.package.outputs.iso_sbom }}
 
