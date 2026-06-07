@@ -27,6 +27,8 @@
  *   POST /api/ha/watchdog/configure
  *   GET  /api/ha/timing
  *   POST /api/ha/timing
+ *   GET  /api/ha/scsi/status
+ *   POST /api/ha/scsi/probe
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -142,6 +144,29 @@ interface SBDResponse {
 interface ClusterSecretStatus {
   success:    boolean
   configured: boolean
+}
+
+interface SCSIStatusResponse {
+  success:  boolean
+  running:  boolean
+  key?:     string
+  devices?: string[]
+  message?: string
+}
+
+interface SCSIProbeResult {
+  device:    string
+  supported: boolean
+  error?:    string
+}
+
+interface SCSIProbeResponse {
+  success:         boolean
+  auto_enumerated: boolean
+  results:         SCSIProbeResult[]
+  all_supported:   boolean
+  device_count:    number
+  message?:        string
 }
 
 interface WatchdogConfig {
@@ -1118,6 +1143,176 @@ function ReplicationConfigForm() {
       <button onClick={() => save.mutate(cfg)} disabled={save.isPending || q.isLoading} className="btn btn-primary">
         <Icon name="save" size={15} />{save.isPending ? 'Saving…' : 'Save Replication Config'}
       </button>
+    </div>
+  )
+}
+
+// ─── SCSIFencingCard ──────────────────────────────────────────────────────────
+// Shows dplane-fenced reservation status and lets the operator run the full
+// PROUT round-trip probe before trusting shared-storage fencing. The probe
+// catches drives that answer PRIN READ KEYS (read-only capability check) but
+// reject PROUT REGISTER - the false-positive that silently arms the cluster
+// with broken fencing.
+
+function SCSIFencingCard() {
+  const statusQ = useQuery({
+    queryKey: ['ha', 'scsi', 'status'],
+    queryFn:  ({ signal }) => api.get<SCSIStatusResponse>('/api/ha/scsi/status', signal),
+    refetchInterval: 30_000,
+  })
+
+  const [probeResult, setProbeResult] = useState<SCSIProbeResponse | null>(null)
+  const [probing, setProbing] = useState(false)
+
+  async function runProbe() {
+    setProbing(true)
+    setProbeResult(null)
+    try {
+      const result = await api.post<SCSIProbeResponse>('/api/ha/scsi/probe', {})
+      setProbeResult(result)
+      if (result.all_supported) {
+        toast.success(`All ${result.device_count} disk(s) support SCSI-3 PR`)
+      } else {
+        toast.error('One or more disks do not support SCSI-3 PR - shared-storage fencing will fail on those devices')
+      }
+    } catch (e: unknown) {
+      toast.error(`Probe failed: ${(e as Error).message}`)
+    } finally {
+      setProbing(false)
+    }
+  }
+
+  const status = statusQ.data
+  const fencedDevices = status?.devices ?? []
+
+  return (
+    <div className="card" style={{
+      borderRadius: 'var(--radius-lg)', padding: '20px 24px', marginTop: 24,
+      borderLeft: status?.running ? '4px solid var(--success)' : '4px solid var(--border)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <Icon name="storage" size={24} style={{ color: status?.running ? 'var(--success)' : 'var(--text-tertiary)' }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700 }}>SCSI-3 Persistent Reservations</div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+            Shared-storage write exclusivity via dplane-fenced - hardware split-brain protection
+          </div>
+        </div>
+        <div style={{
+          padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', fontWeight: 600,
+          background: status?.running ? 'var(--success-bg)' : 'var(--surface)',
+          border: `1px solid ${status?.running ? 'var(--success-border)' : 'var(--border)'}`,
+          color: status?.running ? 'var(--success)' : 'var(--text-tertiary)',
+        }}>
+          {statusQ.isLoading ? 'Checking…' : status?.running ? 'Active' : 'Not Running'}
+        </div>
+      </div>
+
+      {status?.running ? (
+        <>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Reservation Key
+            </div>
+            <code style={{ fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', background: 'var(--surface)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+              {status.key ?? 'unknown'}
+            </code>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Reserved Devices ({fencedDevices.length})
+            </div>
+            {fencedDevices.length === 0 ? (
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                No devices currently reserved. Pool may not be imported or dplane-fenced is starting up.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {fencedDevices.map(dev => (
+                  <span key={dev} style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
+                    background: 'var(--success-bg)', border: '1px solid var(--success-border)',
+                    color: 'var(--success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                  }}>
+                    <Icon name="lock" size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{dev}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div style={{ marginBottom: 14, fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          {status?.message ?? 'dplane-fenced is not running. Shared-storage SCSI-3 PR fencing requires the dplane-fenced service to be enabled in NixOS configuration.'}
+        </div>
+      )}
+
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 4 }}>
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.6 }}>
+          <strong>Validate before enabling shared-storage HA.</strong> The probe runs a full PROUT write round-trip
+          on each pool disk - the only reliable test. PRIN read-only probes produce false positives on drives that
+          answer READ KEYS but reject REGISTER, which silently arms the cluster with broken fencing.
+        </div>
+        <button
+          onClick={runProbe}
+          disabled={probing}
+          className="btn btn-ghost"
+        >
+          <Icon name="search" size={14} />{probing ? 'Probing disks…' : 'Probe PR Support on Pool Disks'}
+        </button>
+      </div>
+
+      {probeResult && (
+        <div style={{
+          marginTop: 16, background: 'var(--surface)', borderRadius: 'var(--radius-md)',
+          padding: '12px 16px',
+          border: `1px solid ${probeResult.all_supported ? 'var(--success-border)' : 'var(--error-border)'}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <Icon
+              name={probeResult.all_supported ? 'check_circle' : 'cancel'}
+              size={16}
+              style={{ color: probeResult.all_supported ? 'var(--success)' : 'var(--error)' }}
+            />
+            <span style={{
+              fontWeight: 700, fontSize: 'var(--text-sm)',
+              color: probeResult.all_supported ? 'var(--success)' : 'var(--error)',
+            }}>
+              {probeResult.all_supported
+                ? `All ${probeResult.device_count} device(s) support SCSI-3 PR - shared-storage fencing is safe`
+                : `${probeResult.results.filter(r => !r.supported).length} of ${probeResult.device_count} device(s) do NOT support SCSI-3 PR`}
+            </span>
+          </div>
+          {probeResult.message && (
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 10 }}>
+              {probeResult.message}
+            </div>
+          )}
+          {probeResult.results.map((r, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6, fontSize: 'var(--text-xs)' }}>
+              <Icon
+                name={r.supported ? 'check' : 'close'}
+                size={13}
+                style={{ color: r.supported ? 'var(--success)' : 'var(--error)', flexShrink: 0, marginTop: 1 }}
+              />
+              <div>
+                <span style={{ fontFamily: 'var(--font-mono)', color: r.supported ? 'var(--text)' : 'var(--text-tertiary)' }}>
+                  {r.device}
+                </span>
+                {r.error && (
+                  <div style={{ color: 'var(--error)', marginTop: 2, lineHeight: 1.4 }}>{r.error}</div>
+                )}
+              </div>
+            </div>
+          ))}
+          {probeResult.auto_enumerated && (
+            <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+              Devices auto-enumerated from imported ZFS pools.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -2204,6 +2399,7 @@ export function HAPage() {
         <FencingConfigForm />
         <PDUConfigForm />
         <WatchdogConfigForm />
+        <SCSIFencingCard />
       </div>
       <SBDConfigForm />
       <NetworkWitnessForm />

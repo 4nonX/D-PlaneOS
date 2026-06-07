@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"dplaned/internal/gitops"
 	"dplaned/internal/ha"
 	"dplaned/internal/jobs"
+	"dplaned/internal/scsipr"
 	"dplaned/internal/security"
 	"github.com/gorilla/mux"
 )
@@ -1084,6 +1087,158 @@ func (h *HAHandler) SaveClusterTiming(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"message": "Timing configuration saved. Restart the daemon for heartbeat_interval_seconds and failover_after_seconds to take effect.",
 	})
+}
+
+// GetSCSIStatus returns the current SCSI-3 PR reservation state from dplane-fenced.
+// The response includes which /dev/sgN devices are currently reserved, the
+// reservation key in use, and whether the fenced daemon is reachable.
+// GET /api/ha/scsi/status
+func (h *HAHandler) GetSCSIStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := ha.FencedStatus()
+	if err != nil {
+		// dplane-fenced not running or socket unavailable - not an error, just not configured
+		respondJSON(w, http.StatusOK, map[string]any{
+			"success": true,
+			"running": false,
+			"message": "dplane-fenced not reachable: " + err.Error(),
+			"devices": []string{},
+		})
+		return
+	}
+	devices, _ := status["devices"].([]any)
+	devStrs := make([]string, 0, len(devices))
+	for _, d := range devices {
+		if s, ok := d.(string); ok {
+			devStrs = append(devStrs, s)
+		}
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"running": true,
+		"key":     status["key"],
+		"devices": devStrs,
+	})
+}
+
+// ProbeSCSIDevices runs the full PROUT round-trip probe (SupportsReservations)
+// on the specified devices. If no devices are provided, the endpoint auto-
+// enumerates /dev/sgN devices from current ZFS pool members.
+//
+// This is the correct PR capability check: it tests whether a drive will
+// actually accept a PERSISTENT RESERVE OUT REGISTER command, not just
+// whether it answers a PRIN READ KEYS query. Drives that pass the read-only
+// probe but reject writes produce false positives that arm the cluster with
+// broken fencing - this endpoint detects those before setup.
+//
+// POST /api/ha/scsi/probe
+// Body: { "devices": ["/dev/sg0"] }  // optional; empty = auto-enumerate pool disks
+func (h *HAHandler) ProbeSCSIDevices(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Devices []string `json:"devices"`
+	}
+	// Decode is best-effort; empty body is valid (triggers auto-enumerate)
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
+
+	devices := req.Devices
+	autoEnumerated := false
+	if len(devices) == 0 {
+		autoEnumerated = true
+		var err error
+		devices, err = enumPoolSGDevices()
+		if err != nil {
+			respondErrorSimple(w, "failed to enumerate pool disks: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if len(devices) == 0 {
+			respondJSON(w, http.StatusOK, map[string]any{
+				"success":        true,
+				"auto_enumerated": true,
+				"results":        []any{},
+				"all_supported":  true,
+				"message":        "No ZFS pool member disks found - pool may not be imported or no SAS/SATA disks present",
+			})
+			return
+		}
+	}
+
+	type probeResult struct {
+		Device    string `json:"device"`
+		Supported bool   `json:"supported"`
+		Error     string `json:"error,omitempty"`
+	}
+
+	results := make([]probeResult, len(devices))
+	allSupported := true
+	for i, dev := range devices {
+		if err := scsipr.SupportsReservations(dev); err != nil {
+			results[i] = probeResult{Device: dev, Supported: false, Error: err.Error()}
+			allSupported = false
+		} else {
+			results[i] = probeResult{Device: dev, Supported: true}
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success":         true,
+		"auto_enumerated": autoEnumerated,
+		"results":         results,
+		"all_supported":   allSupported,
+		"device_count":    len(devices),
+	})
+}
+
+// enumPoolSGDevices returns /dev/sgN paths for all current ZFS pool member disks.
+// Mirrors the enumeration logic in dplane-fenced so setup probes and runtime
+// fencing operate on the same device set.
+func enumPoolSGDevices() ([]string, error) {
+	out, err := exec.Command("zpool", "status", "-P").Output()
+	if err != nil {
+		return nil, fmt.Errorf("zpool status: %w", err)
+	}
+
+	var sgDevs []string
+	seen := make(map[string]bool)
+
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "/dev/") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		blockDev := fields[0]
+
+		sg, err := blockDevToSG(blockDev)
+		if err != nil {
+			continue
+		}
+		if seen[sg] {
+			continue
+		}
+		seen[sg] = true
+		sgDevs = append(sgDevs, sg)
+	}
+	return sgDevs, nil
+}
+
+// blockDevToSG resolves a block device path to its /dev/sgN counterpart via sysfs.
+func blockDevToSG(blockDev string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(blockDev)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", blockDev, err)
+	}
+	base := filepath.Base(resolved)
+	if strings.HasPrefix(base, "nvme") {
+		return "", fmt.Errorf("NVMe devices do not use SG_IO (%s)", base)
+	}
+	genericLink := fmt.Sprintf("/sys/class/block/%s/device/generic", base)
+	sgTarget, err := filepath.EvalSymlinks(genericLink)
+	if err != nil {
+		return "", fmt.Errorf("no scsi_generic for %s: %w", base, err)
+	}
+	return "/dev/" + filepath.Base(sgTarget), nil
 }
 
 // GetWatchdogConfig returns the hardware watchdog self-fence configuration.
