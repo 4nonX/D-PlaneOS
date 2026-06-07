@@ -1236,21 +1236,49 @@ export function HAPage() {
   const [showHAConsole, setShowHAConsole] = useState(false)
   const setJob = useJobStore(s => s.setActiveJob)
 
+  // blockState holds the structured block response from the backend so the
+  // UI can render a guided workflow rather than a raw error string.
+  const [haBlock, setHaBlock] = useState<{
+    code: string; error: string; guide: string; action: string
+  } | null>(null)
+
+  const switchover = useMutation({
+    mutationFn: () => api.post<{ success: boolean; job_id?: string; error?: string }>(
+      '/api/ha/switchover', {}),
+    onSuccess: (data) => {
+      if (!data.success) {
+        toast.error(data.error ?? 'Primary handoff failed')
+        return
+      }
+      if (data.job_id) {
+        setJobId(data.job_id)
+        setJob(data.job_id, 'Switching Primary to Standby')
+        setHaBlock(null) // Clear the block panel - switchover started
+      }
+    },
+    onError: (e: Error) => toast.error(`Primary handoff failed: ${e.message}`),
+  })
+
   const toggleHA = useMutation({
     mutationFn: ({ enable, force = false }: { enable: boolean; force?: boolean }) =>
-      api.post<{ success: boolean; job_id?: string; warnings?: string[]; error?: string; code?: string }>(
+      api.post<{ success: boolean; job_id?: string; warnings?: string[]; error?: string; guide?: string; code?: string; action?: string }>(
         '/api/ha/toggle', { enable, force }),
     onSuccess: (data, vars) => {
       if (!data.success) {
-        // Server returned a conflict/blocked response (e.g. patroni_primary).
-        // Show the error and, if it's a primary-node block, offer a force option.
-        if (data.code === 'patroni_primary') {
-          toast.error('This node is the Patroni primary. Run patronictl switchover first, or use Force Disable to override.')
+        if (data.code) {
+          // Structured block - render a guided workflow panel, not a toast
+          setHaBlock({
+            code:   data.code,
+            error:  data.error  ?? 'Operation blocked',
+            guide:  data.guide  ?? '',
+            action: data.action ?? '',
+          })
         } else {
           toast.error(data.error ?? 'HA toggle failed')
         }
         return
       }
+      setHaBlock(null)
       if (data.warnings?.length) {
         data.warnings.forEach(w => toast.warning(w))
       }
@@ -1524,6 +1552,17 @@ export function HAPage() {
             {String((toggleHA.error as Error)?.message ?? 'Failed to enable HA')}
           </p>
         )}
+        {haBlock && (
+          <div style={{ marginTop: 20, maxWidth: 520, margin: '20px auto 0', padding: '16px 20px', borderRadius: 'var(--radius-lg)', background: 'var(--warning-bg)', borderLeft: '4px solid var(--warning)', textAlign: 'left' }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>{haBlock.error}</div>
+            {haBlock.guide && (
+              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 12 }}>
+                {haBlock.guide}
+              </div>
+            )}
+            <button onClick={() => setHaBlock(null)} className="btn btn-ghost" style={{ fontSize: 'var(--text-xs)' }}>Dismiss</button>
+          </div>
+        )}
       </div>
     )
   }
@@ -1557,13 +1596,13 @@ export function HAPage() {
             <Icon name="toggle_off" size={14} />
             {toggleHA.isPending ? 'Disabling…' : 'Disable HA'}
           </button>
-          {toggleHA.data && !toggleHA.data.success && toggleHA.data.code === 'patroni_primary' && (
+          {haBlock?.code === 'patroni_primary' && (
             <button
               onClick={() => toggleHA.mutate({ enable: false, force: true })}
               disabled={toggleHA.isPending}
               className="btn btn-ghost"
               style={{ color: 'var(--error)', fontSize: 'var(--text-xs)' }}
-              title="Force disable even though this node is the Patroni primary. Active database connections will be dropped."
+              title="Force disable without primary handoff. Active database connections will be dropped."
             >
               <Icon name="warning" size={13} />Force Disable
             </button>
@@ -1820,6 +1859,48 @@ export function HAPage() {
           </div>
         )}
       </div>
+
+      {/* ── Guided action panel - shown when an operation is blocked ─────────── */}
+      {haBlock && (
+        <div className="card" style={{ borderRadius: 'var(--radius-lg)', padding: '20px 24px', marginBottom: 24, borderLeft: '4px solid var(--warning)', background: 'var(--warning-bg)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16 }}>
+            <Icon name="info" size={22} style={{ color: 'var(--warning)', flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>{haBlock.error}</div>
+              {haBlock.guide && (
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  {haBlock.guide}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {haBlock.action === 'switchover' && (
+              <button
+                onClick={() => switchover.mutate()}
+                disabled={switchover.isPending || !!jobId}
+                className="btn btn-primary"
+              >
+                <Icon name="swap_horiz" size={16} />
+                {switchover.isPending ? 'Handing off primary…' : 'Switch Primary to Standby'}
+              </button>
+            )}
+            <button
+              onClick={() => setHaBlock(null)}
+              className="btn btn-ghost"
+            >
+              Dismiss
+            </button>
+          </div>
+
+          {switchover.isError && (
+            <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--error-bg)', color: 'var(--error)', fontSize: 'var(--text-xs)' }}>
+              {String((switchover.error as Error)?.message ?? 'Switchover failed')}
+            </div>
+          )}
+        </div>
+      )}
 
       <AddPeerForm onAdd={peer => addPeer.mutate(peer)} pending={pending} />
 

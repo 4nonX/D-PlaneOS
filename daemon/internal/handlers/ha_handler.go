@@ -368,6 +368,50 @@ func (h *HAHandler) Promote(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Switchover performs a graceful Patroni primary handoff to the standby node.
+// POST /api/ha/switchover
+//
+// This is the user-facing operation for "I want the standby to become primary".
+// Unlike Promote (which performs STONITH fencing), Switchover asks the current
+// primary to voluntarily demote itself so the standby can take over with zero
+// data loss and no fencing required.
+//
+// Use cases:
+//   - Before disabling HA on the primary node
+//   - Rolling maintenance (disable-HA on primary, upgrade, re-enable)
+//   - Testing failover behaviour without a real failure
+func (h *HAHandler) Switchover(w http.ResponseWriter, r *http.Request) {
+	if !isPatroniPrimary() {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"success": false,
+			"error":   "This node is not the Patroni primary. Switchover can only be initiated from the primary.",
+			"code":    "not_primary",
+		})
+		return
+	}
+
+	jobID := jobs.Start("ha_switchover", func(j *jobs.Job) {
+		j.Log("Initiating graceful primary handoff to standby node...")
+		j.Log("The standby will take over as PostgreSQL primary. Client connections will briefly pause during the transition (typically under 5 seconds).")
+
+		if err := demotePatroni(); err != nil {
+			j.Log(fmt.Sprintf("Switchover failed: %v", err))
+			j.Fail("Primary handoff failed. The standby may not have been ready to take over. Check that the standby node is healthy and replication lag is low, then try again.")
+			return
+		}
+
+		j.Log("Primary handoff complete. The standby node is now the active PostgreSQL primary.")
+		j.Log("You can now safely disable HA on this node if desired.")
+		j.Done(map[string]any{"switched": true})
+	})
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "Primary handoff initiated. Standby node is taking over as PostgreSQL primary.",
+		"job_id":  jobID,
+	})
+}
+
 // TriggerFence fires a manual STONITH request against a given peer.
 // POST /api/ha/fence
 func (h *HAHandler) TriggerFence(w http.ResponseWriter, r *http.Request) {
@@ -460,18 +504,18 @@ func (h *HAHandler) ToggleHA(w http.ResponseWriter, r *http.Request) {
 		// 'patronictl switchover' first to hand off leadership gracefully.
 		if !req.Force && isPatroniPrimary() {
 			// Return 200 OK so the frontend onSuccess handler receives the code
-			// and can surface the "Force Disable" button. 409 would go to onError
-			// where structured codes are not accessible to the UI.
+			// and can surface the guided switchover workflow.
 			respondJSON(w, http.StatusOK, map[string]any{
 				"success": false,
-				"error":   "This node is the Patroni PostgreSQL primary. Disabling HA now would cause an abrupt primary loss without graceful replication handoff. Run 'patronictl switchover' to promote the standby first, then disable HA. To override this check, set force:true in the request.",
+				"error":   "This node is currently the active database primary.",
+				"guide":   "Hand off the primary role to the standby node first using the 'Switch Primary to Standby' button below. This transfers active database connections gracefully with no data loss. After the handoff completes, disable HA.",
 				"code":    "patroni_primary",
-				"action":  "switchover_first",
+				"action":  "switchover",
 			})
 			return
 		}
 		if req.Force && isPatroniPrimary() {
-			warnings = append(warnings, "This node is the Patroni primary. Disabling HA without switchover will cause an abrupt PostgreSQL primary loss. Active client connections will be dropped.")
+			warnings = append(warnings, "Proceeding without graceful primary handoff. Active database connections will be dropped when Patroni stops. The standby node will promote itself after detecting the primary is gone (typically 15-45 seconds).")
 		}
 	}
 
@@ -520,7 +564,7 @@ func (h *HAHandler) ToggleHA(w http.ResponseWriter, r *http.Request) {
 					if req.Force {
 						j.Log(fmt.Sprintf("WARNING: graceful Patroni demotion failed (%v). Proceeding with force disable - active DB connections will be dropped.", err))
 					} else {
-						j.Fail(fmt.Sprintf("Patroni demotion failed: %v. Run patronictl switchover first, or retry with force:true.", err))
+						j.Fail(fmt.Sprintf("Primary handoff failed during HA disable: %v. Use the 'Switch Primary to Standby' action on the HA page to complete the handoff, then try disabling HA again. If the standby is offline, use Force Disable to proceed without a handoff.", err))
 						if revertErr := NixWriter.SetHA(previousHAEnable); revertErr != nil {
 							j.Log("WARNING: could not revert ha_enable flag: " + revertErr.Error())
 						}

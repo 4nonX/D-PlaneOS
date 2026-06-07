@@ -1295,6 +1295,7 @@ func main() {
 	r.Handle("/api/ha/witness/configure", permRoute("system", "admin", haHandler.GetWitnessConfig)).Methods("GET")
 	r.Handle("/api/ha/witness/test", permRoute("system", "admin", haHandler.TestWitness)).Methods("POST")
 	r.Handle("/api/ha/promote", permRoute("system", "admin", haHandler.Promote)).Methods("POST")
+	r.Handle("/api/ha/switchover", middleware.RequireAAL2(permRoute("system", "admin", haHandler.Switchover))).Methods("POST")
 	r.Handle("/api/ha/fence", permRoute("system", "admin", haHandler.TriggerFence)).Methods("POST")
 	r.Handle("/api/ha/maintenance", permRoute("system", "admin", haHandler.RegisterMaintenance)).Methods("POST")
 	r.Handle("/api/ha/pdu/configure", permRoute("system", "admin", haHandler.ConfigurePDU)).Methods("POST")
