@@ -1886,6 +1886,18 @@ export function HAPage() {
                 {switchover.isPending ? 'Handing off primary…' : 'Switch Primary to Standby'}
               </button>
             )}
+            {haBlock.action === 'configure_fencing' && (
+              <button
+                onClick={() => {
+                  setHaBlock(null)
+                  // Scroll to the fencing configuration section
+                  document.getElementById('fencing-config-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
+                className="btn btn-primary"
+              >
+                <Icon name="security" size={16} />Configure Fencing
+              </button>
+            )}
             <button
               onClick={() => setHaBlock(null)}
               className="btn btn-ghost"
@@ -1916,8 +1928,10 @@ export function HAPage() {
       />
       <ClusterSecretForm />
       <WitnessConfigForm />
-      <FencingConfigForm />
-      <PDUConfigForm />
+      <div id="fencing-config-section">
+        <FencingConfigForm />
+        <PDUConfigForm />
+      </div>
       <SBDConfigForm />
       <NetworkWitnessForm />
       <ReplicationConfigForm />

@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"database/sql"
@@ -254,7 +254,7 @@ func (h *NFSHandler) CreateNFSExport(w http.ResponseWriter, r *http.Request) {
 		req.Path, req.Clients, req.Options,
 	).Scan(&id)
 	if err != nil {
-		respondErrorSimple(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeDB(err), err)
 		return
 	}
 
@@ -353,7 +353,7 @@ func (h *NFSHandler) UpdateNFSExport(w http.ResponseWriter, r *http.Request) {
 
 	query := "UPDATE nfs_exports SET " + strings.Join(sets, ", ") + fmt.Sprintf(" WHERE id = $%d", len(args))
 	if _, err := h.db.Exec(query, args...); err != nil {
-		respondErrorSimple(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeDB(err), err)
 		return
 	}
 
@@ -390,7 +390,7 @@ func (h *NFSHandler) DeleteNFSExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.db.Exec(`DELETE FROM nfs_exports WHERE id = $1`, id); err != nil {
-		respondErrorSimple(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeDB(err), err)
 		return
 	}
 
@@ -413,7 +413,7 @@ func (h *NFSHandler) ReloadNFSExportsHandler(w http.ResponseWriter, r *http.Requ
 	}
 	user := r.Header.Get("X-User")
 	if err := h.writeExportsFile(); err != nil {
-		respondErrorSimple(w, "failed to write exports file: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeServiceControl("NFS", err), err)
 		return
 	}
 	if err := reloadExports(user); err != nil {

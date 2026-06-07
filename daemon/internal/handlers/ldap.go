@@ -33,10 +33,12 @@ func NewLDAPHandler(db *sql.DB) *LDAPHandler {
 }
 
 type ldapResp struct {
-	Success bool        `json:"success"`
-	Data    any `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
-	Warning string      `json:"warning,omitempty"`
+	Success bool   `json:"success"`
+	Data    any    `json:"data,omitempty"`
+	Error   string `json:"error,omitempty"`
+	Code    string `json:"code,omitempty"`
+	Guide   string `json:"guide,omitempty"`
+	Warning string `json:"warning,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, code int, resp ldapResp) {

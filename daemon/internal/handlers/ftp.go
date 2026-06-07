@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"encoding/json"
@@ -340,7 +340,7 @@ func StartFTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := cmdutil.RunFast("systemctl", "start", vsftpdService); err != nil {
-		respondErrorSimple(w, "Failed to start vsftpd: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeServiceControl("FTP", err), err)
 		return
 	}
 	audit.LogActivity(r.Header.Get("X-User"), "ftp_start", nil)
@@ -354,7 +354,7 @@ func StopFTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := cmdutil.RunFast("systemctl", "stop", vsftpdService); err != nil {
-		respondErrorSimple(w, "Failed to stop vsftpd: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeServiceControl("FTP", err), err)
 		return
 	}
 	audit.LogActivity(r.Header.Get("X-User"), "ftp_stop", nil)
@@ -368,7 +368,7 @@ func RestartFTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := cmdutil.RunFast("systemctl", "restart", vsftpdService); err != nil {
-		respondErrorSimple(w, "Failed to restart vsftpd: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeServiceControl("FTP", err), err)
 		return
 	}
 	audit.LogActivity(r.Header.Get("X-User"), "ftp_restart", nil)

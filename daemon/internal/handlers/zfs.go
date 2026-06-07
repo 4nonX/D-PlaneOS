@@ -29,11 +29,13 @@ type CommandRequest struct {
 }
 
 type CommandResponse struct {
-	Success  bool        `json:"success"`
-	Output   string      `json:"output,omitempty"`
-	Error    string      `json:"error,omitempty"`
-	Duration int64       `json:"duration_ms"`
-	Data     any `json:"data,omitempty"`
+	Success  bool   `json:"success"`
+	Output   string `json:"output,omitempty"`
+	Error    string `json:"error,omitempty"`
+	Code     string `json:"code,omitempty"`
+	Guide    string `json:"guide,omitempty"`
+	Duration int64  `json:"duration_ms"`
+	Data     any    `json:"data,omitempty"`
 }
 
 func NewZFSHandler(db *sql.DB) *ZFSHandler {
@@ -94,9 +96,13 @@ func (h *ZFSHandler) HandleCommand(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
+		ue := SanitizeZFS(err)
+		log.Printf("ZFS command %v failed: %v", req.Args, err)
 		respondOK(w, CommandResponse{
 			Success:  false,
-			Error:    err.Error(),
+			Error:    ue.Error,
+			Code:     ue.Code,
+			Guide:    ue.Guide,
 			Duration: duration.Milliseconds(),
 		})
 		return

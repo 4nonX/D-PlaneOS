@@ -491,11 +491,21 @@ func (h *HAHandler) ToggleHA(w http.ResponseWriter, r *http.Request) {
 	var warnings []string
 
 	if req.Enable {
-		// Pre-flight for ENABLE: collect warnings (non-blocking) to surface in UI.
+		// Pre-flight for ENABLE: surface a structured block so the UI can render
+		// a guided workflow, not just a warning toast.
 		fencingCfg, _ := ha.GetFencingConfig(h.mgr.DB())
 		pduCfg, _ := ha.GetPDUConfig(h.mgr.DB())
 		if !fencingCfg.Enable && !pduCfg.Enable {
-			warnings = append(warnings, "No fencing method (IPMI or PDU) is configured. Automatic failover will be blocked until at least one fencing method is enabled. Configure fencing under Settings → HA → Fencing before relying on automated failover.")
+			// Return 200 with success:false so the frontend onSuccess handler
+			// renders the guided panel (same pattern as patroni_primary).
+			respondJSON(w, http.StatusOK, map[string]any{
+				"success": false,
+				"error":   "No fencing method is configured.",
+				"guide":   "Without IPMI or PDU fencing, automatic failover is disabled. If the peer becomes unreachable, this node will not promote itself - it cannot confirm the peer is offline and must stay passive to avoid split-brain. Configure at least one fencing method, then enable HA.",
+				"code":    "no_fencing",
+				"action":  "configure_fencing",
+			})
+			return
 		}
 	} else {
 		// Pre-flight for DISABLE: check if this node is the Patroni primary.

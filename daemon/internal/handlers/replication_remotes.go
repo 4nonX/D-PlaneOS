@@ -397,7 +397,7 @@ func (h *RemotesHandler) HandleAuthorizeRemote(w http.ResponseWriter, r *http.Re
 
 	sess, err := client.NewSession()
 	if err != nil {
-		respondErrorSimple(w, "Failed to open SSH session: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeSSH(err), err)
 		return
 	}
 	defer sess.Close()
@@ -738,16 +738,11 @@ func (h *RemotesHandler) HandleResetFingerprint(w http.ResponseWriter, r *http.R
 	gitops.CommitAllAsync(h.db)
 }
 
-// sanitiseSSHConnError strips credential material from SSH dial errors before
-// returning them to the client.
+// sanitiseSSHConnError returns a safe user-facing message for SSH errors,
+// delegating to the SanitizeSSH utility that covers all error categories.
 func sanitiseSSHConnError(err error) string {
 	if err == nil {
 		return ""
 	}
-	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "password") || strings.Contains(msg, "authentication") ||
-		strings.Contains(msg, "auth") {
-		return "authentication failed - check host, user, and password"
-	}
-	return err.Error()
+	return SanitizeSSH(err).Error
 }

@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"encoding/json"
@@ -312,7 +312,7 @@ func StartMinio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := cmdutil.RunFast("systemctl", "start", minioService); err != nil {
-		respondErrorSimple(w, "Failed to start MinIO: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeServiceControl("MinIO", err), err)
 		return
 	}
 	audit.LogActivity("system", "minio_start", nil)
@@ -323,7 +323,7 @@ func StartMinio(w http.ResponseWriter, r *http.Request) {
 // POST /api/s3/stop
 func StopMinio(w http.ResponseWriter, r *http.Request) {
 	if _, err := cmdutil.RunFast("systemctl", "stop", minioService); err != nil {
-		respondErrorSimple(w, "Failed to stop MinIO: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeServiceControl("MinIO", err), err)
 		return
 	}
 	audit.LogActivity("system", "minio_stop", nil)
@@ -343,7 +343,7 @@ func RestartMinio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := cmdutil.RunFast("systemctl", "restart", minioService); err != nil {
-		respondErrorSimple(w, "Failed to restart MinIO: "+err.Error(), http.StatusInternalServerError)
+		respondUserErrStatus(w, http.StatusInternalServerError, SanitizeServiceControl("MinIO", err), err)
 		return
 	}
 	audit.LogActivity("system", "minio_restart", nil)

@@ -46,45 +46,51 @@ func (h *LDAPHandler) JoinADDomain(w http.ResponseWriter, r *http.Request) {
 
 	// 1. NTP Pre-check
 	if err := h.checkNTP(r.Context()); err != nil {
-		writeJSON(w, 412, ldapResp{Error: "NTP Synchronization Pre-check Failed: " + err.Error()})
+		ue := SanitizeDomainJoin(err, "NTP")
+		if ue.Code == "" {
+			ue = userErr("System clock may not be synchronized. Kerberos requires clocks within 5 minutes of the domain controller.", "ntp_skew", "Enable NTP under Settings → System → Time.")
+		}
+		writeJSON(w, 412, ldapResp{Error: ue.Error, Code: ue.Code, Guide: ue.Guide})
 		return
 	}
 
 	// 2. Perform Join via 'net ads join'
-	// Use environment variable for password to avoid exposure in /proc/pid/cmdline
-	// We use security.CommandWhitelist["net_ads_join"].Path to get the binary name ("net")
-	// and ValidateCommand to ensure args are safe.
 	args := []string{"ads", "join", "-U", req.Username, "-W", req.Domain, "-S", req.DomainController}
 	if err := security.ValidateCommand("net_ads_join", args); err != nil {
-		writeJSON(w, 403, ldapResp{Error: "Security validation failed: " + err.Error()})
+		writeJSON(w, 403, ldapResp{Error: "The domain join request was blocked by the security validator.", Code: "security_validation"})
 		return
 	}
 
 	cmdEntry := security.CommandWhitelist["net_ads_join"]
 	cmd := exec.CommandContext(r.Context(), cmdEntry.Path, args...)
 	cmd.Env = append(os.Environ(), "PASSWD="+string(req.Password))
-	
+
 	if out, err := cmd.CombinedOutput(); err != nil {
-		writeJSON(w, 500, ldapResp{Error: fmt.Sprintf("Domain join failed: %v\nOutput: %s", err, string(out))})
+		ue := SanitizeDomainJoin(err, string(out))
+		log.Printf("ad_join: net ads join failed for domain %s: %v output: %s", req.Domain, err, string(out))
+		writeJSON(w, 500, ldapResp{Error: ue.Error, Code: ue.Code, Guide: ue.Guide})
 		return
 	}
 
 	// 3. Verify Join via 'wbinfo -t' (Machine account trust)
-
 	if err := security.ValidateCommand("wbinfo_test", []string{"-t"}); err != nil {
-		writeJSON(w, 403, ldapResp{Error: "Security validation failed: " + err.Error()})
+		writeJSON(w, 403, ldapResp{Error: "The winbind verification request was blocked by the security validator.", Code: "security_validation"})
 		return
 	}
 	out, err := cmdutil.Run(30*time.Second, "wbinfo_test", "-t")
 	if err != nil {
-		// handle timeout/error
 		if strings.Contains(err.Error(), "deadline exceeded") {
 			writeJSON(w, 202, ldapResp{
 				Success: true,
-				Warning: "Domain joined but winbind verification timed out - check winbind service status.",
+				Warning: "Domain joined but the winbind service did not respond in time. The join may still succeed - check the HA status page in a few seconds.",
 			})
 		} else {
-			writeJSON(w, 500, ldapResp{Error: "Domain joined but trust verification (wbinfo -t) failed: " + string(out)})
+			log.Printf("ad_join: wbinfo -t failed after join to %s: %v output: %s", req.Domain, err, string(out))
+			writeJSON(w, 500, ldapResp{
+				Error: "The domain was joined but trust verification failed. The join may still be functional - try again in a few seconds.",
+				Code:  "winbind_verification_failed",
+				Guide: "Check Directory Services status and the winbind service.",
+			})
 		}
 		return
 	}
