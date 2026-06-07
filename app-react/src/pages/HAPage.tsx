@@ -1,4 +1,4 @@
-/**
+﻿/**
  * pages/HAPage.tsx - High Availability Cluster
  *
  * API surface:
@@ -1237,10 +1237,30 @@ export function HAPage() {
   const setJob = useJobStore(s => s.setActiveJob)
 
   const toggleHA = useMutation({
-    mutationFn: (enable: boolean) => api.post<{ success: boolean; job_id?: string }>('/api/ha/toggle', { enable }),
-    onSuccess: (data) => {
-      if (data.job_id) { setJobId(data.job_id); setJob(data.job_id, 'HA Stack Rebuild') }
-      else { toast.success('HA configuration updated.'); qc.invalidateQueries({ queryKey: ['ha', 'status'] }) }
+    mutationFn: ({ enable, force = false }: { enable: boolean; force?: boolean }) =>
+      api.post<{ success: boolean; job_id?: string; warnings?: string[]; error?: string; code?: string }>(
+        '/api/ha/toggle', { enable, force }),
+    onSuccess: (data, vars) => {
+      if (!data.success) {
+        // Server returned a conflict/blocked response (e.g. patroni_primary).
+        // Show the error and, if it's a primary-node block, offer a force option.
+        if (data.code === 'patroni_primary') {
+          toast.error('This node is the Patroni primary. Run patronictl switchover first, or use Force Disable to override.')
+        } else {
+          toast.error(data.error ?? 'HA toggle failed')
+        }
+        return
+      }
+      if (data.warnings?.length) {
+        data.warnings.forEach(w => toast.warning(w))
+      }
+      if (data.job_id) {
+        setJobId(data.job_id)
+        setJob(data.job_id, vars.enable ? 'Enabling HA' : 'Disabling HA')
+      } else {
+        toast.success(vars.enable ? 'High Availability enabled.' : 'High Availability disabled.')
+        qc.invalidateQueries({ queryKey: ['ha', 'status'] })
+      }
     },
     onError: (e: Error) => toast.error(`HA toggle failed: ${e.message}`),
   })
@@ -1345,7 +1365,7 @@ export function HAPage() {
                   <div style={{ fontWeight: 700 }}>HA Stack</div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Patroni + etcd + HAProxy</div>
                 </div>
-                <button onClick={() => toggleHA.mutate(!haEnabled)} disabled={toggleHA.isPending || !!jobId}
+                <button onClick={() => toggleHA.mutate({ enable: !haEnabled })} disabled={toggleHA.isPending || !!jobId}
                   className={`btn ${haEnabled ? 'btn-danger' : 'btn-success'}`}>
                   {haEnabled ? 'Disable HA' : 'Enable HA'}
                 </button>
@@ -1456,7 +1476,6 @@ export function HAPage() {
             </p>
             <FencingConfigForm />
             <PDUConfigForm />
-            <NetworkWitnessForm />
             <div className="alert alert-success" style={{ marginTop: 32, marginBottom: 24 }}>
               <Icon name="check_circle" size={18} />
               <div>Setup complete! You can now monitor the cluster from the main dashboard.</div>
@@ -1480,13 +1499,31 @@ export function HAPage() {
     return (
       <div style={{ maxWidth: 800, margin: '60px auto', textAlign: 'center' }}>
         <Icon name="topology" size={64} style={{ color: 'var(--text-tertiary)', opacity: 0.2, marginBottom: 24 }} />
-        <h1>High Availability is Disabled</h1>
-        <p style={{ color: 'var(--text-secondary)', maxWidth: 500, margin: '16px auto 32px' }}>
-          Your D-PlaneOS instance is running as a standalone node. Enable HA to support automatic failover, Virtual IP migration, and storage redundancy.
+        <h1>High Availability is Off</h1>
+        <p style={{ color: 'var(--text-secondary)', maxWidth: 520, margin: '16px auto 12px' }}>
+          This node is running as a standalone system. All NAS features (storage, shares, replication, Docker) are fully operational without HA.
         </p>
-        <button onClick={() => setWizardStep(1)} className="btn btn-primary btn-lg">
-          <Icon name="bolt" size={18} />Launch HA Setup Wizard
-        </button>
+        <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', maxWidth: 480, margin: '0 auto 32px' }}>
+          Enable HA when you are ready to add a second node for automatic failover and Virtual IP migration. HA can be enabled and disabled at any time from this page.
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => toggleHA.mutate({ enable: true })}
+            disabled={toggleHA.isPending}
+            className="btn btn-primary btn-lg"
+          >
+            <Icon name="toggle_on" size={18} />
+            {toggleHA.isPending ? 'Enabling…' : 'Enable High Availability'}
+          </button>
+          <button onClick={() => setWizardStep(1)} className="btn btn-ghost">
+            <Icon name="settings" size={14} />Setup Wizard
+          </button>
+        </div>
+        {toggleHA.isError && (
+          <p style={{ color: 'var(--error)', marginTop: 16, fontSize: 'var(--text-sm)' }}>
+            {String((toggleHA.error as Error)?.message ?? 'Failed to enable HA')}
+          </p>
+        )}
       </div>
     )
   }
@@ -1500,7 +1537,7 @@ export function HAPage() {
           <h1 className="page-title">HA Cluster</h1>
           <p className="page-subtitle">High availability - nodes, quorum and failover</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => setWizardStep(1)} className="btn btn-ghost">
             <Icon name="settings" size={14} />Setup Wizard
           </button>
@@ -1510,6 +1547,27 @@ export function HAPage() {
           }} className="btn btn-ghost">
             <Icon name="refresh" size={14} />Refresh
           </button>
+          <button
+            onClick={() => toggleHA.mutate({ enable: false })}
+            disabled={toggleHA.isPending}
+            className="btn btn-ghost"
+            style={{ color: 'var(--error)', borderColor: 'var(--error-border)' }}
+            title="Disable HA. If this node is the Patroni primary, run patronictl switchover first. The system remains fully operational as a standalone node after disable."
+          >
+            <Icon name="toggle_off" size={14} />
+            {toggleHA.isPending ? 'Disabling…' : 'Disable HA'}
+          </button>
+          {toggleHA.data && !toggleHA.data.success && toggleHA.data.code === 'patroni_primary' && (
+            <button
+              onClick={() => toggleHA.mutate({ enable: false, force: true })}
+              disabled={toggleHA.isPending}
+              className="btn btn-ghost"
+              style={{ color: 'var(--error)', fontSize: 'var(--text-xs)' }}
+              title="Force disable even though this node is the Patroni primary. Active database connections will be dropped."
+            >
+              <Icon name="warning" size={13} />Force Disable
+            </button>
+          )}
         </div>
       </div>
 

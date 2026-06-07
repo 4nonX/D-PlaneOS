@@ -1006,6 +1006,14 @@ func (m *Manager) GetFencingConfig() (FencingConfig, error) {
 	return GetFencingConfig(m.db)
 }
 
+// IsFencingInProgress reports whether a STONITH fencing sequence is actively running.
+// Used by the HA toggle handler to block enable/disable during a fence operation.
+func (m *Manager) IsFencingInProgress() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.fencingInProgress
+}
+
 // SaveFencingConfig exposes STONITH write access on the Manager.
 func (m *Manager) SaveFencingConfig(cfg FencingConfig) error {
 	return SaveFencingConfig(m.db, cfg)

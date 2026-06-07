@@ -141,6 +141,16 @@ func promotionWouldFire(m *Manager) (fire bool, blockedBy string) {
 		}
 	}
 
+	// Guard 4b: Network quorum witness (optional VPS/cloud endpoint probe).
+	// Mirrors the check added to checkFailover() at Guard 4b.
+	nwCfg, nwErr := GetNetworkWitnessConfig(m.db)
+	if nwErr == nil && nwCfg.Enable {
+		result := ProbeNetworkWitness(nwCfg)
+		if !result.Reachable {
+			return false, "network-witness-isolated"
+		}
+	}
+
 	if m.IsMaintenanceActive() {
 		return false, "maintenance"
 	}
@@ -272,6 +282,73 @@ func TestFailover_WitnessReachable_ClearsWitnessGate(t *testing.T) {
 	fire, blocked := promotionWouldFire(m)
 	if !fire {
 		t.Fatalf("node refused to promote with fencing enabled and witness reachable; blocked by %q", blocked)
+	}
+}
+
+// TestFailover_NetworkWitnessUnreachable_DoesNotPromote verifies Guard 4b: the
+// network quorum witness is configured but the target is unreachable, meaning
+// this node cannot prove it is not the isolated side. Promotion must be blocked.
+func TestFailover_NetworkWitnessUnreachable_DoesNotPromote(t *testing.T) {
+	db := haTestDB(t)
+	defer db.Close()
+	m := deadPeerManager(t, db)
+	addHealthyActivePeer(t, m)
+	enableIPMIFencing(t, db)
+	// No etcd witness configured so Guard 4 is skipped, isolating Guard 4b.
+
+	// Point the network witness at an unroutable address (RFC 5737 documentation
+	// range: 203.0.113.x is guaranteed non-routable). TCP dial will time out,
+	// proving the node cannot reach a neutral third party.
+	if err := SaveNetworkWitnessConfig(db, NetworkWitnessConfig{
+		Enable:    true,
+		Target:    "203.0.113.2",
+		Method:    "icmp",
+		TimeoutMs: 200, // short for test speed
+		Count:     1,
+	}); err != nil {
+		t.Fatalf("SaveNetworkWitnessConfig: %v", err)
+	}
+
+	fire, blocked := promotionWouldFire(m)
+	if fire {
+		t.Fatal("node promoted while network-witness-isolated - split-brain risk: both sides may go active")
+	}
+	if blocked != "network-witness-isolated" {
+		t.Fatalf("expected block reason 'network-witness-isolated', got %q", blocked)
+	}
+}
+
+// TestFailover_NetworkWitnessReachable_ClearsGuard verifies the positive path
+// for Guard 4b: when the network witness target IS reachable, the guard clears
+// and (with no other guard blocking) the node proceeds to promote.
+func TestFailover_NetworkWitnessReachable_ClearsGuard(t *testing.T) {
+	db := haTestDB(t)
+	defer db.Close()
+	m := deadPeerManager(t, db)
+	addHealthyActivePeer(t, m)
+	enableIPMIFencing(t, db)
+
+	// Use an httptest server as the witness target so the TCP dial succeeds.
+	witness := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer witness.Close()
+
+	// Strip http:// prefix - the icmp method dials host:port directly.
+	host := witness.Listener.Addr().String()
+	if err := SaveNetworkWitnessConfig(db, NetworkWitnessConfig{
+		Enable:    true,
+		Target:    host,
+		Method:    "icmp",
+		TimeoutMs: 2000,
+		Count:     1,
+	}); err != nil {
+		t.Fatalf("SaveNetworkWitnessConfig: %v", err)
+	}
+
+	fire, blocked := promotionWouldFire(m)
+	if !fire {
+		t.Fatalf("node refused to promote with fencing enabled and network witness reachable; blocked by %q", blocked)
 	}
 }
 

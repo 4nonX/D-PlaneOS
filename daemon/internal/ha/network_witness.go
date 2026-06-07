@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -134,22 +135,8 @@ func isConnectionRefused(err error) bool {
 		return false
 	}
 	// "connection refused" means the host responded (it's reachable), just no listener
-	return contains(err.Error(), "connection refused") ||
-		contains(err.Error(), "refused")
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		(len(s) > len(substr) && indexString(s, substr) >= 0))
-}
-
-func indexString(s, sub string) int {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
+	msg := err.Error()
+	return strings.Contains(msg, "connection refused") || strings.Contains(msg, "refused")
 }
 
 // GetNetworkWitnessConfig reads the witness config from the database.

@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -396,30 +400,90 @@ func (h *HAHandler) TriggerFence(w http.ResponseWriter, r *http.Request) {
 }
 
 // ToggleHA arms or disarms the NixOS HA cluster modules.
-// POST /api/ha/toggle {"enable": true/false}
+// POST /api/ha/toggle {"enable": true/false, "force": false}
+//
+// Safety checks before enable:
+//   - No fencing method configured → warning (not blocked; operator may configure after)
+//   - Fencing/STONITH in progress → blocked
+//
+// Safety checks before disable:
+//   - Fencing/STONITH in progress → blocked; disabling mid-fence causes split-brain
+//   - This node is the Patroni primary → blocked unless force:true; client connections
+//     would be severed abruptly. Operator should switchover first.
+//   - Failover in progress → blocked
+//
+// On failure of nixos-rebuild: the NixWriter JSON is reverted to the previous
+// value so that ha_enabled in the UI reflects the actual applied state.
 func (h *HAHandler) ToggleHA(w http.ResponseWriter, r *http.Request) {
 	if NixWriter == nil {
 		respondJSON(w, http.StatusOK, map[string]any{
 			"success": false,
-			"error":   "High Availability requires NixOS",
+			"error":   "High Availability requires NixOS. This system is not running a DPlaneOS NixOS appliance.",
 		})
 		return
 	}
+
 	var req struct {
 		Enable bool `json:"enable"`
+		Force  bool `json:"force"` // override primary-node block on disable
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondErrorSimple(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
+	// ── Safety guards ───────────────────────────────────────────────────────
+	// Guard: block if a STONITH fencing sequence is in progress.
+	// Disabling HA mid-fence would leave the peer fenced but unable to recover;
+	// enabling mid-fence would corrupt the fencing state machine.
+	if h.mgr.IsFencingInProgress() {
+		respondJSON(w, http.StatusConflict, map[string]any{
+			"success": false,
+			"error":   "Cannot change HA state while a STONITH fencing sequence is in progress. Wait for it to complete or abort it first.",
+			"code":    "fencing_in_progress",
+		})
+		return
+	}
+
+	var warnings []string
+
+	if req.Enable {
+		// Pre-flight for ENABLE: collect warnings (non-blocking) to surface in UI.
+		fencingCfg, _ := ha.GetFencingConfig(h.mgr.DB())
+		pduCfg, _ := ha.GetPDUConfig(h.mgr.DB())
+		if !fencingCfg.Enable && !pduCfg.Enable {
+			warnings = append(warnings, "No fencing method (IPMI or PDU) is configured. Automatic failover will be blocked until at least one fencing method is enabled. Configure fencing under Settings → HA → Fencing before relying on automated failover.")
+		}
+	} else {
+		// Pre-flight for DISABLE: check if this node is the Patroni primary.
+		// Disabling HA while primary causes an abrupt loss of the PostgreSQL primary
+		// without replication catchup or client draining. Operator should run
+		// 'patronictl switchover' first to hand off leadership gracefully.
+		if !req.Force && isPatroniPrimary() {
+			respondJSON(w, http.StatusConflict, map[string]any{
+				"success": false,
+				"error":   "This node is the Patroni PostgreSQL primary. Disabling HA now would cause an abrupt primary loss without graceful replication handoff. Run 'patronictl switchover' to promote the standby first, then disable HA. To override this check, set force:true in the request.",
+				"code":    "patroni_primary",
+				"action":  "switchover_first",
+			})
+			return
+		}
+		if req.Force && isPatroniPrimary() {
+			warnings = append(warnings, "This node is the Patroni primary. Disabling HA without switchover will cause an abrupt PostgreSQL primary loss. Active client connections will be dropped.")
+		}
+	}
+
+	// ── Acquire gitops lock ─────────────────────────────────────────────────
 	if !gitops.TryLock() {
-		respondJSON(w, 423, map[string]any{
+		respondJSON(w, http.StatusLocked, map[string]any{
 			"success": false,
 			"error":   "A reconciliation is already in progress. Please wait for the current operation to finish.",
 		})
 		return
 	}
+
+	// Record the previous state so we can revert on rebuild failure.
+	previousHAEnable := NixWriter.State().HAEnable
 
 	if err := NixWriter.SetHA(req.Enable); err != nil {
 		gitops.Unlock()
@@ -427,34 +491,247 @@ func (h *HAHandler) ToggleHA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Trigger nixos-rebuild switch via the jobs system for frontend visibility
-	jobID := jobs.Start("nixos_rebuild", func(j *jobs.Job) {
+	action := "disabling"
+	if req.Enable {
+		action = "enabling"
+	}
+
+	jobID := jobs.Start("ha_toggle", func(j *jobs.Job) {
 		defer gitops.Unlock()
-		action := "disabling"
-		if req.Enable {
-			action = "enabling"
+
+		for _, w := range warnings {
+			j.Log("WARNING: " + w)
 		}
-		j.Log(fmt.Sprintf("HA: User is %s HA - triggering nixos-rebuild switch", action))
-		
-		// Run rebuild using the whitelisted key
+
+		if !req.Enable {
+			// ── Disable sequence: graceful shutdown before nixos-rebuild ────────
+			//
+			// Step 1: Demote Patroni primary.
+			// If this node is the PostgreSQL primary, initiate a graceful switchover
+			// so the peer becomes primary before we stop services. Without this,
+			// stopping Patroni here causes an abrupt primary loss - the peer cannot
+			// promote until etcd quorum is re-established (may take 10-30s), during
+			// which PostgreSQL is completely unavailable.
+			if isPatroniPrimary() {
+				j.Log("This node is the Patroni primary. Initiating graceful demotion...")
+				if err := demotePatroni(); err != nil {
+					if req.Force {
+						j.Log(fmt.Sprintf("WARNING: graceful Patroni demotion failed (%v). Proceeding with force disable - active DB connections will be dropped.", err))
+					} else {
+						j.Fail(fmt.Sprintf("Patroni demotion failed: %v. Run patronictl switchover first, or retry with force:true.", err))
+						if revertErr := NixWriter.SetHA(previousHAEnable); revertErr != nil {
+							j.Log("WARNING: could not revert ha_enable flag: " + revertErr.Error())
+						}
+						return
+					}
+				} else {
+					j.Log("Patroni primary demoted. Peer is now the PostgreSQL primary.")
+				}
+			} else {
+				j.Log("This node is not the Patroni primary - no demotion needed.")
+			}
+
+			// Step 2: Leave the etcd cluster gracefully.
+			// If this node leaves cleanly, the remaining two members (peer + witness)
+			// maintain quorum and the cluster stays healthy. If we just stop etcd,
+			// the cluster transitions to a degraded state and may lose quorum
+			// temporarily while the member-leave timeout fires.
+			j.Log("Leaving etcd cluster...")
+			if err := leaveEtcdCluster(); err != nil {
+				// Non-fatal: etcd will remove the member after its peer timeout.
+				// Log it prominently but don't block the disable.
+				j.Log(fmt.Sprintf("WARNING: etcd graceful leave failed (%v). etcd will remove this member after its election timeout (~5s). Proceeding.", err))
+			} else {
+				j.Log("This node removed from etcd cluster. Remaining members maintain quorum.")
+			}
+
+			// Note: ZFS pools are NOT exported here. When disabling HA, this node
+			// continues as a standalone system and needs its pools. Pool export
+			// happens during a failover (when yielding to a peer), not during
+			// a planned HA disable.
+			j.Log("ZFS pools remain imported. This node will continue serving data as a standalone system.")
+		}
+
+		// ── Apply NixOS configuration ────────────────────────────────────────
+		j.Log(fmt.Sprintf("Applying NixOS configuration (%s HA)...", action))
 		out, err := cmdutil.RunExtreme("nixos-rebuild", "switch")
 		if err != nil {
-			log.Printf("HA: NixOS rebuild failed: %v\nOutput: %s", err, string(out))
+			log.Printf("HA TOGGLE: NixOS rebuild failed: %v\nOutput: %s", err, string(out))
 			j.Log(fmt.Sprintf("ERROR: NixOS reconfiguration failed: %v", err))
+
+			// Revert the JSON flag so ha_enabled in the UI reflects reality.
+			// nixos-rebuild rolls back to the previous generation automatically on
+			// failure, so the running system is still the old config.
+			if revertErr := NixWriter.SetHA(previousHAEnable); revertErr != nil {
+				j.Log(fmt.Sprintf("WARNING: could not revert ha_enable flag: %v - manual correction may be needed", revertErr))
+			} else {
+				j.Log(fmt.Sprintf("ha_enable reverted to %v to match the active NixOS generation.", previousHAEnable))
+			}
+
 			j.Fail(err.Error())
-			DispatchAlert("critical", "HA_REBUILD_FAILED", "system", fmt.Sprintf("NixOS reconfig failed: %v", err))
-		} else {
-			log.Printf("HA: NixOS rebuild success. HA is now %v", req.Enable)
-			j.Log("NixOS reconfiguration completed successfully.")
-			j.Done(map[string]any{"output": string(out)})
+			DispatchAlert("critical", "HA_REBUILD_FAILED", "system", fmt.Sprintf("HA %s failed: %v", action, err))
+			return
 		}
+
+		log.Printf("HA TOGGLE: NixOS rebuild succeeded. HA is now %v", req.Enable)
+		j.Log(fmt.Sprintf("NixOS reconfiguration completed. HA is now %s.", map[bool]string{true: "ENABLED", false: "DISABLED"}[req.Enable]))
+		j.Done(map[string]any{"ha_enabled": req.Enable})
 	})
 
-	respondJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"success": true,
-		"message": "HA state updated. System reconfiguration started.",
+		"message": fmt.Sprintf("HA %s started. System reconfiguration in progress.", action),
 		"job_id":  jobID,
-	})
+	}
+	if len(warnings) > 0 {
+		resp["warnings"] = warnings
+	}
+	respondJSON(w, http.StatusOK, resp)
+}
+
+// isPatroniPrimary returns true if the local Patroni instance is the cluster primary.
+// Uses the Patroni REST API (localhost:8008/primary) which returns 200 if primary,
+// 503 otherwise. A failed request is treated as not-primary (Patroni not running).
+func isPatroniPrimary() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8008/primary", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// demotePatroni initiates a graceful Patroni switchover and waits for this node
+// to no longer be primary (max 20 seconds). The peer is promoted as the new
+// PostgreSQL primary before HA services are stopped.
+//
+// Patroni REST API:
+//
+//	POST /demote  - triggers a graceful demotion (Patroni coordinates with replica)
+//	GET  /primary - returns 200 if this node is primary, 503 if not
+func demotePatroni() error {
+	hc := &http.Client{Timeout: 5 * time.Second}
+
+	// Initiate demotion
+	resp, err := hc.Post("http://localhost:8008/demote", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		return fmt.Errorf("POST /demote: %w", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode >= 500 {
+		return fmt.Errorf("POST /demote returned %d", resp.StatusCode)
+	}
+
+	// Poll until this node is no longer primary (max 20s)
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		checkReq, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8008/primary", nil)
+		cancel()
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		checkResp, err := hc.Do(checkReq)
+		if err != nil || checkResp.StatusCode == http.StatusServiceUnavailable {
+			if checkResp != nil {
+				io.Copy(io.Discard, checkResp.Body)
+				checkResp.Body.Close()
+			}
+			return nil // No longer primary - demotion succeeded
+		}
+		io.Copy(io.Discard, checkResp.Body)
+		checkResp.Body.Close()
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout: node still reports as Patroni primary after 20s demotion attempt")
+}
+
+// leaveEtcdCluster removes this node from the etcd cluster using the etcd v3 HTTP API.
+// This allows the remaining members (peer + witness) to maintain clean quorum state
+// without waiting for the election timeout to remove the departed member.
+//
+// etcd v3 gRPC-gateway endpoints:
+//
+//	POST /v3/cluster/member/list   - returns cluster membership
+//	POST /v3/cluster/member/remove - removes a member by ID
+func leaveEtcdCluster() error {
+	hc := &http.Client{Timeout: 5 * time.Second}
+	const etcdEndpoint = "http://localhost:2379"
+
+	// Step 1: Get the member list to find this node's member ID
+	listResp, err := hc.Post(etcdEndpoint+"/v3/cluster/member/list",
+		"application/json", strings.NewReader("{}"))
+	if err != nil {
+		return fmt.Errorf("cannot reach etcd: %w", err)
+	}
+	defer listResp.Body.Close()
+
+	var memberList struct {
+		Members []struct {
+			ID       string   `json:"ID"`       // uint64 as string in etcd v3 API
+			Name     string   `json:"name"`
+			PeerURLs []string `json:"peerURLs"`
+		} `json:"members"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&memberList); err != nil {
+		return fmt.Errorf("decode member list: %w", err)
+	}
+
+	hostname, _ := os.Hostname()
+
+	// Find this node's member ID by hostname match
+	var myMemberID string
+	for _, m := range memberList.Members {
+		if m.Name == hostname {
+			myMemberID = m.ID
+			break
+		}
+	}
+	if myMemberID == "" {
+		// Try matching by peer URL containing localhost or the node's address
+		for _, m := range memberList.Members {
+			for _, purl := range m.PeerURLs {
+				if strings.Contains(purl, "localhost") || strings.Contains(purl, "127.0.0.1") {
+					myMemberID = m.ID
+					break
+				}
+			}
+			if myMemberID != "" {
+				break
+			}
+		}
+	}
+	if myMemberID == "" {
+		return fmt.Errorf("this node (%s) not found in etcd cluster (%d members)", hostname, len(memberList.Members))
+	}
+
+	// Step 2: Remove this member
+	// The ID field in etcd v3 API is a uint64 encoded as a decimal string
+	idInt, err := strconv.ParseUint(myMemberID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid member ID %q: %w", myMemberID, err)
+	}
+	removeBody, _ := json.Marshal(map[string]any{"ID": idInt})
+	removeResp, err := hc.Post(etcdEndpoint+"/v3/cluster/member/remove",
+		"application/json", bytes.NewReader(removeBody))
+	if err != nil {
+		return fmt.Errorf("remove member %s: %w", myMemberID, err)
+	}
+	io.Copy(io.Discard, removeResp.Body)
+	removeResp.Body.Close()
+
+	if removeResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("member remove returned HTTP %d", removeResp.StatusCode)
+	}
+	return nil
 }
 
 // GetWitnessConfig returns the current quorum witness configuration.

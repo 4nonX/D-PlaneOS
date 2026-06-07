@@ -2,6 +2,10 @@
 
 Run a full HA NAS on two mini-PCs and a shared disk shelf, no third box required. On shared-SAS and shared-block topologies where the disks support SCSI-3 Persistent Reservations, DPlaneOS enforces split-brain protection at the disk-controller level, eliminating the need for a separate witness machine. On replicated or stretched-ZFS topologies where the two nodes do not share physical storage, a lightweight witness node is still the recommended approach.
 
+**HA is optional and off by default.** A freshly installed DPlaneOS node runs as a fully functional standalone system: all storage, shares (SMB/NFS), iSCSI, NVMe-oF, Docker, and monitoring features work without HA. Enable HA only when unplanned downtime is unacceptable and you have a second node ready.
+
+**Enabling and disabling HA:** The HA on/off toggle is on the Settings - High Availability page. Turning HA on triggers a NixOS configuration rebuild to activate the cluster agent, Keepalived VIP, Patroni, and fencing services. Turning it off reverses this. The system remains fully operational in either state - disabling HA does not affect stored data, pools, or shares.
+
 Before reading further, review [ARCHITECTURE.md](../reference/ARCHITECTURE.md#multi-node-ha-architecture) for the overall system model. HA adds infrastructure complexity; it is the right choice when unplanned downtime is unacceptable, not as a default for every deployment.
 
 ---

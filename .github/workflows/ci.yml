@@ -420,6 +420,8 @@ jobs:
             TestFailover_NoFencingConfigured_DoesNotPromote \
             TestFailover_WitnessUnreachable_DoesNotPromote \
             TestFailover_WitnessReachable_ClearsWitnessGate \
+            TestFailover_NetworkWitnessUnreachable_DoesNotPromote \
+            TestFailover_NetworkWitnessReachable_ClearsGuard \
             TestFailover_MaintenanceMode_SuppressesPromotion \
             TestFailover_HysteresisWindow_SuppressesFlapping \
             TestFailover_SubordinateMode_SuppressesPromotion \
