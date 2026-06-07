@@ -765,6 +765,161 @@ function SBDConfigForm() {
   )
 }
 
+// ─── NetworkWitnessForm ──────────────────────────────────────────────────────
+
+interface NetworkWitnessConfig {
+  enable:      boolean
+  target:      string
+  method:      'icmp' | 'http' | 'https'
+  timeout_ms:  number
+  count:       number
+  description: string
+}
+
+interface NetworkWitnessProbeResult {
+  reachable:   boolean
+  latency_ms?: number
+  error?:      string
+}
+
+function NetworkWitnessForm() {
+  const qc = useQueryClient()
+  const q  = useQuery({
+    queryKey: ['ha', 'network-witness'],
+    queryFn:  ({ signal }) => api.get<{ success: boolean; config: NetworkWitnessConfig }>('/api/ha/network-witness', signal),
+  })
+
+  const [enable,  setEnable]  = useState(false)
+  const [target,  setTarget]  = useState('')
+  const [method,  setMethod]  = useState<'icmp' | 'http' | 'https'>('icmp')
+  const [timeout, setTimeout] = useState(2000)
+  const [count,   setCount]   = useState(3)
+  const [desc,    setDesc]    = useState('')
+  const [probing, setProbing] = useState(false)
+  const [probeResult, setProbeResult] = useState<NetworkWitnessProbeResult | null>(null)
+
+  useEffect(() => {
+    if (q.data?.config) {
+      const c = q.data.config
+      setEnable(c.enable ?? false)
+      setTarget(c.target ?? '')
+      setMethod(c.method ?? 'icmp')
+      setTimeout(c.timeout_ms ?? 2000)
+      setCount(c.count ?? 3)
+      setDesc(c.description ?? '')
+    }
+  }, [q.data])
+
+  const save = useMutation({
+    mutationFn: (cfg: NetworkWitnessConfig) => api.post('/api/ha/network-witness', cfg),
+    onSuccess: () => { toast.success('Network witness configuration saved'); qc.invalidateQueries({ queryKey: ['ha', 'network-witness'] }) },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  async function probe() {
+    if (!target.trim()) { toast.error('Enter a target IP or URL first'); return }
+    setProbing(true)
+    setProbeResult(null)
+    try {
+      const r = await api.post<{ success: boolean; result: NetworkWitnessProbeResult }>(
+        '/api/ha/network-witness/probe', { target: target.trim(), method })
+      setProbeResult(r.result)
+    } catch (e) {
+      setProbeResult({ reachable: false, error: String(e) })
+    } finally {
+      setProbing(false)
+    }
+  }
+
+  function submit() {
+    if (enable && !target.trim()) { toast.error('Target IP or URL is required when witness is enabled'); return }
+    save.mutate({ enable, target: target.trim(), method, timeout_ms: timeout, count, description: desc.trim() })
+  }
+
+  const configured = enable && target.trim() !== ''
+
+  return (
+    <div className="card" style={{ borderRadius: 'var(--radius-lg)', padding: '20px 24px', marginTop: 24, borderLeft: configured ? '4px solid var(--primary)' : '4px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Icon name="network_check" size={24} style={{ color: configured ? 'var(--primary)' : 'var(--text-tertiary)' }} />
+          <div>
+            <div style={{ fontWeight: 700 }}>Network Quorum Witness</div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+              Neutral VPS or cloud endpoint that both nodes probe independently to detect network isolation. No software installation required on the target.
+            </div>
+          </div>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input type="checkbox" checked={enable} onChange={e => setEnable(e.target.checked)} />
+          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Enabled</span>
+        </label>
+      </div>
+
+      <div className="alert alert-info" style={{ marginBottom: 16, padding: '10px 14px' }}>
+        <Icon name="info" size={16} />
+        <div style={{ fontSize: 'var(--text-xs)' }}>
+          Both nodes independently check if this target is reachable. If your node can reach it but the peer cannot, the peer is network-isolated and it is safe to promote. If <em>neither</em> node can reach it, do not promote — the cluster may be in a full partition. Any VPS, cloud metadata endpoint, or DNS server works; no software needed on the target.
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 12, marginBottom: 12 }}>
+        <label className="field">
+          <span className="field-label">Target IP or URL</span>
+          <input value={target} onChange={e => setTarget(e.target.value)}
+            placeholder="e.g. 95.217.1.1 or https://witness.example.com"
+            className="input" style={{ fontFamily: 'var(--font-mono)' }} disabled={q.isLoading} />
+        </label>
+        <label className="field">
+          <span className="field-label">Method</span>
+          <select value={method} onChange={e => setMethod(e.target.value as 'icmp' | 'http' | 'https')} className="input" disabled={q.isLoading}>
+            <option value="icmp">TCP Ping</option>
+            <option value="http">HTTP</option>
+            <option value="https">HTTPS</option>
+          </select>
+        </label>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <label className="field">
+          <span className="field-label">Timeout (ms)</span>
+          <input type="number" min={100} max={10000} step={100} value={timeout}
+            onChange={e => setTimeout(Math.min(10000, Math.max(100, parseInt(e.target.value) || 2000)))}
+            className="input" disabled={q.isLoading} />
+        </label>
+        <label className="field">
+          <span className="field-label">Probe Count</span>
+          <input type="number" min={1} max={10} value={count}
+            onChange={e => setCount(Math.min(10, Math.max(1, parseInt(e.target.value) || 3)))}
+            className="input" disabled={q.isLoading} />
+        </label>
+        <label className="field">
+          <span className="field-label">Label (optional)</span>
+          <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="e.g. Hetzner VPS Frankfurt"
+            className="input" disabled={q.isLoading} />
+        </label>
+      </div>
+
+      {probeResult && (
+        <div style={{ marginBottom: 14, padding: '8px 12px', borderRadius: 'var(--radius-md)', background: probeResult.reachable ? 'var(--success-bg)' : 'var(--error-bg)', border: `1px solid ${probeResult.reachable ? 'var(--success-border)' : 'var(--error-border)'}`, fontSize: 'var(--text-xs)' }}>
+          {probeResult.reachable
+            ? `✓ Reachable${probeResult.latency_ms !== undefined ? ` (avg ${probeResult.latency_ms}ms)` : ''}`
+            : `✗ Unreachable — ${probeResult.error ?? 'no response'}`}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={probe} disabled={probing || q.isLoading} className="btn btn-secondary">
+          <Icon name="network_ping" size={15} />{probing ? 'Probing…' : 'Test Connectivity'}
+        </button>
+        <button onClick={submit} disabled={save.isPending || q.isLoading} className="btn btn-primary">
+          <Icon name="save" size={15} />{save.isPending ? 'Saving…' : 'Save Witness Config'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── ClusterSecretForm ───────────────────────────────────────────────────────
 
 function ClusterSecretForm() {
@@ -1301,6 +1456,7 @@ export function HAPage() {
             </p>
             <FencingConfigForm />
             <PDUConfigForm />
+            <NetworkWitnessForm />
             <div className="alert alert-success" style={{ marginTop: 32, marginBottom: 24 }}>
               <Icon name="check_circle" size={18} />
               <div>Setup complete! You can now monitor the cluster from the main dashboard.</div>
@@ -1624,6 +1780,7 @@ export function HAPage() {
       <FencingConfigForm />
       <PDUConfigForm />
       <SBDConfigForm />
+      <NetworkWitnessForm />
       <ReplicationConfigForm />
 
       <ConfirmDialog />

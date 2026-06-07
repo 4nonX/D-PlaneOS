@@ -1301,6 +1301,13 @@ func main() {
 	r.Handle("/api/ha/pdu/configure", permRoute("system", "admin", haHandler.GetPDUConfig)).Methods("GET")
 	r.Handle("/api/ha/sbd/configure", permRoute("system", "admin", haHandler.ConfigureSBD)).Methods("POST")
 	r.Handle("/api/ha/sbd/configure", permRoute("system", "admin", haHandler.GetSBDConfig)).Methods("GET")
+
+	// Network quorum witness: neutral VPS/cloud IP that both nodes probe
+	// to detect network isolation without installing anything on the target
+	nwHandler := handlers.NewNetworkWitnessHandler(db)
+	r.Handle("/api/ha/network-witness", permRoute("system", "read", nwHandler.GetConfig)).Methods("GET")
+	r.Handle("/api/ha/network-witness", middleware.RequireAAL2(permRoute("system", "admin", nwHandler.SaveConfig))).Methods("POST")
+	r.Handle("/api/ha/network-witness/probe", permRoute("system", "admin", nwHandler.Probe)).Methods("POST")
 	r.Handle("/api/ha/clear_fault", permRoute("system", "admin", haHandler.ClearFault)).Methods("POST")
 	r.Handle("/api/ha/alua-standby", permRoute("system", "admin", haHandler.ALUAStandby)).Methods("POST")
 	r.Handle("/api/ha/standby", permRoute("system", "admin", haHandler.BecomeStandby)).Methods("POST")

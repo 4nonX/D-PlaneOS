@@ -471,6 +471,25 @@ func (m *Manager) checkFailover() {
 			deadPeer.ID, witnessCfg.RequiredHealthy, len(witnessCfg.Witnesses))
 	}
 
+	// Guard 4b: Network Quorum Witness (optional VPS/cloud endpoint probe).
+	// When configured, both nodes independently probe a neutral IP or URL.
+	// If this node cannot reach the witness it may be the isolated side -
+	// do not promote. This guard is additive: it only blocks promotion, never
+	// enables it when other guards have already blocked it.
+	nwCfg, nwErr := GetNetworkWitnessConfig(m.db)
+	if nwErr == nil && nwCfg.Enable {
+		result := ProbeNetworkWitness(nwCfg)
+		if !result.Reachable {
+			if deadPeer.MissedBeats == 3 {
+				log.Printf("HA NETWORK-WITNESS: Peer %s unreachable but cannot reach network witness %q (%s) - node may be isolated. Automatic failover SUSPENDED. Error: %s",
+					deadPeer.ID, nwCfg.Target, nwCfg.Method, result.Error)
+			}
+			return
+		}
+		log.Printf("HA NETWORK-WITNESS: Peer %s unreachable, network witness %q reachable (latency %dms) - network isolation ruled out.",
+			deadPeer.ID, nwCfg.Target, result.Latency)
+	}
+
 	// Guard 5: Maintenance Mode.
 	if m.IsMaintenanceActive() {
 		if deadPeer.MissedBeats == 3 {
@@ -719,6 +738,16 @@ func (m *Manager) ensureSchema() error {
 	m.db.Exec(`ALTER TABLE ha_fencing_config ADD COLUMN IF NOT EXISTS bmc_protocol TEXT NOT NULL DEFAULT 'auto'`)
 	m.db.Exec(`ALTER TABLE ha_witness_config ADD COLUMN IF NOT EXISTS witnesses_json TEXT NOT NULL DEFAULT '[]'`)
 	m.db.Exec(`ALTER TABLE ha_witness_config ADD COLUMN IF NOT EXISTS required_healthy INTEGER NOT NULL DEFAULT 1`)
+	m.db.Exec(`CREATE TABLE IF NOT EXISTS ha_network_witness (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		enable BOOLEAN NOT NULL DEFAULT FALSE,
+		target TEXT NOT NULL DEFAULT '',
+		method TEXT NOT NULL DEFAULT 'icmp' CHECK (method IN ('icmp','http','https')),
+		timeout_ms INTEGER NOT NULL DEFAULT 2000,
+		count INTEGER NOT NULL DEFAULT 3,
+		description TEXT NOT NULL DEFAULT ''
+	)`)
+	m.db.Exec(`INSERT INTO ha_network_witness (id) VALUES (1) ON CONFLICT (id) DO NOTHING`)
 
 	return nil
 }
