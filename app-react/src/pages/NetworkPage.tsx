@@ -328,7 +328,7 @@ function VLANsTab() {
   // Physical interfaces only (no existing VLANs as parent)
   const physIfaces = (netQ.data?.interfaces ?? []).filter(i => !i.name.includes('.'))
 
-  const vlans = (vlanQ.data as any)?.vlans ?? []
+  const vlans = (vlanQ.data as unknown as { vlans?: { name: string; index: number; flags: string }[] })?.vlans ?? []
 
   return (
     <>
@@ -367,7 +367,7 @@ function VLANsTab() {
             </tr>
           </thead>
           <tbody>
-            {vlans.map((v: any) => (
+            {vlans.map((v) => (
               <tr key={v.name}>
                 <td style={{ fontWeight: 600 }}>{v.name}</td>
                 <td>{v.index}</td>
@@ -520,31 +520,23 @@ function DnsNtpTab() {
     refetchInterval: 30_000,
   })
 
-  const [dnsStr,    setDnsStr]    = useState('')
-  const [ntpStr,    setNtpStr]    = useState('')
-  const [dnsSeeded, setDnsSeeded] = useState(false)
-  const [ntpSeeded, setNtpSeeded] = useState(false)
+  const [dnsEdit, setDnsEdit] = useState<string | null>(null)
+  const [ntpEdit, setNtpEdit] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (netQ.data?.dns && !dnsSeeded) {
-      setDnsStr(netQ.data.dns.join(', '))
-      setDnsSeeded(true)
-    }
-  }, [netQ.data, dnsSeeded])
-
-  useEffect(() => {
-    if (ntpQ.data?.servers && !ntpSeeded) {
-      setNtpStr(ntpQ.data.servers.join(', '))
-      setNtpSeeded(true)
-    }
-  }, [ntpQ.data, ntpSeeded])
+  // Effective values: user edit OR server value (no seeding effect needed)
+  const dnsStr = dnsEdit ?? netQ.data?.dns?.join(', ') ?? ''
+  const ntpStr = ntpEdit ?? ntpQ.data?.servers?.join(', ') ?? ''
 
   const saveDns = useMutation({
     mutationFn: () => {
       const dns = dnsStr.split(',').map(s => s.trim()).filter(Boolean)
       return api.post('/api/network/apply', { action: 'set_dns', dns })
     },
-    onSuccess: () => { toast.success('DNS servers saved'); qc.invalidateQueries({ queryKey: ['network', 'info'] }) },
+    onSuccess: () => {
+      toast.success('DNS servers saved')
+      setDnsEdit(null)
+      qc.invalidateQueries({ queryKey: ['network', 'info'] })
+    },
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -554,7 +546,11 @@ function DnsNtpTab() {
       if (servers.length === 0) throw new Error('At least one NTP server is required')
       return api.post('/api/system/ntp', { servers })
     },
-    onSuccess: () => { toast.success('NTP servers saved'); qc.invalidateQueries({ queryKey: ['system', 'ntp'] }) },
+    onSuccess: () => {
+      toast.success('NTP servers saved')
+      setNtpEdit(null)
+      qc.invalidateQueries({ queryKey: ['system', 'ntp'] })
+    },
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -569,7 +565,7 @@ function DnsNtpTab() {
         {netQ.isLoading ? <Skeleton height={56} /> : (
           <>
             <div style={{ display: 'flex', gap: 10 }}>
-              <input value={dnsStr} onChange={e => setDnsStr(e.target.value)}
+              <input value={dnsStr} onChange={e => setDnsEdit(e.target.value)}
                 placeholder="8.8.8.8, 8.8.4.4, 1.1.1.1"
                 className="input" style={{ flex: 1, fontFamily: 'var(--font-mono)' }} />
               <button onClick={() => saveDns.mutate()} disabled={saveDns.isPending} className="btn btn-primary">
@@ -600,7 +596,7 @@ function DnsNtpTab() {
         {ntpQ.isLoading ? <Skeleton height={80} /> : (
           <>
             <div style={{ display: 'flex', gap: 10, marginBottom: 12, marginTop: 12 }}>
-              <input value={ntpStr} onChange={e => setNtpStr(e.target.value)}
+              <input value={ntpStr} onChange={e => setNtpEdit(e.target.value)}
                 placeholder="0.pool.ntp.org, 1.pool.ntp.org"
                 className="input" style={{ flex: 1, fontFamily: 'var(--font-mono)' }} />
               <button onClick={() => saveNtp.mutate()} disabled={saveNtp.isPending} className="btn btn-primary">
@@ -674,8 +670,8 @@ function DiagnosticsTab() {
         const chunk = decoder.decode(value, { stream: true })
         setOutput(prev => [...prev, ...chunk.split('\n').filter(l => l.length > 0)])
       }
-    } catch (e: any) {
-      setOutput(prev => [...prev, `[ERROR] ${e.message}`])
+    } catch (e: unknown) {
+      setOutput(prev => [...prev, `[ERROR] ${e instanceof Error ? e.message : String(e)}`])
     } finally {
       setIsRunning(false)
     }
@@ -688,7 +684,7 @@ function DiagnosticsTab() {
         <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 80px auto', gap: 12, alignItems: 'flex-end' }}>
           <label className="field">
             <span className="field-label">Tool</span>
-            <select value={type} onChange={e => setType(e.target.value as any)} className="input" style={{ appearance: 'none', background: 'var(--surface)' }}>
+            <select value={type} onChange={e => setType(e.target.value as 'ping'|'dns'|'traceroute')} className="input" style={{ appearance: 'none', background: 'var(--surface)' }}>
               <option value="ping">Ping</option>
               <option value="dns">DNS Lookup</option>
               <option value="traceroute">Traceroute</option>

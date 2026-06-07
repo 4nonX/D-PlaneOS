@@ -20,7 +20,7 @@
  *   POST   /api/replication/remote                 one-shot async send
  */
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
@@ -667,8 +667,7 @@ function ReplicateForm({ datasets, remotes }: { datasets: ZFSDataset[]; remotes:
   })
   const snapshots = snapshotsQ.data?.snapshots ?? []
 
-  // Reset base snapshot when source dataset changes
-  useEffect(() => { setBaseSnapshot('') }, [dataset])
+  // Reset base snapshot when source dataset changes - done in the event handler
 
   const sendMutation = useMutation({
     mutationFn: () => {
@@ -727,7 +726,7 @@ function ReplicateForm({ datasets, remotes }: { datasets: ZFSDataset[]; remotes:
 
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>Source Dataset</span>
-              <select value={dataset} onChange={e => setDataset(e.target.value)} className="input">
+              <select value={dataset} onChange={e => { setDataset(e.target.value); setBaseSnapshot('') }} className="input">
                 {datasets.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
               </select>
             </label>
@@ -1384,7 +1383,7 @@ function RetentionTab() {
             <button onClick={() => setEditing({ ...p })} className="btn btn-sm btn-ghost"><Icon name="edit" size={13} />Edit</button>
             <button onClick={async () => {
               if (await confirm({ title: `Delete retention policy for "${p.dataset}"?`, danger: true, confirmLabel: 'Delete' }))
-                save.mutate({ action: 'delete', id: p.id } as any)
+                save.mutate({ action: 'delete', id: p.id } as Partial<RetentionPolicy> & { action: string })
             }} className="btn btn-sm btn-danger"><Icon name="delete" size={13} />Delete</button>
           </div>
         ))}
@@ -1408,7 +1407,7 @@ function RetentionTab() {
               {([['keep_hourly','Hourly'],['keep_daily','Daily'],['keep_weekly','Weekly'],['keep_monthly','Monthly'],['keep_yearly','Yearly']] as const).map(([k, label]) => (
                 <label key={k} className="field">
                   <span className="field-label">Keep {label} (0 = unlimited)</span>
-                  <input type="number" min={0} value={(editing as any)[k] ?? 0}
+                  <input type="number" min={0} value={(editing as Partial<RetentionPolicy>)[k] ?? 0}
                     onChange={e => setEditing(p => ({ ...p, [k]: parseInt(e.target.value) || 0 }))}
                     className="input" />
                 </label>
@@ -1420,7 +1419,7 @@ function RetentionTab() {
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setEditing(null)} className="btn btn-ghost">Cancel</button>
-              <button onClick={() => save.mutate({ action: editing.id ? 'update' : 'create', ...editing } as any)}
+              <button onClick={() => save.mutate({ action: editing.id ? 'update' : 'create', ...editing } as Partial<RetentionPolicy> & { action: string })}
                 disabled={!editing.dataset?.trim() || save.isPending}
                 className="btn btn-primary">
                 {save.isPending ? 'Saving…' : 'Save'}

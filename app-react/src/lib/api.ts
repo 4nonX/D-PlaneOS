@@ -139,7 +139,7 @@ export async function apiFetch<T>(
     const isMockMode = isMockActive && (sessionId === 'mock_session_id' || !sessionId)
     
     if (isMockMode) {
-      const mockData: Record<string, any> = {
+      const mockData: Record<string, unknown> = {
         '/api/system/metrics': {
           success: true,
           cpu_model: 'AMD Ryzen 9 7950X (16-Core)',

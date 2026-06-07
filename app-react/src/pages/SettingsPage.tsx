@@ -82,32 +82,28 @@ function GeneralTab() {
     queryFn:  ({ signal }) => api.get<SettingsResponse>('/api/system/settings', signal),
   })
 
-  const [hostname,       setHostname]       = useState('')
-  const [timezone,       setTimezone]       = useState('')
-  const [motd,           setMotd]           = useState('')
-  const [licenseKey,     setLicenseKey]     = useState('')
-  const [seeded,         setSeeded]         = useState(false)
-  const [autoReconcile,   setAutoReconcile]   = useState(false)
+  const [dirty, setDirty] = useState<{ hostname?: string; timezone?: string; motd?: string; licenseKey?: string }>({})
+  const [autoReconcile, setAutoReconcile] = useState(false)
+
+  const s = settingsQ.data?.settings
+  const hostname   = dirty.hostname   ?? s?.['hostname']    ?? ''
+  const timezone   = dirty.timezone   ?? s?.['timezone']    ?? ''
+  const motd       = dirty.motd       ?? s?.['motd']        ?? ''
+  const licenseKey = dirty.licenseKey ?? s?.['license_key'] ?? ''
+
+  const setHostname   = (v: string) => setDirty(p => ({ ...p, hostname: v }))
+  const setTimezone   = (v: string) => setDirty(p => ({ ...p, timezone: v }))
+  const setMotd       = (v: string) => setDirty(p => ({ ...p, motd: v }))
+  const setLicenseKey = (v: string) => setDirty(p => ({ ...p, licenseKey: v }))
 
   const diffQ = useQuery({
     queryKey: ['nixos', 'diff-intent'],
-    queryFn: () => api.get<{ changes: any[] }>('/api/nixos/diff-intent'),
+    queryFn: () => api.get<{ changes: Array<{ path: string; to: unknown }> }>('/api/nixos/diff-intent'),
   })
 
   const reconcileM = useMutation({
     mutationFn: () => api.post('/api/nixos/reconcile', {}),
   })
-
-  useEffect(() => {
-    if (settingsQ.data?.settings && !seeded) {
-      const s = settingsQ.data.settings
-      setHostname(s['hostname'] ?? '')
-      setTimezone(s['timezone'] ?? '')
-      setMotd(s['motd'] ?? '')
-      setLicenseKey(s['license_key'] ?? '')
-      setSeeded(true)
-    }
-  }, [settingsQ.data, seeded])
 
   const save = useMutation({
     mutationFn: () => {
@@ -118,17 +114,18 @@ function GeneralTab() {
       body['license_key'] = licenseKey
       return api.post('/api/system/settings', body)
     },
-    onSuccess: async () => { 
+    onSuccess: async () => {
+      setDirty({})
       qc.invalidateQueries({ queryKey: ['system', 'settings'] })
       qc.invalidateQueries({ queryKey: ['nixos', 'diff-intent'] })
-      
+
       if (autoReconcile) {
         toast.info('Settings stored. Reconciling system...')
         try {
           await reconcileM.mutateAsync()
           toast.success('System settings applied to Nix generation')
-        } catch (err: any) {
-          toast.error(`Reconciliation failed: ${err.message}`)
+        } catch (err: unknown) {
+          toast.error(`Reconciliation failed: ${err instanceof Error ? err.message : String(err)}`)
         }
       } else {
         toast.success('Settings staged. Remember to Reconcile to apply changes.')
@@ -611,8 +608,8 @@ function MaintenanceTab() {
       }
       toast.success('Database restored. Reload the page.')
       setRestoreFile(null)
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Restore failed')
     } finally {
       setRestoring(false)
     }

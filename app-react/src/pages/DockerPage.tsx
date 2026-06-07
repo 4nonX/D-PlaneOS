@@ -347,11 +347,9 @@ function ContainerEditModal({
   })
 
   const [tab, setTab] = useState<EditTab>('general')
-  const [icon, setIcon] = useState('')
-  const [restartPolicy, setRestartPolicy] = useState('unless-stopped')
-  const [ports, setPorts] = useState<PortEntry[]>([])
-  const [volumes, setVolumes] = useState<VolumeEntry[]>([])
-  const [envVars, setEnvVars] = useState<EnvEntry[]>([])
+  const [dirty, setDirty] = useState<{
+    icon?: string; restartPolicy?: string; ports?: PortEntry[]; volumes?: VolumeEntry[]; envVars?: EnvEntry[]
+  }>({})
 
   const inspectQ = useQuery({
     queryKey: ['docker', 'inspect', containerName],
@@ -362,15 +360,22 @@ function ContainerEditModal({
       ),
   })
 
-  useEffect(() => {
-    const d = inspectQ.data
-    if (!d?.success) return
-    setIcon(d.icon ?? '')
-    setRestartPolicy(d.restart_policy ?? 'unless-stopped')
-    setPorts(d.ports ?? [])
-    setVolumes(d.volumes ?? [])
-    setEnvVars(d.env ?? [])
-  }, [inspectQ.data])
+  // Effective values: user edit OR server value
+  const d = inspectQ.data?.success ? inspectQ.data : null
+  const icon          = dirty.icon          ?? d?.icon          ?? ''
+  const restartPolicy = dirty.restartPolicy ?? d?.restart_policy ?? 'unless-stopped'
+  const ports         = dirty.ports         ?? d?.ports         ?? []
+  const volumes       = dirty.volumes       ?? d?.volumes       ?? []
+  const envVars       = dirty.envVars       ?? d?.env           ?? []
+
+  const setIcon          = (v: string)       => setDirty(p => ({ ...p, icon: v }))
+  const setRestartPolicy = (v: string)       => setDirty(p => ({ ...p, restartPolicy: v }))
+  const setPorts         = (v: PortEntry[] | ((prev: PortEntry[]) => PortEntry[])) =>
+    setDirty(p => ({ ...p, ports: typeof v === 'function' ? v(p.ports ?? d?.ports ?? []) : v }))
+  const setVolumes       = (v: VolumeEntry[] | ((prev: VolumeEntry[]) => VolumeEntry[])) =>
+    setDirty(p => ({ ...p, volumes: typeof v === 'function' ? v(p.volumes ?? d?.volumes ?? []) : v }))
+  const setEnvVars       = (v: EnvEntry[] | ((prev: EnvEntry[]) => EnvEntry[])) =>
+    setDirty(p => ({ ...p, envVars: typeof v === 'function' ? v(p.envVars ?? d?.env ?? []) : v }))
 
   const save = useMutation({
     mutationFn: async () => {
@@ -1323,6 +1328,32 @@ async function* parseSSEStream(url: string, signal: AbortSignal): AsyncGenerator
   }
 }
 
+function SSETerminalArea({ lines, active, onStop }: {
+  lines: string[]
+  active: boolean
+  onStop: () => void
+}) {
+  const preRef = useRef<HTMLPreElement>(null)
+  useEffect(() => {
+    if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight
+  }, [lines])
+  if (lines.length === 0 && !active) return null
+  return (
+    <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)' }}>
+      {active && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 20px', background: 'rgba(0,0,0,0.3)', fontSize: 'var(--text-xs)', color: 'var(--primary)' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--primary)', animation: 'pulse 1s infinite' }} />
+          Running...
+          <button onClick={onStop} style={{ marginLeft: 'auto', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', cursor: 'pointer' }}>Stop</button>
+        </div>
+      )}
+      <pre ref={preRef} style={{ margin: 0, padding: '10px 20px', background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.8)', fontSize: 12, fontFamily: 'var(--font-mono)', lineHeight: 1.5, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+        {lines.join('\n')}
+      </pre>
+    </div>
+  )
+}
+
 function useSSEStream() {
   const [lines, setLines] = useState<string[]>([])
   const [active, setActive] = useState(false)
@@ -1353,8 +1384,8 @@ function useSSEStream() {
             break
           }
         }
-      } catch (e: any) {
-        if (e?.name !== 'AbortError') setLines(prev => [...prev, `Stream error: ${e?.message ?? 'unknown'}`])
+      } catch (e: unknown) {
+        if ((e as { name?: string })?.name !== 'AbortError') setLines(prev => [...prev, `Stream error: ${e instanceof Error ? e.message : 'unknown'}`])
       } finally {
         setActive(false)
         abortRef.current = null
@@ -1496,9 +1527,9 @@ function ComposeManager() {
   const [selected, setSelected] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
-  const [yaml, setYaml] = useState('')
+  const [yamlEdit, setYamlEdit] = useState('')
   const [yamlDirty, setYamlDirty] = useState(false)
-  const [env, setEnv] = useState('')
+  const [envEdit, setEnvEdit] = useState('')
   const [envDirty, setEnvDirty] = useState(false)
   const [panelTab, setPanelTab] = useState<'yaml' | 'containers' | 'logs'>('yaml')
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -1515,10 +1546,12 @@ function ComposeManager() {
     enabled: !!selected && !isCreating,
   })
 
-  useEffect(() => {
-    if (yamlQ.data?.yaml != null && !yamlDirty) setYaml(yamlQ.data.yaml)
-    if (yamlQ.data?.env != null && !envDirty) setEnv(yamlQ.data.env)
-  }, [yamlQ.data, yamlDirty, envDirty])
+  // Effective values: user edit OR server value (no effect needed)
+  const yaml = yamlDirty ? yamlEdit : (yamlQ.data?.yaml ?? yamlEdit)
+  const env  = envDirty  ? envEdit  : (yamlQ.data?.env  ?? envEdit)
+
+  function setYaml(v: string) { setYamlEdit(v) }
+  function setEnv(v: string)  { setEnvEdit(v) }
 
   function selectStack(name: string) {
     setSelected(name); setIsCreating(false); setYamlDirty(false); setEnvDirty(false)
@@ -1526,7 +1559,7 @@ function ComposeManager() {
   }
 
   function startCreating() {
-    setSelected(null); setIsCreating(true); setNewName(''); setYaml(COMPOSE_TEMPLATE); setEnv('')
+    setSelected(null); setIsCreating(true); setNewName(''); setYamlEdit(COMPOSE_TEMPLATE); setEnvEdit('')
     setYamlDirty(false); setEnvDirty(false); stream.clear()
   }
 
@@ -1553,7 +1586,7 @@ function ComposeManager() {
       qc.invalidateQueries({ queryKey: ['docker', 'stacks', 'yaml', selected] })
       qc.invalidateQueries({ queryKey: ['docker', 'containers'] })
       if (andDeploy) { doAction('start') } else { toast.success('Saved') }
-    } catch (e: any) { toast.error(e?.message ?? 'Save failed') }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : null) ?? 'Save failed') }
     finally { setSaving(false) }
   }
 
@@ -1596,21 +1629,6 @@ function ComposeManager() {
     <button key={id} onClick={() => setPanelTab(id)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 'var(--radius-sm)', border: 'none', background: panelTab === id ? 'var(--primary-bg)' : 'transparent', color: panelTab === id ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: panelTab === id ? 700 : 400, cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
       <Icon name={icon} size={13} />{label}
     </button>
-  )
-
-  const terminalArea = (stream.lines.length > 0 || stream.active) && (
-    <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)' }}>
-      {stream.active && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 20px', background: 'rgba(0,0,0,0.3)', fontSize: 'var(--text-xs)', color: 'var(--primary)' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--primary)', animation: 'pulse 1s infinite' }} />
-          Running...
-          <button onClick={stream.stop} style={{ marginLeft: 'auto', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', cursor: 'pointer' }}>Stop</button>
-        </div>
-      )}
-      <pre ref={stream.preRef} style={{ margin: 0, padding: '10px 20px', background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.8)', fontSize: 12, fontFamily: 'var(--font-mono)', lineHeight: 1.5, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
-        {stream.lines.join('\n')}
-      </pre>
-    </div>
   )
 
   return (
@@ -1690,7 +1708,7 @@ function ComposeManager() {
               placeholder={'# KEY=value\nDATABASE_URL=postgres://...'}
               style={{ width: '100%', height: 90, padding: '8px 20px', fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.5, background: 'var(--bg)', color: 'rgba(255,255,255,0.6)', border: 'none', borderTop: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box', flexShrink: 0 }}
             />
-            {terminalArea}
+            <SSETerminalArea lines={stream.lines} active={stream.active} onStop={stream.stop} />
           </div>
         )}
 
@@ -1835,7 +1853,7 @@ function ComposeManager() {
               )
             })()}
 
-            {terminalArea}
+            <SSETerminalArea lines={stream.lines} active={stream.active} onStop={stream.stop} />
             {execTarget && <ContainerExecModal target={execTarget} onClose={() => setExecTarget(null)} />}
           </div>
         )}
@@ -1913,17 +1931,26 @@ function FileBrowserModal({ repoId, onSelect, onClose }: {
   const [browseError, setBrowseError] = useState('')
 
   useEffect(() => {
-    setLoading(true)
-    setBrowseError('')
+    let cancelled = false
     const params = new URLSearchParams({ id: String(repoId) })
     if (currentPath) params.set('path', currentPath)
-    api.get<{ success: boolean; files: BrowseEntry[]; error?: string }>(`/api/git-sync/repos/browse?${params}`)
-      .then(res => {
+    ;(async () => {
+      setLoading(true)
+      setBrowseError('')
+      try {
+        const res = await api.get<{ success: boolean; files: BrowseEntry[]; error?: string }>(
+          `/api/git-sync/repos/browse?${params}`
+        )
+        if (cancelled) return
         if (res.success) setEntries(res.files ?? [])
         else setBrowseError(res.error ?? 'Browse failed')
-      })
-      .catch(e => setBrowseError(e?.message ?? 'Browse failed'))
-      .finally(() => setLoading(false))
+      } catch (e: unknown) {
+        if (!cancelled) setBrowseError((e instanceof Error ? e.message : null) ?? 'Browse failed')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
   }, [repoId, currentPath])
 
   const pathParts = currentPath ? currentPath.split('/').filter(Boolean) : []
@@ -2017,7 +2044,7 @@ function ExportModal({ repoId, repoName, yaml, onClose }: {
       if (!res.success) { toast.error(res.error ?? 'Push failed'); return }
       toast.success(`Pushed${res.commit ? ` (${res.commit.slice(0, 7)})` : ''}`)
       onClose()
-    } catch (e: any) { toast.error(e?.message ?? 'Push failed') }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : null) ?? 'Push failed') }
     finally { setPushing(false) }
   }
 
@@ -2085,7 +2112,7 @@ function RepoModal({
         `/api/git-sync/credentials/branches?${params}`)
       if (res.success) setBranches(res.branches.map(b => b.name))
       else toast.error(res.error ?? 'Failed to list branches')
-    } catch (e: any) { toast.error(e?.message ?? 'Failed to list branches') }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : null) ?? 'Failed to list branches') }
     finally { setLoadingBranches(false) }
   }
 
@@ -2100,7 +2127,7 @@ function RepoModal({
       if (!res.success) { toast.error(res.error ?? 'Save failed'); return }
       toast.success(initial ? 'Repo updated' : 'Repo added')
       onSave()
-    } catch (e: any) { toast.error(e?.message ?? 'Save failed') }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : null) ?? 'Save failed') }
     finally { setSaving(false) }
   }
 
@@ -2225,7 +2252,7 @@ function CredentialModal({
       if (!res.success) { toast.error(res.error ?? 'Save failed'); return }
       toast.success(initial ? 'Credential updated' : 'Credential added')
       onSave()
-    } catch (e: any) { toast.error(e?.message ?? 'Save failed') }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : null) ?? 'Save failed') }
     finally { setSaving(false) }
   }
 
@@ -2340,9 +2367,9 @@ function GitSyncTab() {
         setRepoStatuses(prev => ({ ...prev, [id]: { checking: false, behind: false, behindCount: '', recentCommits: [] } }))
         if (res.success && !res.cloned) toast.error('Not cloned yet - pull first')
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       setRepoStatuses(prev => ({ ...prev, [id]: { checking: false, behind: false, behindCount: '', recentCommits: [] } }))
-      toast.error(e?.message ?? 'Status check failed')
+      toast.error((e instanceof Error ? e.message : null) ?? 'Status check failed')
     }
   }
 
@@ -2381,7 +2408,7 @@ function GitSyncTab() {
           qc.invalidateQueries({ queryKey: ['docker', 'stacks'] })
         }
       }
-    } catch (e: any) { toast.error(e?.message ?? `${action} failed`) }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : null) ?? `${action} failed`) }
     finally { setPendingOp(prev => { const n = { ...prev }; delete n[id]; return n }) }
   }
 
@@ -2390,7 +2417,7 @@ function GitSyncTab() {
       await api.post(`/api/git-sync/credentials/delete?id=${id}`, {})
       toast.success('Credential removed')
       qc.invalidateQueries({ queryKey: ['git-sync', 'credentials'] })
-    } catch (e: any) { toast.error(e?.message ?? 'Delete failed') }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : null) ?? 'Delete failed') }
   }
 
   async function runTest() {
@@ -2399,7 +2426,7 @@ function GitSyncTab() {
       const res = await api.post<{ success: boolean; message?: string; error?: string }>(
         '/api/git-sync/credentials/test', { credential_id: testCred.id, repo_url: testUrl })
       setTestResult({ success: res.success, message: res.success ? (res.message ?? 'OK') : (res.error ?? 'Failed') })
-    } catch (e: any) { setTestResult({ success: false, message: e?.message ?? 'Error' }) }
+    } catch (e: unknown) { setTestResult({ success: false, message: (e instanceof Error ? e.message : null) ?? 'Error' }) }
   }
 
   const chipStyle = (active: boolean): React.CSSProperties => ({

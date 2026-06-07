@@ -699,7 +699,7 @@ function CloneSnapshotModal({ node, onClose, onCloned }: { node: TreeNode; onClo
 function DatasetSharingModal({ node, onClose }: { node: TreeNode; onClose: () => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ['shares', 'by-path', node.name],
-    queryFn: () => api.get<any>(`/api/shares/by-path?path=/${node.name}`),
+    queryFn: () => api.get<{ success: boolean; smb?: { name: string; enabled: boolean; comment?: string }[]; nfs?: { id: string; clients: string; enabled: boolean; options: string }[] }>(`/api/shares/by-path?path=/${node.name}`),
   })
 
   return (
@@ -715,7 +715,7 @@ function DatasetSharingModal({ node, onClose }: { node: TreeNode; onClose: () =>
               <table className="data-table">
                 <thead><tr><th>Share Name</th><th>Status</th><th>Comment</th></tr></thead>
                 <tbody>
-                  {data?.smb?.map((s: any) => (
+                  {data?.smb?.map((s) => (
                     <tr key={s.name}>
                       <td style={{ fontWeight: 600 }}>{s.name}</td>
                       <td>{s.enabled ? <span className="badge badge-success">Enabled</span> : <span className="badge badge-neutral">Disabled</span>}</td>
@@ -740,7 +740,7 @@ function DatasetSharingModal({ node, onClose }: { node: TreeNode; onClose: () =>
               <table className="data-table">
                 <thead><tr><th>Clients</th><th>Status</th><th>Options</th></tr></thead>
                 <tbody>
-                  {data?.nfs?.map((n: any) => (
+                  {data?.nfs?.map((n) => (
                     <tr key={n.id}>
                       <td style={{ fontWeight: 600 }}>{n.clients}</td>
                       <td>{n.enabled ? <span className="badge badge-success">Enabled</span> : <span className="badge badge-neutral">Disabled</span>}</td>
@@ -1244,8 +1244,14 @@ export function DatasetsPage() {
     refetchInterval: 30_000,
   })
 
-  const pools: ZFSPool[] = poolsQ.data?.pools ?? poolsQ.data?.data ?? []
-  const allDatasets: ZFSDataset[] = datasetsQ.data?.data ?? []
+  const pools: ZFSPool[] = useMemo(
+    () => poolsQ.data?.pools ?? poolsQ.data?.data ?? [],
+    [poolsQ.data]
+  )
+  const allDatasets: ZFSDataset[] = useMemo(
+    () => datasetsQ.data?.data ?? [],
+    [datasetsQ.data]
+  )
 
   // Group datasets by pool (first path component)
   const datasetsByPool = useMemo(() => {

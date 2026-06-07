@@ -13,7 +13,7 @@
  *   GET  /api/rbac/users  → system user list for allowed-users selection
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
@@ -109,17 +109,17 @@ export function FTPPage() {
     queryFn: () => api.get<UsersResponse>('/api/rbac/users'),
   })
 
-  const [form, setForm] = useState<FTPConfig | null>(null)
+  const [dirtyForm, setDirtyForm] = useState<Partial<FTPConfig>>({})
 
-  useEffect(() => {
-    if (configData?.config && !form) {
-      setForm(configData.config)
-    }
-  }, [configData, form])
+  // Effective form: user edits OR server value (no seeding effect needed)
+  const form: FTPConfig | null = configData?.config
+    ? { ...configData.config, ...dirtyForm }
+    : null
 
   const saveMut = useMutation({
     mutationFn: (cfg: FTPConfig) => api.put<FTPConfigResponse>('/api/ftp/config', cfg),
     onSuccess: (res) => {
+      setDirtyForm({})
       qc.invalidateQueries({ queryKey: ['ftp', 'status'] })
       qc.invalidateQueries({ queryKey: ['ftp', 'config'] })
       if (res.warning) {
@@ -159,20 +159,18 @@ export function FTPPage() {
   })
 
   function set<K extends keyof FTPConfig>(k: K, v: FTPConfig[K]) {
-    setForm(f => f ? { ...f, [k]: v } : f)
+    setDirtyForm(f => ({ ...f, [k]: v }))
   }
 
   function toggleUser(username: string) {
-    setForm(f => {
-      if (!f) return f
-      const has = f.allowed_users.includes(username)
-      return {
-        ...f,
-        allowed_users: has
-          ? f.allowed_users.filter(u => u !== username)
-          : [...f.allowed_users, username],
-      }
-    })
+    const currentUsers = form?.allowed_users ?? []
+    const has = currentUsers.includes(username)
+    setDirtyForm(f => ({
+      ...f,
+      allowed_users: has
+        ? currentUsers.filter(u => u !== username)
+        : [...currentUsers, username],
+    }))
   }
 
   function handleSave(e: React.FormEvent) {

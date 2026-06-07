@@ -66,7 +66,7 @@ type EventMap = {
   inotifyStats: (data: unknown) => void
   mountError: (data: unknown) => void
   gitopsDrift: (data: unknown) => void
-  jobProgress: (data: { job_id: string; data: any }) => void
+  jobProgress: (data: { job_id: string; data: { progress?: number; status?: string; [key: string]: unknown } }) => void
   jobLog:      (data: { job_id: string; line: string }) => void
   haReplicationProgress: (data: Record<string, unknown>) => void
   raidzExpandStarted: (data: unknown) => void
@@ -237,7 +237,7 @@ export const useWsStore = create<WsState>((set) => {
           emit('gitopsDrift', msg.data ?? msg)
           break
         case 'job.progress':
-          emit('jobProgress', (msg.data ?? msg) as { job_id: string; data: any })
+          emit('jobProgress', (msg.data ?? msg) as { job_id: string; data: unknown })
           break
         case 'job.log':
           emit('jobLog', (msg.data ?? msg) as { job_id: string; line: string })

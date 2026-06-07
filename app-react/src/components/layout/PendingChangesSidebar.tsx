@@ -14,8 +14,8 @@ import { toast } from '@/hooks/useToast'
 
 interface Change {
   path: string
-  from: any
-  to: any
+  from: unknown
+  to: unknown
   op: 'add' | 'remove' | 'modify'
 }
 

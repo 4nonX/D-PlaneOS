@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { fmtDateTime } from '@/lib/fmt'
@@ -107,7 +107,7 @@ const CATEGORY_META = [
 
 function SettingsTab({ s, updateSettings, repos, setShowWizard, onSyncNow, summary }: {
   s: GitOpsSettings;
-  updateSettings: any;
+  updateSettings: { mutate: (vals: Partial<GitOpsSettings>) => void };
   repos: Repo[];
   setShowWizard: (t: 'state'|'nixos') => void;
   onSyncNow: () => void;
@@ -510,7 +510,7 @@ function CredentialsTab() {
           </label>
           <label className="field">
             <span className="field-label">Auth Type</span>
-            <select value={type} onChange={e=>setType(e.target.value as any)} className="input" style={{ appearance:'none' }}>
+            <select value={type} onChange={e=>setType(e.target.value as 'token'|'ssh'|'password')} className="input" style={{ appearance:'none' }}>
               <option value="token">Token</option><option value="ssh">SSH Private Key</option><option value="password">Password</option>
             </select>
           </label>
@@ -557,16 +557,17 @@ function RepoSyncWizard({ type, onClose, onComplete }: { type: 'state'|'nixos'; 
   const [isTesting, setIsTesting] = useState(false)
 
   const tokenName = type === 'nixos' ? 'NixOS Base System Token' : 'Infrastructure State Token'
-  // Memoised so the default repo name doesn't change on every render
-  const repoName = useMemo(() =>
-    type === 'nixos' ? `NixOS-Backup-${Math.floor(Math.random()*1000)}` : `System-State-${Math.floor(Math.random()*1000)}`
-  , [type])
+  // Lazy initializer runs once at mount - stable random suffix, readable during render
+  const [randomSuffix] = useState(() => Math.floor(Math.random() * 1000))
+  const repoName = type === 'nixos'
+    ? `NixOS-Backup-${randomSuffix}`
+    : `System-State-${randomSuffix}`
 
   const credsQ = useQuery({ queryKey:['git-sync','creds'], queryFn:()=>api.get<{success:boolean;credentials:Cred[]}>('/api/git-sync/credentials') })
 
   const saveCred = useMutation({
-    mutationFn: () => api.post('/api/git-sync/credentials', { name: tokenName, type: 'token', username: 'git', secret: token }),
-    onSuccess: (res: any) => { setUseExisting(String(res.id)); setStep(3); qc.invalidateQueries({queryKey:['git-sync','creds']}) },
+    mutationFn: () => api.post<{ id: number }>('/api/git-sync/credentials', { name: tokenName, type: 'token', username: 'git', secret: token }),
+    onSuccess: (res: { id: number }) => { setUseExisting(String(res.id)); setStep(3); qc.invalidateQueries({queryKey:['git-sync','creds']}) },
     onError: (e: Error) => toast.error(e.message)
   })
 
@@ -585,21 +586,21 @@ function RepoSyncWizard({ type, onClose, onComplete }: { type: 'state'|'nixos'; 
       } else {
         toast.error(`Connection failed: ${res.error}`)
       }
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Connection error')
     } finally {
       setIsTesting(false)
     }
   }
 
   const saveRepo = useMutation({
-    mutationFn: () => api.post('/api/git-sync/repos', { 
+    mutationFn: () => api.post<{ id: number }>('/api/git-sync/repos', {
       name: repoName,
       url,
       branch,
       credential_id: useExisting || undefined
     }),
-    onSuccess: (res: any) => { toast.success('Repository linked'); onComplete(res.id); qc.invalidateQueries({queryKey:['git-sync']}) },
+    onSuccess: (res: { id: number }) => { toast.success('Repository linked'); onComplete(res.id); qc.invalidateQueries({queryKey:['git-sync']}) },
     onError: (e: Error) => toast.error(e.message)
   })
 

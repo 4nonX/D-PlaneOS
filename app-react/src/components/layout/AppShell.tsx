@@ -27,6 +27,8 @@ import { initNotificationSubscribers } from '@/stores/notifications'
 import { PendingChangesSidebar } from './PendingChangesSidebar'
 import { GlobalSearch } from '@/components/ui/GlobalSearch'
 import { KeyboardHelpModal } from '@/components/ui/KeyboardHelpModal'
+import { JobTaskbar } from '@/components/ui/JobTaskbar'
+import { useJobStore } from '@/stores/jobs'
 
 // ---------------------------------------------------------------------------
 // StrengthBar - mirrors daemon validatePasswordStrength exactly
@@ -238,6 +240,7 @@ export function AppShell() {
   const connect    = useWsStore((s) => s.connect)
   const disconnect = useWsStore((s) => s.disconnect)
   const user       = useAuthStore((s) => s.user)
+  const hasActiveJob = useJobStore((s) => !!s.activeJobId)
   const gPressedRef = useRef(false)
   const gTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -276,7 +279,7 @@ export function AppShell() {
         gPressedRef.current = false
         if (gTimerRef.current) clearTimeout(gTimerRef.current)
         const route = GO_ROUTES[e.key]
-        if (route) { e.preventDefault(); navigate({ to: route as any }) }
+        if (route) { e.preventDefault(); navigate({ to: route as never }) }
       }
     }
     window.addEventListener('keydown', handler)
@@ -302,7 +305,10 @@ export function AppShell() {
         transition: 'margin-left 0.2s ease',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center'
+        alignItems: 'center',
+        // Reserve space at the bottom when the taskbar is visible so content
+        // is never obscured by the 40px collapsed strip.
+        paddingBottom: hasActiveJob ? 40 : 0,
       }}>
         <div style={{
           width: '100%',
@@ -315,6 +321,7 @@ export function AppShell() {
       </main>
       <PendingChangesSidebar />
       <ToastContainer />
+      <JobTaskbar sidebarCollapsed={collapsed} />
     </>
   )
 }

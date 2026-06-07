@@ -10,9 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 Upgrade from: v14.2.0 - No schema migration required. No breaking API changes. No breaking configuration changes.
 
-This release closes the NixOS module gap in the Path A' two-node setup, ships a rewritten command palette, adds stable-layout polling to four pages, and introduces inline list filters. Three correctness fixes from a post-release audit of the v14.2.0 HA watchdog are also included.
+This release closes the NixOS module gap in the Path A' two-node setup, ships a persistent job taskbar with xterm log streaming, a rewritten command palette, stable-layout polling across four pages, and inline list filters. A codebase-wide lint audit eliminated all ESLint warnings and the remaining `any` types across the frontend. Three correctness fixes from a post-release audit of the v14.2.0 HA watchdog are also included.
 
 ### Added
+
+- **Job taskbar (`app-react/src/components/ui/JobTaskbar.tsx`, `AppShell.tsx`)**: Persistent 40px strip at the bottom of the shell that becomes visible when a background job is active. Auto-expands when a new job starts. The expanded panel is drag-resizable (min 150px, max 80 % of viewport height) and streams live xterm output via WebSocket. Expanded height is persisted to `localStorage`. Dismissing the taskbar hides it without cancelling the running job. The main content area gains `paddingBottom: 40px` while the taskbar is active so nothing is obscured.
 
 - **`colocatedWitness` NixOS option (`nixos/ha.nix`)**: When `colocatedWitness = true`, the ha.nix module starts a second etcd process on this node (port 2381 client / 2382 raft peer) alongside the data-path etcd (port 2379). The `initialCluster` for both etcd processes and the Patroni `etcd3.hosts` list are wired automatically. No `witnessAddress` required; no separate witness machine needed. Ports 2381 and 2382 are added to the firewall automatically. This makes the "no third node required" statement in the Path A' docs accurate: the previous ha.nix generated all three etcd members on port 2380, so pointing `witnessAddress` at Node A's IP would create an address collision.
 
@@ -26,7 +28,9 @@ This release closes the NixOS module gap in the Path A' two-node setup, ships a 
 
 - **Inline share filter (`app-react/src/pages/SharesPage.tsx`)**: Same pattern as the container filter - appears when more than three shares are present, filters by name or path.
 
-- **Doc-freshness gate (`scripts/release-check.sh`, Check 7)**: Hard error if any file under `daemon/internal/ha/` changed since the previous tag but `docs/admin/HIGH-AVAILABILITY.md` did not. Warning if any file under `daemon/internal/gitops/` changed but the GitOps reference docs did not. Hard error if no file under `docs/` changed at all since the previous tag.
+- **Doc-freshness gate (`scripts/release-check.sh`, Check 7)**: Hard error if HA code (`daemon/internal/ha/`, `nixos/ha.nix`) changed since the previous tag but `docs/admin/HIGH-AVAILABILITY.md` did not. Hard error if GitOps code (`daemon/internal/gitops/`) changed but `docs/admin/GITOPS-DRIVEN-NAS.md` did not (upgraded from warning). Hard error if no file under `docs/` changed at all since the previous tag.
+
+- **Quorum-gated pool operations documented (`docs/admin/GITOPS-DRIVEN-NAS.md`)**: New "Quorum-gated pool operations" section under "HA Environments" explains that pool `CREATE`, `RESHAPE`, and `DESTROY` plan items are deferred (not failed) when HA is active and the node has no quorum. Includes a table of which operations are and are not quorum-gated.
 
 ### Fixed
 
@@ -45,6 +49,13 @@ This release closes the NixOS module gap in the Path A' two-node setup, ships a 
 - **`HAPage` node list uses frozen layout**: Node cards no longer re-order on the 15-second heartbeat poll. `nodeRefreshKey` increments after add-peer, remove-peer, and promote mutations to force a structural update immediately after the API call.
 
 - **`HIGH-AVAILABILITY.md` Path A' install example** now uses `colocatedWitness = true` instead of the manual `witnessAddress`/`etcdEndpoints` port-2381 entries.
+
+- **Frontend lint audit - zero warnings (`app-react/src/`)**: All 105 ESLint warnings and the one blocking error present since v14.2.0 are eliminated. Fixes span 25 files:
+  - `any` → proper types across `api.ts`, `Toast.tsx`, `AppShell.tsx`, `PendingChangesSidebar.tsx`, `GlobalSearch.tsx`, `plugins.ts`, `stores/ws.ts`, `stores/notifications.ts`, `FirewallPage.tsx`, `GitOpsPage.tsx`, `AlertsPage.tsx`, `CertificatesPage.tsx`, `DatasetsPage.tsx`, `DockerPage.tsx`, `FTPPage.tsx`, `HardwarePage.tsx`, `NetworkPage.tsx`, `PoolsPage.tsx`, `ReplicationPage.tsx`, `SettingsPage.tsx`
+  - `react-hooks/set-state-in-effect` resolved across `Sidebar.tsx`, `GlobalSearch.tsx`, `AlertsPage.tsx`, `DockerPage.tsx`, `FTPPage.tsx`, `HAPage.tsx`, `HardwarePage.tsx`, `LoginPage.tsx`, `NetworkPage.tsx`, `ReplicationPage.tsx`, `S3Page.tsx`, `SettingsPage.tsx` by replacing seeding effects with dirty-tracking or event-driven state patterns
+  - `react-hooks/exhaustive-deps` resolved in `DatasetsPage.tsx`, `PoolsPage.tsx`, `HardwarePage.tsx` by wrapping logical expressions in their own `useMemo`
+  - `react-hooks/purity` resolved in `GitOpsPage.tsx` by replacing `useRef(Math.random())` with `useState(() => ...)` lazy initialiser
+  - `react-hooks/refs` resolved in `DockerPage.tsx` by extracting the SSE log area from a render-time JSX variable into a proper `SSETerminalArea` component that owns its own scroll ref
 
 ## v14.2.0 (2026-06-07) - "Arbiter"
 

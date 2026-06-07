@@ -14,7 +14,7 @@
  */
 
 import type React from 'react'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
@@ -71,15 +71,14 @@ function ServiceBadge({ installed, active }: { installed: boolean; active: boole
 
 export function S3Page() {
   const qc = useQueryClient()
-  const [form, setForm] = useState<{
-    root_user: string
-    root_password: string
-    volume_path: string
-    api_port: number
-    console_port: number
-  } | null>(null)
+  const [dirtyForm, setDirtyForm] = useState<{
+    root_user?: string
+    root_password?: string
+    volume_path?: string
+    api_port?: number
+    console_port?: number
+  }>({})
   const [showPassword, setShowPassword] = useState(false)
-  const [dirty, setDirty]               = useState(false)
 
   const statusQ = useQuery<MinioStatus>({
     queryKey: ['s3', 'status'],
@@ -92,26 +91,24 @@ export function S3Page() {
     queryFn: () => api.get<MinioConfigResponse>('/api/s3/config'),
   })
 
-  useEffect(() => {
-    if (configQ.data && !dirty) {
-      const c = configQ.data.config
-      setForm({
-        root_user:     c.root_user,
-        root_password: '',
-        volume_path:   c.volume_path,
-        api_port:      c.api_port,
-        console_port:  c.console_port,
-      })
-    }
-  }, [configQ.data, dirty])
+  // Effective form: user edits OR server value (no seeding effect needed)
+  const sc = configQ.data?.config
+  const form = {
+    root_user:     dirtyForm.root_user     ?? sc?.root_user    ?? '',
+    root_password: dirtyForm.root_password ?? '',
+    volume_path:   dirtyForm.volume_path   ?? sc?.volume_path  ?? '',
+    api_port:      dirtyForm.api_port      ?? sc?.api_port     ?? 9000,
+    console_port:  dirtyForm.console_port  ?? sc?.console_port ?? 9001,
+  }
+  const dirty = Object.keys(dirtyForm).length > 0
 
   const saveMut = useMutation({
-    mutationFn: () => api.put('/api/s3/config', form!),
+    mutationFn: () => api.put('/api/s3/config', form),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['s3', 'status'] })
       qc.invalidateQueries({ queryKey: ['s3', 'config'] })
       toast.success('Configuration saved and applied')
-      setDirty(false)
+      setDirtyForm({})
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -136,14 +133,12 @@ export function S3Page() {
   const isActive  = status?.active ?? false
   const anyPending = startMut.isPending || stopMut.isPending || restartMut.isPending || saveMut.isPending
 
-  function field<K extends keyof NonNullable<typeof form>>(key: K, value: NonNullable<typeof form>[K]) {
-    setForm(prev => prev ? { ...prev, [key]: value } : prev)
-    setDirty(true)
+  function field<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setDirtyForm(prev => ({ ...prev, [key]: value }))
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form) return
     saveMut.mutate()
   }
 

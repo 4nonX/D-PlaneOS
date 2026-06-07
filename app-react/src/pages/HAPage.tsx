@@ -404,25 +404,29 @@ function WitnessConfigForm() {
     queryFn:  ({ signal }) => api.get<{ success: boolean; config: WitnessConfig }>('/api/ha/witness/configure', signal),
   })
 
-  const [enable,    setEnable]    = useState(false)
-  const [required,  setRequired]  = useState(1)
-  const [timeout,   setTimeoutS]  = useState(5)
-  const [witnesses, setWitnesses] = useState<WitnessEntry[]>([])
-  const [testOut,   setTestOut]   = useState<WitnessTestResponse | null>(null)
+  const [dirty, setDirty] = useState<{
+    enable?: boolean; required?: number; timeout?: number; witnesses?: WitnessEntry[]
+  }>({})
+  const [testOut, setTestOut] = useState<WitnessTestResponse | null>(null)
 
-  useEffect(() => {
-    if (q.data?.config) {
-      const c = q.data.config
-      setEnable(c.enable)
-      setRequired(c.required_healthy || 1)
-      setTimeoutS(c.timeout_secs || 5)
-      setWitnesses(c.witnesses || [])
-    }
-  }, [q.data])
+  const serverCfg = q.data?.config
+  const enable    = dirty.enable    ?? serverCfg?.enable             ?? false
+  const required  = dirty.required  ?? serverCfg?.required_healthy   ?? 1
+  const timeout   = dirty.timeout   ?? serverCfg?.timeout_secs       ?? 5
+  const witnesses = dirty.witnesses ?? serverCfg?.witnesses          ?? []
+
+  const setEnable    = (v: boolean)        => setDirty(p => ({ ...p, enable: v }))
+  const setRequired  = (v: number)         => setDirty(p => ({ ...p, required: v }))
+  const setTimeoutS  = (v: number)         => setDirty(p => ({ ...p, timeout: v }))
+  const setWitnesses = (v: WitnessEntry[]) => setDirty(p => ({ ...p, witnesses: v }))
 
   const save = useMutation({
     mutationFn: (cfg: WitnessConfig) => api.post('/api/ha/witness/configure', cfg),
-    onSuccess: () => { toast.success('Witness configuration saved'); qc.invalidateQueries({ queryKey: ['ha', 'witness'] }) },
+    onSuccess: () => {
+      toast.success('Witness configuration saved')
+      setDirty({})
+      qc.invalidateQueries({ queryKey: ['ha', 'witness'] })
+    },
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -567,24 +571,24 @@ function FencingConfigForm() {
     queryFn:  ({ signal }) => api.get<{ success: boolean; config: FencingConfig }>('/api/ha/fencing/configure', signal),
   })
 
-  const [enable,    setEnable]    = useState(false)
-  const [ip,        setIp]        = useState('')
-  const [user,      setUser]      = useState('')
-  const [passFile,  setPassFile]  = useState('')
-  const [jitterMs,  setJitterMs]  = useState(3000)
-  const [diskTolPct, setDiskTolPct] = useState(10)
+  const [dirty, setDirty] = useState<{
+    enable?: boolean; ip?: string; user?: string; passFile?: string; jitterMs?: number; diskTolPct?: number
+  }>({})
 
-  useEffect(() => {
-    if (q.data?.config) {
-      const c = q.data.config
-      setEnable(c.enable)
-      setIp(c.bmc_ip)
-      setUser(c.bmc_user)
-      setPassFile(c.bmc_password_file)
-      setJitterMs(c.jitter_max_ms ?? 3000)
-      setDiskTolPct(c.disk_fault_tolerance_pct ?? 10)
-    }
-  }, [q.data])
+  const sc = q.data?.config
+  const enable     = dirty.enable     ?? sc?.enable                    ?? false
+  const ip         = dirty.ip         ?? sc?.bmc_ip                    ?? ''
+  const user       = dirty.user       ?? sc?.bmc_user                  ?? ''
+  const passFile   = dirty.passFile   ?? sc?.bmc_password_file         ?? ''
+  const jitterMs   = dirty.jitterMs   ?? sc?.jitter_max_ms             ?? 3000
+  const diskTolPct = dirty.diskTolPct ?? sc?.disk_fault_tolerance_pct  ?? 10
+
+  const setEnable     = (v: boolean) => setDirty(p => ({ ...p, enable: v }))
+  const setIp         = (v: string)  => setDirty(p => ({ ...p, ip: v }))
+  const setUser       = (v: string)  => setDirty(p => ({ ...p, user: v }))
+  const setPassFile   = (v: string)  => setDirty(p => ({ ...p, passFile: v }))
+  const setJitterMs   = (v: number)  => setDirty(p => ({ ...p, jitterMs: v }))
+  const setDiskTolPct = (v: number)  => setDirty(p => ({ ...p, diskTolPct: v }))
 
   const save = useMutation({
     mutationFn: (cfg: FencingConfig) => api.post('/api/ha/fencing/configure', cfg),
@@ -667,26 +671,26 @@ function PDUConfigForm() {
     queryFn:  ({ signal }) => api.get<{ success: boolean; config: PDUConfig }>('/api/ha/pdu/configure', signal),
   })
 
-  const [enable,    setEnable]    = useState(false)
-  const [offUrl,    setOffUrl]    = useState('')
-  const [method,    setMethod]    = useState('GET')
-  const [username,  setUsername]  = useState('')
-  const [passFile,  setPassFile]  = useState('')
-  const [timeoutS,  setTimeoutS]  = useState(10)
-  const [expStatus, setExpStatus] = useState(0)
+  const [dirty, setDirty] = useState<{
+    enable?: boolean; offUrl?: string; method?: string; username?: string; passFile?: string; timeoutS?: number; expStatus?: number
+  }>({})
 
-  useEffect(() => {
-    if (q.data?.config) {
-      const c = q.data.config
-      setEnable(c.enable)
-      setOffUrl(c.outlet_off_url)
-      setMethod(c.method || 'GET')
-      setUsername(c.username)
-      setPassFile(c.password_file)
-      setTimeoutS(c.timeout_secs || 10)
-      setExpStatus(c.expected_status ?? 0)
-    }
-  }, [q.data])
+  const sp = q.data?.config
+  const enable    = dirty.enable    ?? sp?.enable          ?? false
+  const offUrl    = dirty.offUrl    ?? sp?.outlet_off_url  ?? ''
+  const method    = dirty.method    ?? sp?.method          ?? 'GET'
+  const username  = dirty.username  ?? sp?.username        ?? ''
+  const passFile  = dirty.passFile  ?? sp?.password_file   ?? ''
+  const timeoutS  = dirty.timeoutS  ?? sp?.timeout_secs    ?? 10
+  const expStatus = dirty.expStatus ?? sp?.expected_status ?? 0
+
+  const setEnable    = (v: boolean) => setDirty(p => ({ ...p, enable: v }))
+  const setOffUrl    = (v: string)  => setDirty(p => ({ ...p, offUrl: v }))
+  const setMethod    = (v: string)  => setDirty(p => ({ ...p, method: v }))
+  const setUsername  = (v: string)  => setDirty(p => ({ ...p, username: v }))
+  const setPassFile  = (v: string)  => setDirty(p => ({ ...p, passFile: v }))
+  const setTimeoutS  = (v: number)  => setDirty(p => ({ ...p, timeoutS: v }))
+  const setExpStatus = (v: number)  => setDirty(p => ({ ...p, expStatus: v }))
 
   const save = useMutation({
     mutationFn: (cfg: PDUConfig) => api.post('/api/ha/pdu/configure', cfg),
@@ -773,18 +777,16 @@ function SBDConfigForm() {
     queryFn:  ({ signal }) => api.get<SBDResponse>('/api/ha/sbd/configure', signal),
   })
 
-  const [pool,    setPool]    = useState('')
-  const [dataset, setDataset] = useState('sbd-lease')
-  const [ttl,     setTtl]     = useState(30)
+  const [dirty, setDirty] = useState<{ pool?: string; dataset?: string; ttl?: number }>({})
 
-  useEffect(() => {
-    if (q.data?.config) {
-      const c = q.data.config
-      setPool(c.pool ?? '')
-      setDataset(c.dataset || 'sbd-lease')
-      setTtl(c.lease_ttl_secs || 30)
-    }
-  }, [q.data])
+  const ss = q.data?.config
+  const pool    = dirty.pool    ?? ss?.pool           ?? ''
+  const dataset = dirty.dataset ?? ss?.dataset        ?? 'sbd-lease'
+  const ttl     = dirty.ttl     ?? ss?.lease_ttl_secs ?? 30
+
+  const setPool    = (v: string) => setDirty(p => ({ ...p, pool: v }))
+  const setDataset = (v: string) => setDirty(p => ({ ...p, dataset: v }))
+  const setTtl     = (v: number) => setDirty(p => ({ ...p, ttl: v }))
 
   const save = useMutation({
     mutationFn: (cfg: SBDConfig) => api.post('/api/ha/sbd/configure', cfg),
@@ -887,26 +889,26 @@ function NetworkWitnessForm() {
     queryFn:  ({ signal }) => api.get<{ success: boolean; config: NetworkWitnessConfig }>('/api/ha/network-witness', signal),
   })
 
-  const [enable,  setEnable]  = useState(false)
-  const [target,  setTarget]  = useState('')
-  const [method,  setMethod]  = useState<'icmp' | 'http' | 'https'>('icmp')
-  const [timeout, setTimeout] = useState(2000)
-  const [count,   setCount]   = useState(3)
-  const [desc,    setDesc]    = useState('')
+  const [dirty, setDirty] = useState<{
+    enable?: boolean; target?: string; method?: 'icmp'|'http'|'https'; timeout?: number; count?: number; desc?: string
+  }>({})
   const [probing, setProbing] = useState(false)
   const [probeResult, setProbeResult] = useState<NetworkWitnessProbeResult | null>(null)
 
-  useEffect(() => {
-    if (q.data?.config) {
-      const c = q.data.config
-      setEnable(c.enable ?? false)
-      setTarget(c.target ?? '')
-      setMethod(c.method ?? 'icmp')
-      setTimeout(c.timeout_ms ?? 2000)
-      setCount(c.count ?? 3)
-      setDesc(c.description ?? '')
-    }
-  }, [q.data])
+  const nw = q.data?.config
+  const enable  = dirty.enable  ?? nw?.enable      ?? false
+  const target  = dirty.target  ?? nw?.target      ?? ''
+  const method  = dirty.method  ?? nw?.method      ?? 'icmp'
+  const timeout = dirty.timeout ?? nw?.timeout_ms  ?? 2000
+  const count   = dirty.count   ?? nw?.count       ?? 3
+  const desc    = dirty.desc    ?? nw?.description ?? ''
+
+  const setEnable  = (v: boolean)               => setDirty(p => ({ ...p, enable: v }))
+  const setTarget  = (v: string)                => setDirty(p => ({ ...p, target: v }))
+  const setMethod  = (v: 'icmp'|'http'|'https') => setDirty(p => ({ ...p, method: v }))
+  const setTimeout = (v: number)                => setDirty(p => ({ ...p, timeout: v }))
+  const setCount   = (v: number)                => setDirty(p => ({ ...p, count: v }))
+  const setDesc    = (v: string)                => setDirty(p => ({ ...p, desc: v }))
 
   const save = useMutation({
     mutationFn: (cfg: NetworkWitnessConfig) => api.post('/api/ha/network-witness', cfg),
@@ -1132,11 +1134,14 @@ function ReplicationConfigForm() {
     queryFn:  ({ signal }) => api.get<{ success: boolean; config: ReplicationConfig }>('/api/ha/replication/configure', signal),
   })
 
-  const [cfg, setCfg] = useState<ReplicationConfig>({
-    local_pool: '', remote_pool: '', remote_host: '', remote_user: 'root', remote_port: 22, ssh_key_path: '/root/.ssh/id_rsa', interval_secs: 30
-  })
+  const [dirtyCfg, setDirtyCfg] = useState<ReplicationConfig | null>(null)
 
-  useEffect(() => { if (q.data?.config) setCfg(q.data.config) }, [q.data])
+  const defaultCfg: ReplicationConfig = {
+    local_pool: '', remote_pool: '', remote_host: '', remote_user: 'root', remote_port: 22, ssh_key_path: '/root/.ssh/id_rsa', interval_secs: 30
+  }
+  const cfg = dirtyCfg ?? q.data?.config ?? defaultCfg
+  const setCfg = (v: ReplicationConfig | ((prev: ReplicationConfig) => ReplicationConfig)) =>
+    setDirtyCfg(typeof v === 'function' ? v(cfg) : v)
 
   const save = useMutation({
     mutationFn: (c: ReplicationConfig) => api.post('/api/ha/replication/configure', c),
@@ -1382,20 +1387,18 @@ function WatchdogConfigForm() {
     queryFn:  ({ signal }) => api.get<{ success: boolean; config: WatchdogConfig }>('/api/ha/watchdog/configure', signal),
   })
 
-  const [enable,  setEnable]  = useState(false)
-  const [device,  setDevice]  = useState('/dev/watchdog')
-  const [timeout, setTimeoutS] = useState(30)
-  const [pet,     setPet]     = useState(10)
+  const [dirty, setDirty] = useState<{ enable?: boolean; device?: string; timeout?: number; pet?: number }>({})
 
-  useEffect(() => {
-    if (q.data?.config) {
-      const c = q.data.config
-      setEnable(c.enable)
-      setDevice(c.device || '/dev/watchdog')
-      setTimeoutS(c.timeout_secs || 30)
-      setPet(c.pet_interval_sec || 10)
-    }
-  }, [q.data])
+  const wd = q.data?.config
+  const enable  = dirty.enable  ?? wd?.enable          ?? false
+  const device  = dirty.device  ?? wd?.device          ?? '/dev/watchdog'
+  const timeout = dirty.timeout ?? wd?.timeout_secs    ?? 30
+  const pet     = dirty.pet     ?? wd?.pet_interval_sec ?? 10
+
+  const setEnable  = (v: boolean) => setDirty(p => ({ ...p, enable: v }))
+  const setDevice  = (v: string)  => setDirty(p => ({ ...p, device: v }))
+  const setTimeoutS = (v: number) => setDirty(p => ({ ...p, timeout: v }))
+  const setPet     = (v: number)  => setDirty(p => ({ ...p, pet: v }))
 
   const save = useMutation({
     mutationFn: (cfg: WatchdogConfig) => api.post('/api/ha/watchdog/configure', cfg),
@@ -1509,17 +1512,16 @@ function TimingConfigForm() {
     queryFn:  ({ signal }) => api.get<{ success: boolean; note?: string } & TimingConfig>('/api/ha/timing', signal),
   })
 
-  const [failover,    setFailover]    = useState(45)
-  const [hysteresis,  setHysteresis]  = useState(60)
-  const [heartbeat,   setHeartbeat]   = useState(15)
+  const [dirty, setDirty] = useState<{ failover?: number; hysteresis?: number; heartbeat?: number }>({})
 
-  useEffect(() => {
-    if (q.data) {
-      setFailover(q.data.failover_after_seconds     ?? 45)
-      setHysteresis(q.data.hysteresis_window_minutes ?? 60)
-      setHeartbeat(q.data.heartbeat_interval_seconds ?? 15)
-    }
-  }, [q.data])
+  const tc = q.data
+  const failover   = dirty.failover   ?? tc?.failover_after_seconds     ?? 45
+  const hysteresis = dirty.hysteresis ?? tc?.hysteresis_window_minutes  ?? 60
+  const heartbeat  = dirty.heartbeat  ?? tc?.heartbeat_interval_seconds ?? 15
+
+  const setFailover   = (v: number) => setDirty(p => ({ ...p, failover: v }))
+  const setHysteresis = (v: number) => setDirty(p => ({ ...p, hysteresis: v }))
+  const setHeartbeat  = (v: number) => setDirty(p => ({ ...p, heartbeat: v }))
 
   const save = useMutation({
     mutationFn: (cfg: TimingConfig) => api.post('/api/ha/timing', cfg),
@@ -1610,7 +1612,11 @@ function MaintenanceModeCard({ active, until, onToggle }: {
   const [rem,      setRem]      = useState(0)
 
   useEffect(() => {
-    if (!active || !until) { setRem(0); return }
+    if (!active || !until) {
+      // Schedule state update as a callback to avoid synchronous setState in effect body
+      const t = setTimeout(() => setRem(0), 0)
+      return () => clearTimeout(t)
+    }
     const timer = setInterval(() => {
       const s = Math.max(0, until - Math.floor(Date.now() / 1000))
       setRem(s)

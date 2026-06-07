@@ -820,11 +820,13 @@ function RAIDZExpandProgressCard({ pool }: { pool: string }) {
 
   useEffect(() => {
     const unsubs = [
-      ws('raidzExpandProgress', (d: any) => {
-        if (d?.pool === pool) setProgress({ percent: d.percent ?? 0, eta: d.eta ?? '' })
+      ws('raidzExpandProgress', (d: unknown) => {
+        const ev = d as { pool?: string; percent?: number; eta?: string }
+        if (ev?.pool === pool) setProgress({ percent: ev.percent ?? 0, eta: ev.eta ?? '' })
       }),
-      ws('raidzExpandCompleted', (d: any) => {
-        if (d?.pool === pool) { setDone(true); setProgress(null) }
+      ws('raidzExpandCompleted', (d: unknown) => {
+        const ev = d as { pool?: string }
+        if (ev?.pool === pool) { setDone(true); setProgress(null) }
       }),
     ]
     return () => unsubs.forEach(u => u())
@@ -910,7 +912,7 @@ function RAIDZExpandModal({ pool, vdev, onClose, onStarted }: {
     queryKey: ['system', 'disks'],
     queryFn: () => api.get<{ disks: Disk[] }>('/api/system/disks'),
   })
-  const disks: Disk[] = (disksQ.data as any)?.disks ?? []
+  const disks: Disk[] = (disksQ.data as { disks?: Disk[] })?.disks ?? []
 
   // Auto-select the first child of the raidz vdev as the anchor
   const anchorDisk = vdev.children?.[0]?.name ?? ''
@@ -1177,7 +1179,7 @@ function WipeDiskModalInner({ onWiped, onClose }: { onWiped: () => void; onClose
   })
   
   // Use heuristic to find unassigned disks: they aren't in any pool (backend handles safety too)
-  const disks = (disksQ.data as any)?.disks ?? []
+  const disks = (disksQ.data as { disks?: Disk[] })?.disks ?? []
 
   if (selected) {
     return <WipeDiskModal device={selected} onClose={() => setSelected(null)} onWiped={onWiped} />
@@ -2268,8 +2270,8 @@ export function PoolsPage() {
     const unsub2 = wsOn('scrubProgress', () => {
       qc.invalidateQueries({ queryKey: ['zfs', 'scrub', 'status'] })
     })
-    const unsub3 = wsOn('scrubAborted', (d: any) => {
-      toast.warning(`Scrub aborted on pool ${d?.pool ?? ''}`)
+    const unsub3 = wsOn('scrubAborted', (d: unknown) => {
+      toast.warning(`Scrub aborted on pool ${(d as { pool?: string })?.pool ?? ''}`)
       qc.invalidateQueries({ queryKey: ['zfs', 'scrub', 'status'] })
       qc.invalidateQueries({ queryKey: ['zfs', 'pools'] })
     })
@@ -2278,12 +2280,13 @@ export function PoolsPage() {
 
   // WS: ZFS critical alerts (data loss, deadman, I/O errors) → error toast
   useEffect(() => {
-    return wsOn('zfsAlert', (d: any) => {
-      const pool = d?.pool ?? ''
-      const kind = String(d?.alert_type ?? '').replace('zfs.', '')
+    return wsOn('zfsAlert', (d: unknown) => {
+      const ev = d as { pool?: string; alert_type?: string; kind?: string }
+      const pool = ev?.pool ?? ''
+      const kind = String(ev?.alert_type ?? '').replace('zfs.', '')
       const label = kind === 'data_loss' ? 'Data loss detected' :
                     kind === 'deadman'   ? 'Pool deadman triggered' :
-                    kind === 'io_error'  ? `I/O error (${d?.kind ?? 'unknown'})` :
+                    kind === 'io_error'  ? `I/O error (${ev?.kind ?? 'unknown'})` :
                     'ZFS error'
       toast.error(`${label}${pool ? ` on pool ${pool}` : ''}`)
       qc.invalidateQueries({ queryKey: ['zfs', 'pools'] })
@@ -2325,15 +2328,16 @@ export function PoolsPage() {
 
   // WS: RAID-Z expansion events → toast notifications
   useEffect(() => {
-    const unsub1 = wsOn('raidzExpandStarted', (d: any) => {
-      toast.info(`RAID-Z expansion started on pool ${d?.pool ?? ''}`)
+    const unsub1 = wsOn('raidzExpandStarted', (d: unknown) => {
+      toast.info(`RAID-Z expansion started on pool ${(d as { pool?: string })?.pool ?? ''}`)
       qc.invalidateQueries({ queryKey: ['zfs', 'raidz-expand', 'status'] })
     })
-    const unsub2 = wsOn('raidzExpandCompleted', (d: any) => {
-      if (d?.success === false) {
-        toast.error(`RAID-Z expansion failed on pool ${d?.pool ?? ''}: ${d?.error ?? 'unknown error'}`)
+    const unsub2 = wsOn('raidzExpandCompleted', (d: unknown) => {
+      const ev = d as { success?: boolean; pool?: string; error?: string }
+      if (ev?.success === false) {
+        toast.error(`RAID-Z expansion failed on pool ${ev?.pool ?? ''}: ${ev?.error ?? 'unknown error'}`)
       } else {
-        toast.success(`RAID-Z expansion complete on pool ${d?.pool ?? ''}`)
+        toast.success(`RAID-Z expansion complete on pool ${ev?.pool ?? ''}`)
       }
       qc.invalidateQueries({ queryKey: ['zfs', 'pools'] })
       qc.invalidateQueries({ queryKey: ['zfs', 'raidz-expand', 'status'] })
@@ -2341,8 +2345,8 @@ export function PoolsPage() {
     return () => { unsub1(); unsub2() }
   }, [wsOn, qc])
 
-  const pools    = poolsQ.data?.pools ?? poolsQ.data?.data ?? []
-  const datasets = datasetsQ.data?.data ?? []
+  const pools    = useMemo(() => poolsQ.data?.pools ?? poolsQ.data?.data ?? [], [poolsQ.data])
+  const datasets = useMemo(() => datasetsQ.data?.data ?? [], [datasetsQ.data])
 
   // Frozen layout: pool list structure is stable across 60s polls + WS events.
   // Health/capacity values update in place; pools are only added/removed on
@@ -2470,17 +2474,17 @@ export function PoolsPage() {
 
       {/* Scrub Schedules content */}
       {tab === 'scrub' && (
-        <ScrubTab pools={pools.map((p: any) => p.name).filter(Boolean)} />
+        <ScrubTab pools={pools.map(p => p.name).filter(Boolean)} />
       )}
 
       {/* TRIM content */}
       {tab === 'trim' && (
-        <TrimTab pools={pools.map((p: any) => p.name).filter(Boolean)} />
+        <TrimTab pools={pools.map(p => p.name).filter(Boolean)} />
       )}
 
       {/* Maintenance content */}
       {tab === 'maintenance' && (
-        <MaintenanceTab pools={pools.map((p: any) => p.name).filter(Boolean)} />
+        <MaintenanceTab pools={pools.map(p => p.name).filter(Boolean)} />
       )}
 
       {createPoolOpen && (
@@ -2647,7 +2651,7 @@ function MaintenanceTab({ pools }: { pools: string[] }) {
   // --- Upgrade ---
   const upgradePool = useMutation({
     mutationFn: (all: boolean) => api.post('/api/zfs/pool/upgrade', { pool: selectedPool, all }),
-    onSuccess: (data: any) => toast.success(data?.output || 'Pool upgraded'),
+    onSuccess: (data: unknown) => toast.success((data as { output?: string })?.output || 'Pool upgraded'),
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -2664,7 +2668,7 @@ function MaintenanceTab({ pools }: { pools: string[] }) {
   // --- Multihost ---
   const setMultihost = useMutation({
     mutationFn: (enabled: boolean) => api.post('/api/zfs/pool/multihost', { pool: selectedPool, enabled }),
-    onSuccess: (_: any, enabled: boolean) => toast.success(`multihost ${enabled ? 'enabled' : 'disabled'} on ${selectedPool}`),
+    onSuccess: (_: unknown, enabled: boolean) => toast.success(`multihost ${enabled ? 'enabled' : 'disabled'} on ${selectedPool}`),
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -2932,7 +2936,8 @@ function MaintenanceTab({ pools }: { pools: string[] }) {
 // PoolFixerWizard
 // ---------------------------------------------------------------------------
 
-function PoolFixerWizard({ pool, onClose, onRefresh }: { pool: any; onClose: () => void; onRefresh: () => void }) {
+interface PoolFixerPool { name: string; health?: string; topology?: PoolTopology; disks?: { state: string; name?: string; path?: string; device?: string }[] }
+function PoolFixerWizard({ pool, onClose, onRefresh }: { pool: PoolFixerPool; onClose: () => void; onRefresh: () => void }) {
   const [step, setStep] = useState(1)
   
   const clearMutation = useMutation({
@@ -2951,18 +2956,18 @@ function PoolFixerWizard({ pool, onClose, onRefresh }: { pool: any; onClose: () 
   const unhealthyDisks = useMemo(() => {
     // If we have topology data, traverse it for leaf disks
     if (pool.topology) {
-      const disks: any[] = []
-      const traverse = (v: any) => {
+      const disks: VDev[] = []
+      const traverse = (v: VDev) => {
         if (v.type === 'disk' && v.state !== 'ONLINE') {
           disks.push(v)
         }
         if (v.children) v.children.forEach(traverse)
       }
-      traverse(pool.topology)
+      Object.values(pool.topology.groups).forEach(group => group.forEach(traverse))
       if (disks.length > 0) return disks
     }
     // Fallback to legacy flat disks list
-    return (pool.disks || []).filter((d: any) => d.state !== 'ONLINE')
+    return (pool.disks || []).filter(d => d.state !== 'ONLINE')
   }, [pool.topology, pool.disks])
 
   return (
@@ -2997,15 +3002,15 @@ function PoolFixerWizard({ pool, onClose, onRefresh }: { pool: any; onClose: () 
         {step === 2 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <h4 style={{ fontSize: 'var(--text-xs)', fontWeight: 800, textTransform: 'uppercase' }}>Unhealthy Disks</h4>
-            {unhealthyDisks.map((d: any) => (
-              <div key={d.device} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,0,0,0.05)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,0,0,0.1)' }}>
+            {unhealthyDisks.map((d) => (
+              <div key={d.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,0,0,0.05)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,0,0,0.1)' }}>
                 <div>
-                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700 }}>{d.device}</div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700 }}>{d.name}</div>
                   <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--error)' }}>State: {d.state}</div>
                 </div>
-                <button 
+                <button
                   className="btn btn-xs btn-primary"
-                  onClick={() => onlineMutation.mutate(d.device)}
+                  onClick={() => onlineMutation.mutate(d.name ?? '')}
                   disabled={onlineMutation.isPending}
                 >
                   Try Bring Online
@@ -3029,7 +3034,7 @@ function PoolFixerWizard({ pool, onClose, onRefresh }: { pool: any; onClose: () 
 // CacheManageModal
 // ---------------------------------------------------------------------------
 
-function CacheManageModal({ pool, onClose, onRefresh }: { pool: any; onClose: () => void; onRefresh: () => void }) {
+function CacheManageModal({ pool, onClose, onRefresh }: { pool: { name: string }; onClose: () => void; onRefresh: () => void }) {
   const [type, setType] = useState<'cache' | 'log' | 'special' | 'spare'>('cache')
   const [selectedDisks, setSelectedDisks] = useState<string[]>([])
 
@@ -3188,7 +3193,7 @@ function MenuBtn({ icon, label, onClick, danger }: { icon: string; label: string
 function DatasetSharingModal({ node, onClose }: { node: TreeNode; onClose: () => void }) {
 	const { data, isLoading } = useQuery({
 		queryKey: ['shares', 'by-path', node.name],
-		queryFn: () => api.get<any>(`/api/shares/by-path?path=/${node.name}`)
+		queryFn: () => api.get<{ success: boolean; smb?: { name: string; enabled: boolean; comment?: string }[]; nfs?: { id: string; clients: string; enabled: boolean; options: string }[] }>(`/api/shares/by-path?path=/${node.name}`)
 	})
 
 	return (
@@ -3208,7 +3213,7 @@ function DatasetSharingModal({ node, onClose }: { node: TreeNode; onClose: () =>
 									<tr><th>Share Name</th><th>Status</th><th>Comment</th></tr>
 								</thead>
 								<tbody>
-									{data?.smb?.map((s: any) => (
+									{data?.smb?.map((s) => (
 										<tr key={s.name}>
 											<td style={{ fontWeight: 600 }}>{s.name}</td>
 											<td>{s.enabled ? <span className="badge badge-success">Enabled</span> : <span className="badge badge-neutral">Disabled</span>}</td>
@@ -3237,7 +3242,7 @@ function DatasetSharingModal({ node, onClose }: { node: TreeNode; onClose: () =>
 									<tr><th>Clients</th><th>Status</th><th>Options</th></tr>
 								</thead>
 								<tbody>
-									{data?.nfs?.map((n: any) => (
+									{data?.nfs?.map((n) => (
 										<tr key={n.id}>
 											<td style={{ fontWeight: 600 }}>{n.clients}</td>
 											<td>{n.enabled ? <span className="badge badge-success">Enabled</span> : <span className="badge badge-neutral">Disabled</span>}</td>

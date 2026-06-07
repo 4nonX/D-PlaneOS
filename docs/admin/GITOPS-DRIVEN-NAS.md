@@ -527,6 +527,26 @@ When apply is triggered:
 
 You trigger apply on the primary. In practice, direct the apply API call at the VIP (virtual IP managed by Keepalived), which always routes to the current primary.
 
+### Quorum-gated pool operations
+
+When HA is active, pool ownership operations - `CREATE`, `RESHAPE`, and `DESTROY` in the plan - are gated on cluster quorum. An isolated node (one that has lost contact with its peer and all witnesses) will not act on these plan items, regardless of what `state.yaml` says. The operations are **deferred**, not failed: they appear in the plan result as `[DEFERRED no-quorum]` and are retried automatically on the next reconcile cycle once quorum is restored.
+
+This is the sole software-level write guard for replicated-topology clusters (Path B). On shared-storage clusters (Path A'), the SCSI-3 PR hardware reservation is a physical backstop, but the quorum gate fires first in software.
+
+**Operations that are NOT quorum-gated:**
+
+| Operation | Gated on quorum? | Reason |
+|---|---|---|
+| Pool `CREATE` / `RESHAPE` / `DESTROY` | Yes | Dual-writer corruption risk |
+| Dataset `CREATE` / `DELETE` / `MODIFY` | No | Dataset lives on already-imported pool |
+| SMB share `CREATE` / `DELETE` | No | Config-only, no block-level risk |
+| NFS export changes | No | Config-only |
+| Docker stack changes | No | No ownership question |
+| User / group changes | No | DB-only |
+| System / network changes | No | No pool ownership question |
+
+If a pool operation is consistently deferred, check cluster quorum status on the HA page before diagnosing the GitOps config.
+
 ### Rolling configuration updates
 
 For changes that do not affect storage (adding a user, changing a share comment):

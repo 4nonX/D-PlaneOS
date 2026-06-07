@@ -113,7 +113,7 @@ export function JobConsole({ jobId, title = 'Task Console', onClose }: JobConsol
     return wsOn('jobProgress', (msg) => {
       if (msg.job_id === jobId) {
         // Sync status if it changed
-        if (msg.data && typeof msg.data === 'object' && 'status' in msg.data) {
+        if (msg.data?.status !== undefined) {
           setJobStatus(msg.data.status)
         }
       }

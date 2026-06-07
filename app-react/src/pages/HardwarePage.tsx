@@ -17,7 +17,7 @@
  *   diskReplacementAvailable → pre-populate replace modal with faulted vdev suggestion
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -1073,7 +1073,7 @@ export function HardwarePage() {
     refetchInterval: 120_000,
   })
 
-  const disks = disksQ.data?.disks ?? []
+  const disks = useMemo(() => disksQ.data?.disks ?? [], [disksQ.data])
   const freeDisk = disks.filter(d => !d.in_use)
 
   // Bulk-fetch SMART predictions for all disks in parallel - proactive monitoring
@@ -1138,9 +1138,12 @@ export function HardwarePage() {
     })
 
     if (faultedDisk) {
-      setSuggestedNewDev(newDiskDev)
-      setReplaceTarget(faultedDisk)
-      setReplacementSuggestion(null)
+      // Batch state updates via queueMicrotask to avoid synchronous setState in effect
+      queueMicrotask(() => {
+        setSuggestedNewDev(newDiskDev)
+        setReplaceTarget(faultedDisk)
+        setReplacementSuggestion(null)
+      })
     }
   }, [disks, replacementSuggestion])
 

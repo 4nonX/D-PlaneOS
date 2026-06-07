@@ -18,7 +18,7 @@
  *   POST /api/alerts/webhooks/{id}/test    → fire test payload
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
@@ -101,24 +101,22 @@ function TelegramTab() {
     queryFn:  ({ signal }) => api.get<TelegramConfig>('/api/alerts/telegram', signal),
   })
 
-  const [token,    setToken]    = useState('')
-  const [chatId,   setChatId]   = useState('')
-  const [enabled,  setEnabled]  = useState(false)
-  const [seeded,   setSeeded]   = useState(false)
+  const [token,   setToken]   = useState('')
+  const [dirty,   setDirty]   = useState<{ chatId?: string; enabled?: boolean }>({})
 
   const hasStoredToken = configQ.data?.has_token ?? false
 
-  useEffect(() => {
-    if (configQ.data && !seeded) {
-      setChatId(configQ.data.chat_id ?? '')
-      setEnabled(!!configQ.data.enabled)
-      setSeeded(true)
-    }
-  }, [configQ.data, seeded])
+  // Effective values: user edit OR server value
+  const chatId  = dirty.chatId  ?? configQ.data?.chat_id  ?? ''
+  const enabled = dirty.enabled ?? !!configQ.data?.enabled
 
   const save = useMutation({
     mutationFn: () => api.post('/api/alerts/telegram', { bot_token: token, chat_id: chatId, enabled }),
-    onSuccess: () => { toast.success('Telegram config saved'); qc.invalidateQueries({ queryKey: ['alerts', 'telegram'] }) },
+    onSuccess: () => {
+      toast.success('Telegram config saved')
+      setDirty({})
+      qc.invalidateQueries({ queryKey: ['alerts', 'telegram'] })
+    },
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -137,7 +135,7 @@ function TelegramTab() {
     <SectionCard icon="send" title="Telegram Notifications">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 520 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)}
+          <input type="checkbox" checked={enabled} onChange={e => setDirty(d => ({ ...d, enabled: e.target.checked }))}
             style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }} />
           <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>Enable Telegram alerts</span>
         </label>
@@ -152,7 +150,7 @@ function TelegramTab() {
         </Field>
 
         <Field label="Chat ID" hint="Numeric ID of the chat or channel to send alerts to">
-          <input value={chatId} onChange={e => setChatId(e.target.value)}
+          <input value={chatId} onChange={e => setDirty(d => ({ ...d, chatId: e.target.value }))}
             placeholder="-1001234567890" className="input" style={{ fontFamily: 'var(--font-mono)' }} />
         </Field>
 
@@ -181,32 +179,26 @@ function SMTPTab() {
     queryFn:  ({ signal }) => api.get<SMTPConfig>('/api/alerts/smtp', signal),
   })
 
-  const [host,     setHost]     = useState('')
-  const [port,     setPort]     = useState('587')
-  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [from,     setFrom]     = useState('')
-  const [tls,      setTls]      = useState(true)
-  const [enabled,  setEnabled]  = useState(false)
-  const [seeded,   setSeeded]   = useState(false)
+  const [dirty, setDirty] = useState<{
+    host?: string; port?: string; username?: string; from?: string; tls?: boolean; enabled?: boolean
+  }>({})
 
-  useEffect(() => {
-    if (configQ.data && !seeded) {
-      const c = configQ.data
-      setHost(c.host     ?? '')
-      setPort(String(c.port ?? 587))
-      setUsername(c.username ?? '')
-      setPassword(c.password ?? '')
-      setFrom(c.from     ?? '')
-      setTls(c.tls       ?? true)
-      setEnabled(!!c.enabled)
-      setSeeded(true)
-    }
-  }, [configQ.data, seeded])
+  // Effective values: user edit OR server value
+  const host     = dirty.host     ?? configQ.data?.host     ?? ''
+  const port     = dirty.port     ?? String(configQ.data?.port ?? 587)
+  const username = dirty.username ?? configQ.data?.username ?? ''
+  const from     = dirty.from     ?? configQ.data?.from     ?? ''
+  const tls      = dirty.tls      ?? configQ.data?.tls      ?? true
+  const enabled  = dirty.enabled  ?? !!configQ.data?.enabled
 
   const save = useMutation({
     mutationFn: () => api.post('/api/alerts/smtp', { host, port: Number(port), username, password, from, tls, enabled }),
-    onSuccess: () => { toast.success('SMTP config saved'); qc.invalidateQueries({ queryKey: ['alerts', 'smtp'] }) },
+    onSuccess: () => {
+      toast.success('SMTP config saved')
+      setDirty({})
+      qc.invalidateQueries({ queryKey: ['alerts', 'smtp'] })
+    },
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -223,23 +215,23 @@ function SMTPTab() {
     <SectionCard icon="mail" title="SMTP Email Alerts">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 560 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)}
+          <input type="checkbox" checked={enabled} onChange={e => setDirty(d => ({ ...d, enabled: e.target.checked }))}
             style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }} />
           <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>Enable SMTP email alerts</span>
         </label>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 12 }}>
           <Field label="SMTP Host">
-            <input value={host} onChange={e => setHost(e.target.value)} placeholder="smtp.gmail.com" className="input" />
+            <input value={host} onChange={e => setDirty(d => ({ ...d, host: e.target.value }))} placeholder="smtp.gmail.com" className="input" />
           </Field>
           <Field label="Port">
-            <input type="number" value={port} onChange={e => setPort(e.target.value)} className="input" min={1} max={65535} />
+            <input type="number" value={port} onChange={e => setDirty(d => ({ ...d, port: e.target.value }))} className="input" min={1} max={65535} />
           </Field>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Username">
-            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="user@example.com" className="input" autoComplete="off" />
+            <input value={username} onChange={e => setDirty(d => ({ ...d, username: e.target.value }))} placeholder="user@example.com" className="input" autoComplete="off" />
           </Field>
           <Field label="Password">
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="input" autoComplete="new-password" />
@@ -247,11 +239,11 @@ function SMTPTab() {
         </div>
 
         <Field label="From Address" hint="Sender address shown in received emails">
-          <input value={from} onChange={e => setFrom(e.target.value)} placeholder="dplaneos@example.com" className="input" />
+          <input value={from} onChange={e => setDirty(d => ({ ...d, from: e.target.value }))} placeholder="dplaneos@example.com" className="input" />
         </Field>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <input type="checkbox" checked={tls} onChange={e => setTls(e.target.checked)}
+          <input type="checkbox" checked={tls} onChange={e => setDirty(d => ({ ...d, tls: e.target.checked }))}
             style={{ width: 15, height: 15, accentColor: 'var(--primary)', cursor: 'pointer' }} />
           <span style={{ fontSize: 'var(--text-sm)' }}>Use TLS/STARTTLS</span>
         </label>

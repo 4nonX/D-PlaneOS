@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import type React from 'react'
 import { useToastStore, type Toast } from '@/hooks/useToast'
 import { Icon } from './Icon'
 
@@ -86,7 +87,7 @@ export function ToastContainer() {
         position: 'fixed',
         top: 'calc(var(--topbar-height) + 14px)',
         right: '20px',
-        zIndex: 'var(--z-toast)' as any,
+        zIndex: 'var(--z-toast)' as React.CSSProperties['zIndex'],
         display: 'flex', flexDirection: 'column', gap: 8,
         pointerEvents: 'none'}}
     >

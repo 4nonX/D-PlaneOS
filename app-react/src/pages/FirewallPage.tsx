@@ -208,7 +208,7 @@ export function FirewallPage() {
 
   const diffQ = useQuery({
     queryKey: ['nixos', 'diff-intent'],
-    queryFn: () => api.get<{ changes: any[] }>('/api/nixos/diff-intent'),
+    queryFn: () => api.get<{ changes: Array<{ path: string; to: unknown; from: unknown }> }>('/api/nixos/diff-intent'),
   })
 
   const reconcileM = useMutation({
@@ -233,8 +233,8 @@ export function FirewallPage() {
         try {
           await reconcileM.mutateAsync()
           toast.success('Changes applied to kernel successfully')
-        } catch (e: any) {
-          toast.error(`Reconciliation failed: ${e.message}`)
+        } catch (e: unknown) {
+          toast.error(`Reconciliation failed: ${e instanceof Error ? e.message : String(e)}`)
         }
       } else {
         toast.success('Rule staged in configuration. Remember to Reconcile to apply changes.')

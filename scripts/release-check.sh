@@ -57,7 +57,8 @@ if [ "$PREV_TAG" != "none" ]; then
     GITOPS_CODE_CHANGED=$(git diff "$PREV_TAG"..HEAD -- daemon/internal/gitops/ | wc -l)
     GITOPS_DOC_CHANGED=$(git diff  "$PREV_TAG"..HEAD -- docs/admin/GITOPS-DRIVEN-NAS.md docs/reference/GITOPS-REFERENCE.md | wc -l)
     if [ "$GITOPS_CODE_CHANGED" -gt 0 ] && [ "$GITOPS_DOC_CHANGED" -eq 0 ]; then
-        echo "⚠️ WARNING: GitOps code changed since $PREV_TAG but docs/admin/GITOPS-DRIVEN-NAS.md was not updated."
+        echo "❌ ERROR: GitOps code changed since $PREV_TAG but docs/admin/GITOPS-DRIVEN-NAS.md was not updated."
+        exit 1
     fi
 
     # General: at least one .md in docs/ must be modified (CHANGELOG alone satisfies this).

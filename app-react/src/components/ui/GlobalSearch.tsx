@@ -112,7 +112,7 @@ function scoreMatch(query: string, text: string): number {
   if (t.startsWith(q)) return 85
 
   // Word/token boundary matches
-  const words = t.split(/[\s/\-_\.]+/).filter(Boolean)
+  const words = t.split(/[\s/_.-]+/).filter(Boolean)
   if (words.some(w => w.startsWith(q))) return 72
 
   // Acronym: first letter of each word
@@ -154,6 +154,11 @@ interface GlobalSearchProps {
 export function GlobalSearch({ onClose }: GlobalSearchProps) {
   const [query, setQuery]       = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
+
+  function handleQueryChange(q: string) {
+    setQuery(q)
+    setActiveIdx(0)
+  }
   const inputRef   = useRef<HTMLInputElement>(null)
   const listRef    = useRef<HTMLUListElement>(null)
   const panelRef   = useRef<HTMLDivElement>(null)
@@ -333,22 +338,17 @@ export function GlobalSearch({ onClose }: GlobalSearchProps) {
   // ── Flatten sections to a flat index for keyboard navigation ──
   const flatResults = allResults // sections already flattened
 
-  // Reset active index on query change
-  useEffect(() => { setActiveIdx(0) }, [query])
-
-  // Clamp active index when results shrink
-  useEffect(() => {
-    setActiveIdx(i => Math.min(i, Math.max(flatResults.length - 1, 0)))
-  }, [flatResults.length])
+  // Clamp active index when results shrink - derived inline, no effect needed
+  const clampedActiveIdx = flatResults.length === 0 ? 0 : Math.min(activeIdx, flatResults.length - 1)
 
   // Focus input on mount
   useEffect(() => { inputRef.current?.focus() }, [])
 
   // Scroll active item into view
   useEffect(() => {
-    const item = listRef.current?.querySelector<HTMLElement>(`[data-flat-idx="${activeIdx}"]`)
+    const item = listRef.current?.querySelector<HTMLElement>(`[data-flat-idx="${clampedActiveIdx}"]`)
     item?.scrollIntoView({ block: 'nearest' })
-  }, [activeIdx])
+  }, [clampedActiveIdx])
 
   const select = useCallback((result: SearchResult) => {
     // Persist to recents for non-action/non-recent entries
@@ -369,7 +369,7 @@ export function GlobalSearch({ onClose }: GlobalSearchProps) {
       setActiveIdx(i => Math.max(i - 1, 0))
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      const r = flatResults[activeIdx]
+      const r = flatResults[clampedActiveIdx]
       if (r) select(r)
     }
   }
@@ -389,7 +389,7 @@ export function GlobalSearch({ onClose }: GlobalSearchProps) {
     containersQ.isFetching || sharesQ.isFetching
   )
 
-  const activeId = flatResults[activeIdx] ? `${listId}-opt-${activeIdx}` : undefined
+  const activeId = flatResults[clampedActiveIdx] ? `${listId}-opt-${clampedActiveIdx}` : undefined
 
   // Build a flat index counter across sections for aria and keyboard tracking
   let flatIdx = 0
@@ -448,7 +448,7 @@ export function GlobalSearch({ onClose }: GlobalSearchProps) {
             aria-label="Search pages, pools, containers, shares, or type a command"
             aria-autocomplete="list"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => handleQueryChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or run a command…"
             style={{
@@ -498,7 +498,7 @@ export function GlobalSearch({ onClose }: GlobalSearchProps) {
                   {/* Section items */}
                   {section.items.map(r => {
                     const myIdx = flatIdx++
-                    const isActive = myIdx === activeIdx
+                    const isActive = myIdx === clampedActiveIdx
                     return (
                       <li
                         key={r.id}

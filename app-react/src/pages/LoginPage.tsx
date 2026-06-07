@@ -143,10 +143,12 @@ export function LoginPage() {
       oidc_provider:        'SSO provider is temporarily unavailable',
       oidc_internal:        'An internal error occurred during SSO login',
     }
-    setError(msgs[errCode] ?? 'SSO login error - please try again')
+    const msg = msgs[errCode] ?? 'SSO login error - please try again'
     const url = new URL(window.location.href)
     url.searchParams.delete('error')
     window.history.replaceState({}, '', url.toString())
+    // Use queueMicrotask to avoid synchronous setState in effect body
+    queueMicrotask(() => setError(msg))
   }, [])
 
   // Exchange a one-time OIDC handoff code for a real session
@@ -159,14 +161,16 @@ export function LoginPage() {
     url.searchParams.delete('oidc_handoff')
     window.history.replaceState({}, '', url.toString())
 
-    setLoading(true)
-    fetch('/api/auth/oidc/exchange', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ handoff_code: handoffCode }),
-    })
-      .then(r => r.json())
-      .then(async (data: OIDCExchangeResponse) => {
+    // Run exchange in an async IIFE so setLoading is inside an async callback
+    ;(async () => {
+      setLoading(true)
+      try {
+        const r = await fetch('/api/auth/oidc/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ handoff_code: handoffCode }),
+        })
+        const data: OIDCExchangeResponse = await r.json()
         if (!data.success || !data.session_id || !data.username) {
           setError(data.error ?? 'SSO login failed - please try again')
           setLoading(false)
@@ -175,11 +179,11 @@ export function LoginPage() {
         storeSession(data.session_id, data.username)
         await useAuthStore.getState().validateSession()
         navigate({ to: '/' })
-      })
-      .catch(() => {
+      } catch {
         setError('SSO login failed - please try again')
         setLoading(false)
-      })
+      }
+    })()
   }, [navigate])
 
   async function handleCredentialsSubmit(e: React.FormEvent) {

@@ -5,7 +5,7 @@
  * active indicator, hover states, WS status glow.
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { NAV, findNavEntry, type NavGroup, type NavLeaf } from './navConfig'
 import { Icon } from '@/components/ui/Icon'
@@ -28,20 +28,18 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const wsStatus = useWsStore((s) => s.status)
 
   const activeEntry = findNavEntry(pathname)
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
-    const s = new Set<string>()
-    if (activeEntry?.groupId) s.add(activeEntry.groupId)
-    return s
-  })
+  // manuallyOpenedGroups tracks groups the user has explicitly toggled open/closed.
+  // The active group is always open regardless (derived inline below).
+  const [manuallyOpenedGroups, setManuallyOpenedGroups] = useState<Set<string>>(() => new Set<string>())
 
-  useEffect(() => {
-    const entry = findNavEntry(pathname)
-    if (entry?.groupId) setOpenGroups((prev) => new Set(prev).add(entry.groupId!))
-  }, [pathname])
+  // Always keep the active group open without needing an effect
+  const openGroups = new Set(manuallyOpenedGroups)
+  if (activeEntry?.groupId) openGroups.add(activeEntry.groupId)
 
   function toggleGroup(id: string) {
-    setOpenGroups((prev) => {
+    setManuallyOpenedGroups((prev) => {
       const next = new Set(prev)
+      // If this is the active group, only allow closing if it is in the manual set
       if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })

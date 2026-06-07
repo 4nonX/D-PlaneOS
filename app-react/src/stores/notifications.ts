@@ -59,27 +59,30 @@ export function initNotificationSubscribers() {
   const ws = useWsStore.getState()
   const notify = useNotificationsStore.getState().addNotification
 
-  ws.on('poolHealthChange', (data: any) => {
+  ws.on('poolHealthChange', (data: unknown) => {
+    const d = data as { health?: string; name?: string }
     notify({
-      type: data.health === 'ONLINE' ? 'success' : 'error',
-      title: `Pool Health: ${data.name}`,
-      message: `Status changed to ${data.health}`
+      type: d.health === 'ONLINE' ? 'success' : 'error',
+      title: `Pool Health: ${d.name ?? ''}`,
+      message: `Status changed to ${d.health ?? ''}`
     })
   })
 
-  ws.on('hardwareEvent', (data: any) => {
+  ws.on('hardwareEvent', (data: unknown) => {
+    const d = data as { message?: string; event?: string }
     notify({
       type: 'warning',
       title: 'Hardware Event',
-      message: data.message || `Event: ${data.event}`
+      message: d.message || `Event: ${d.event ?? ''}`
     })
   })
 
-  ws.on('gitopsDrift', (data: any) => {
+  ws.on('gitopsDrift', (data: unknown) => {
+    const d = data as { repo_url?: string }
     notify({
       type: 'warning',
       title: 'GitOps Drift Detected',
-      message: `System configuration has drifted from ${data.repo_url}`
+      message: `System configuration has drifted from ${d.repo_url ?? ''}`
     })
   })
 }

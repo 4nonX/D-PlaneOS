@@ -86,7 +86,7 @@ export function useFrozenLayout<T>(
     }
 
     // Only metrics changed: liveById updated silently, snapshot stays frozen
-  }, [data, keyFn, refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, keyFn, refreshKey])
 
   const forceRefresh = useCallback(() => {
     if (data !== undefined) {

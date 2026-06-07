@@ -227,8 +227,8 @@ function ACMEWizard({ onClose, onDone }: { onClose: () => void; onDone: () => vo
         setVerified(true)
         toast.success(resp.message)
       }
-    } catch (e: any) {
-      toast.error(e.message || 'Proxy verification failed')
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : String(e)) || 'Proxy verification failed')
     } finally {
       setVerifying(false)
     }

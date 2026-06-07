@@ -1,3 +1,4 @@
+import type { AnyRoute } from '@tanstack/react-router'
 import type { NavItem } from './components/layout/navConfig'
 
 // Open-source version has no injected enterprise plugins
@@ -13,12 +14,12 @@ export function pluginNavInject(_nav: NavItem[]) {}
  * Plugin extension point: inject additional Settings panel sections.
  * Return a React node to render inside the Settings page.
  */
-export function pluginSettingsInject(_setters: any) { return null }
+export function pluginSettingsInject(_setters: Record<string, unknown>) { return null }
 
 /**
  * Plugin extension point: inject additional protected routes.
  * Return an array of TanStack Router route objects.
  */
-export function getPluginRoutes(_protectedRoute: any): any[] {
+export function getPluginRoutes(_protectedRoute: AnyRoute): AnyRoute[] {
   return []
 }
