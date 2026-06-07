@@ -1,51 +1,75 @@
 # DPlaneOS High Availability Guide
 
-Run a full HA NAS on two mini-PCs and a shared disk shelf, no third box required. On shared-SAS and shared-block topologies where the disks support SCSI-3 Persistent Reservations, DPlaneOS enforces split-brain protection at the disk-controller level, eliminating the need for a separate witness machine. On replicated or stretched-ZFS topologies where the two nodes do not share physical storage, a lightweight witness node is still the recommended approach.
+Run a full HA NAS on two mini-PCs and a shared disk shelf, no third box required. DPlaneOS supports two distinct HA topologies depending on the hardware available. Both are first-class paths with dedicated wizard workflows and matching dissolution procedures.
 
 **HA is optional and off by default.** A freshly installed DPlaneOS node runs as a fully functional standalone system: all storage, shares (SMB/NFS), iSCSI, NVMe-oF, Docker, and monitoring features work without HA. Enable HA only when unplanned downtime is unacceptable and you have a second node ready.
 
-**Enabling and disabling HA:** The HA on/off toggle is on the Settings - High Availability page. Turning HA on triggers a NixOS configuration rebuild to activate the cluster agent, Keepalived VIP, Patroni, and fencing services. Turning it off reverses this. The system remains fully operational in either state - disabling HA does not affect stored data, pools, or shares.
+**Enabling and disabling HA:** The HA on/off toggle is on the Settings - High Availability page. Turning HA on triggers a NixOS configuration rebuild to activate the cluster agent, Keepalived VIP, Patroni, and fencing services. Turning it off reverses this. The system remains fully operational in either state.
 
-Before reading further, review [ARCHITECTURE.md](../reference/ARCHITECTURE.md#multi-node-ha-architecture) for the overall system model. HA adds infrastructure complexity; it is the right choice when unplanned downtime is unacceptable, not as a default for every deployment.
+Before reading further, review [ARCHITECTURE.md](../reference/ARCHITECTURE.md#multi-node-ha-architecture) for the overall system model.
 
 ---
 
 ## Deployment Topologies
 
-Two supported paths. Choose based on how the storage is connected.
+Two supported paths. The **Setup Wizard** (Settings - High Availability - Setup Wizard) auto-detects which path applies to your hardware and shows only the relevant steps.
 
-| Topology | Machines required | Fencing mechanism | When to use |
-|----------|-------------------|-------------------|-------------|
-| **Shared-SAS / shared-block** | 2 data nodes | SCSI-3 Persistent Reservations | Two nodes connected to one DAS shelf or SAN LUN; disks physically accessible from both nodes simultaneously |
-| **Replicated / stretched-ZFS** | 2 data nodes + 1 witness | IPMI or SBD | Nodes in separate enclosures with ZFS send/recv replication; no shared physical disk path |
+| | **Path A': Shared Storage** | **Path B: Replicated ZFS** |
+|---|---|---|
+| Hardware | SAS JBOD, SAN LUN, or NVMe-oF fabric | Any - SATA, NVMe, network-attached |
+| Storage protection | SCSI-3 PR disk reservation (hardware arbiter) | ZFS replication + watchdog self-fence |
+| Third node required | No - co-located etcd witness on Node A | Recommended (RPi, VM) for witness |
+| RPO | Zero - single shared pool, no replication lag | Non-zero - up to one replication interval |
+| Dissolution | Clean - disable HA, pool stays on survivor, no migration | Requires choosing canonical copy |
+| Fencing method | SCSI-3 PR (primary) + watchdog floor | Watchdog (primary) + IPMI/PDU |
 
-If you are running two mini-PCs against a single JBODs or a dual-controller array, use Path A. If the nodes are in separate racks or buildings and connected only by network replication, use Path B.
+**If you are running two nodes against a single JBOD or dual-controller array**, use Path A'. If the nodes are in separate enclosures connected only by network, use Path B.
+
+The Setup Wizard scans your hardware at Step 1 and recommends the appropriate path. You can override the detection manually.
 
 ---
 
-## Path A: Two-Node HA on Shared Storage (SCSI-3 PR)
+## Hardware Topology Detection
 
-### Why this works without a witness
+```
+GET /api/ha/hardware/detect
+```
 
-The traditional witness exists to break the symmetry of a network partition: when node A loses contact with node B, A cannot tell whether B is dead or whether A itself is the isolated side. A witness is an external observer both nodes can try to reach.
+Non-destructive scan returning:
+- `watchdog_available` / `watchdog_device` - whether `/dev/watchdog` is present
+- `fenced_running` / `fenced_devices` - dplane-fenced reservation state
+- `pool_sg_devices` - SCSI generic devices found in current ZFS pools
+- `provisional_path` - `shared_storage` or `replicated`
+- `provisional_reason` - explanation of the recommendation
+- `probe_required` - whether a full PROUT write probe is needed to confirm PR support
 
-SCSI-3 Persistent Reservations replace that logical referee with a physical one. The shared disks hold a Write Exclusive Registrants Only (WERO) reservation on behalf of the current primary. When the surviving node executes `FencedPreempt`, the disk controller evicts the failed node's registration and rejects its I/O with a RESERVATION CONFLICT sense key, regardless of what the failed node believes about its own status. The disk firmware is the arbiter, not a software vote. Split-brain at the storage layer becomes physically impossible: the faulted node cannot corrupt shared state because the controller refuses its writes below the OS.
+This endpoint does not write to disks. The **PROUT write probe** (the only reliable PR capability test) is a separate operator-triggered action via `POST /api/ha/scsi/probe`.
 
-This is the same mechanism used by dual-controller arrays, Veritas Cluster, Pacemaker with `fence_scsi`, and VMware HA. On shared-SAS topologies it is the industry-standard answer for a reason.
+---
 
-**Database coordination layer (Patroni/etcd):** SCSI-3 PR handles the storage split-brain question. Patroni's etcd cluster still benefits from an odd number of members to reliably elect a PostgreSQL primary. On a two-machine deployment, run a co-located etcd witness member on one of the two data nodes (a second etcd process on a different port and data directory). It consumes roughly 64 MB of RAM and requires no additional machine.
+## Path A': Two-Node HA on Shared Storage (SCSI-3 PR + Watchdog)
+
+### Why this works without a third node
+
+SCSI-3 Persistent Reservations replace the logical quorum referee with a physical one. The shared disks hold a Write Exclusive Registrants Only (WERO) reservation on behalf of the current primary. When the surviving node calls `FencedPreempt`, the disk controller evicts the failed node's registration and rejects its I/O with RESERVATION CONFLICT - regardless of what the failed node believes about its own status. The disk firmware is the arbiter, not a software vote. Split-brain at the storage layer is physically impossible: the faulted node cannot corrupt shared state because the controller refuses its writes below the OS.
+
+The hardware watchdog is the complementary floor: if this node loses quorum and cannot reach any witness, it stops petting `/dev/watchdog` and the kernel hard-resets the node after the timeout. This removes the BMC/PDU network-reachability requirement from fencing. See [Hardware Watchdog Self-Fence](#hardware-watchdog-self-fence) below.
+
+**Database coordination (Patroni/etcd):** SCSI-3 PR handles the storage split-brain question. Patroni's etcd cluster benefits from an odd number of members. On a two-machine deployment, run a co-located etcd witness member on Node A (a second etcd process on port 2381). This three-member etcd cluster (A, B, witness-on-A) gives Patroni quorum with no additional machine.
 
 ### Prerequisites
 
 - Two physical machines with identical NIC and disk configurations
 - A shared SAS JBOD, SAS expander, or SAN LUN accessible from both nodes simultaneously
-- Disks that support SCSI-3 Persistent Reservations. Verify before starting:
-  ```bash
-  sg_persist --in -k /dev/sdX
-  # Should return a key list, not an error. An error means PR is not supported.
+- Disks that support SCSI-3 PR write operations - **verify with the PROUT round-trip probe, not a read-only check:**
   ```
+  POST /api/ha/scsi/probe
+  ```
+  or from the UI: Settings - High Availability - SCSI-3 Persistent Reservations - Probe PR Support on Pool Disks.
+  The probe registers a test key, reads it back, and unregisters. A drive that responds to READ KEYS but rejects REGISTER fails silently here, rather than at failover time.
 - Static IP addresses for both nodes and one VIP address
-- SSH access to both nodes
+
+> **NVMe-oF note:** Enterprise NVMe-oF fabric targets support NVMe reservations (spec 1.3+). The PROUT probe does not apply to NVMe devices; use `nvme resv-register` to validate NVMe reservation support on fabric targets. Consumer M.2 NVMe does not support reservations and belongs on Path B.
 
 ### Architecture
 
@@ -57,7 +81,8 @@ This is the same mechanism used by dual-controller arrays, Veritas Cluster, Pace
   │  Patroni (PG primary)     │  HA    │  Patroni (PG replica)     │
   │  etcd member A            │  peer  │  etcd member B            │
   │  etcd witness (co-located)│        │                           │
-  │  dplane-fenced            │        │  dplane-fenced            │
+  │  dplane-fenced (PR held)  │        │  dplane-fenced            │
+  │  /dev/watchdog (petting)  │        │  /dev/watchdog (petting)  │
   │  Keepalived (VIP owner)   │        │  Keepalived (BACKUP)      │
   └──────────┬───────────────┘        └──────────┬───────────────┘
              │                                    │
@@ -71,26 +96,26 @@ This is the same mechanism used by dual-controller arrays, Veritas Cluster, Pace
                     └────────────────┘
 ```
 
-On failover: node B calls `FencedPreempt` for each disk. The controller evicts A's registration. B's ZFS gate imports the pools. Patroni promotes B's PostgreSQL. VIP moves. Total RTO: 10-30 seconds.
+On failover: Node B calls `FencedPreempt` for each disk. The controller evicts A's registration. B's ZFS gate imports the pools. Patroni promotes B's PostgreSQL. VIP moves. Total RTO: 10-30 seconds.
+
+**Dissolution:** Disable HA from the dashboard. This node keeps the pool imported with every byte intact. No replication lag, no canonical-copy decision, no data migration. The second node can be repurposed immediately.
 
 ### Installation
 
 #### Step 1: Install DPlaneOS on both nodes
 
-Install from the ISO on each machine. Complete first-boot setup and verify both nodes are healthy single-node systems before proceeding. Do not configure pools on the standby yet.
+Install from the ISO on each machine. Complete first-boot setup and verify both nodes are healthy standalone systems before proceeding.
 
 #### Step 2: Wire the NixOS HA module
-
-On each node, add the HA block to `configuration.nix`. The co-located etcd witness runs by pointing `witnessAddress` to node A's IP with a separate etcd instance (port 2381) on that same node. This three-member etcd cluster (A, B, witness-on-A) gives Patroni the quorum it needs with no third machine.
 
 ```nix
 services.dplaneos.ha = {
   enable = true;
-  role   = "primary";    # "secondary" on node B
+  role   = "primary";    # "secondary" on Node B
 
   localAddress   = "NODE_A_IP";
   peerAddress    = "NODE_B_IP";
-  witnessAddress = "NODE_A_IP";  # co-located on node A; see etcd note below
+  witnessAddress = "NODE_A_IP";  # co-located on Node A; see etcd note above
 
   etcdEndpoints = [
     "http://NODE_A_IP:2379"
@@ -98,8 +123,11 @@ services.dplaneos.ha = {
     "http://NODE_A_IP:2381"    # co-located witness etcd member
   ];
 
-  # No fence options needed for SCSI-3 PR.
-  # dplane-fenced.service manages PR keys automatically via the fenced module.
+  # Hardware watchdog self-fence (recommended - removes BMC requirement)
+  watchdog = {
+    enable      = true;
+    timeoutSecs = 30;   # must be < failover_after_seconds in timing config
+  };
 
   virtualIP    = "VIP_ADDRESS";
   interface    = "eth0";
@@ -112,20 +140,26 @@ Apply on each node:
 sudo nixos-rebuild switch
 ```
 
-#### Step 3: Verify SCSI-3 reservation acquisition
-
-On the primary node, confirm `dplane-fenced` holds the reservation on all shared disks via the API:
+#### Step 3: Verify SCSI-3 PR support with the PROUT probe
 
 ```
-GET /api/ha/fenced/status
+POST /api/ha/scsi/probe
 ```
 
-This returns the registered key for this node and the list of devices currently holding a WERO reservation.
+The probe auto-enumerates pool disks and runs the full write round-trip on each. Check that all devices show `"supported": true`. Any device showing `"supported": false` will fail to fence at failover time and must be replaced or the cluster moved to Path B.
 
-#### Step 4: Check Patroni and etcd
+#### Step 4: Check dplane-fenced reservation status
+
+```
+GET /api/ha/scsi/status
+```
+
+Returns `"running": true`, the reservation key, and the list of currently reserved `/dev/sgN` devices. All ZFS pool member disks should appear in the list.
+
+#### Step 5: Verify Patroni and etcd
 
 ```bash
-# On any node - all three etcd members should be healthy
+# All three etcd members should be healthy
 etcdctl --endpoints=http://NODE_A_IP:2379,http://NODE_B_IP:2379,http://NODE_A_IP:2381 endpoint health
 
 # Patroni cluster state
@@ -142,23 +176,9 @@ Expected Patroni output:
 +--------+--------------+---------+---------+----+-----------+
 ```
 
-#### Step 5: Verify HAProxy and VIP
-
-```bash
-# Patroni primary check (also used internally by HAProxy) - 200 on primary, 503 on standby
-curl http://localhost:8008/primary
-
-# HAProxy routes PostgreSQL connections - confirm it is up
-curl http://localhost:5000 2>/dev/null || systemctl status haproxy
-
-# VIP is on the primary
-ip addr show eth0 | grep VIP_ADDRESS
-```
-
 #### Step 6: Verify ZFS split-brain gate
 
 On the standby, ZFS pools must not be imported:
-
 ```bash
 zpool list          # should show no pools on the standby
 systemctl status dplaneos-zfs-gate
@@ -166,14 +186,16 @@ systemctl status dplaneos-zfs-gate
 
 ---
 
-## Path B: Three-Node HA with Witness
+## Path B: Two-Node HA with Replicated ZFS
 
 Use this path when:
 - The two data nodes do not share physical storage (ZFS send/recv replication between them)
-- Disks do not support SCSI-3 PR
-- IPMI BMC or SBD fencing is preferred over PR
+- Disks do not support SCSI-3 PR (consumer SATA, NVMe without fabric)
+- IPMI BMC, PDU, or SBD fencing is preferred
 
-The witness is a lightweight third node (Raspberry Pi 4, spare VM, or x86 mini PC with 512 MB RAM) that acts as the external quorum referee. It runs only etcd; it carries no NAS traffic and has no ZFS.
+**RPO is non-zero.** The standby holds ZFS snapshots replicated from the primary. It lags by up to the replication interval. Before disabling HA on a replicated cluster, compare ZFS TXG values on both nodes to identify the canonical copy. The UI prompts you to confirm the lag before tearing down the replication link.
+
+The witness is a lightweight third node (Raspberry Pi 4, spare VM, or x86 mini-PC with 512 MB RAM) that acts as an external quorum referee. It runs only etcd. The hardware watchdog on each data node uses the witness to distinguish a live partition from a dead peer before self-fencing - without a witness, the watchdog cannot safely distinguish "peer died" from "I am the isolated side."
 
 ### Architecture
 
@@ -184,37 +206,38 @@ The witness is a lightweight third node (Raspberry Pi 4, spare VM, or x86 mini P
   │  dplaned          │        │  dplaned          │
   │  Patroni (leader) │  ZFS   │  Patroni (replica)│
   │  etcd member A    │  repl  │  etcd member B    │
+  │  /dev/watchdog    │        │  /dev/watchdog    │
   │  Keepalived (VIP) │        │                   │
   └────────┬──────────┘        └────────┬──────────┘
            │                            │
            └──────────┬─────────────────┘
-                      │ etcd peer links
+                      │ etcd + witness probes
               ┌───────┴────────┐
               │  Witness node   │
               │  etcd member    │
-              │  (vote only)    │
+              │  (vote + probe) │
               └────────────────┘
 ```
 
-When node A fails, node B and the witness form etcd quorum (2 of 3). Fencing (IPMI or SBD) ensures node A cannot write before B promotes.
+When Node A fails, Node B and the witness form etcd quorum (2 of 3). The watchdog self-fences Node A if it loses quorum and cannot reach the witness. Node B then promotes.
 
 ### Prerequisites
 
 - Two data nodes plus one witness machine (512 MB RAM, 4 GB disk minimum)
-- For IPMI fencing: BMC interfaces on both data nodes reachable from the other
-- For SBD fencing: a shared block device (zvol or iSCSI LUN) accessible from both data nodes
-- Static IPs for all three machines and one VIP
+- Watchdog device available on both data nodes (`/dev/watchdog` - present on most x86 and ARM SoCs; `softdog` kernel module is loaded automatically as fallback)
+- At least one witness configured so the watchdog can safely distinguish partition from dead peer
+- For IPMI fencing: BMC interfaces on both data nodes reachable from the other (optional, secondary to watchdog)
+- For SBD fencing: a shared block device accessible from both data nodes (optional, secondary to watchdog)
 
 ### Installing the Witness Node
 
 **Option A: Installer ISO (recommended)**
 
-Download `dplaneos-vX.Y.Z-installer-amd64.iso` (or `...-arm64.iso`) from the [releases page](https://github.com/4nonX/DPlaneOS/releases/latest) and boot the witness machine from it. Select "Install Witness Node." The wizard prompts for the three node IPs, an SSH key, and the target disk.
+Download `dplaneos-vX.Y.Z-installer-amd64.iso` from the [releases page](https://github.com/4nonX/DPlaneOS/releases/latest) and boot the witness machine from it. Select "Install Witness Node."
 
 **Option B: NixOS flake**
 
 ```nix
-# /etc/nixos/configuration.nix on the witness machine
 { ... }:
 {
   imports = [ /path/to/DPlaneOS/nixos/patroni-witness.nix ];
@@ -228,17 +251,11 @@ Download `dplaneos-vX.Y.Z-installer-amd64.iso` (or `...-arm64.iso`) from the [re
 
   networking.hostName = "dplaneos-witness";
   time.timeZone       = "UTC";
-
   boot.loader.systemd-boot.enable      = true;
   boot.loader.efi.canTouchEfiVariables = true;
-
   users.users.root.openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAA..." ];
   system.stateVersion = "26.05";
 }
-```
-
-```bash
-sudo nixos-rebuild switch
 ```
 
 ### Configuring the Data Nodes
@@ -246,7 +263,7 @@ sudo nixos-rebuild switch
 ```nix
 services.dplaneos.ha = {
   enable = true;
-  role   = "primary";    # "secondary" on node B
+  role   = "primary";    # "secondary" on Node B
 
   localAddress   = "NODE_A_IP";
   peerAddress    = "NODE_B_IP";
@@ -258,15 +275,22 @@ services.dplaneos.ha = {
     "http://WITNESS_IP:2379"
   ];
 
+  # Hardware watchdog self-fence (critical on Path B - primary fencing mechanism)
+  watchdog = {
+    enable      = true;
+    timeoutSecs = 30;
+  };
+
+  # IPMI fencing (optional secondary - watchdog fires first)
   fencing = {
     enable          = true;
     bmcIP           = "PEER_BMC_IP";
     bmcUser         = "admin";
     bmcPasswordFile = "/etc/dplaneos/ipmi-fence.pw";
   };
-  # SBD alternative (ZFS dataset-based, set fencing.enable = false):
+  # SBD alternative (set fencing.enable = false if using SBD instead of IPMI):
   # sbd.pool    = "tank";
-  # sbd.dataset = "sbd-lease";   # optional, defaults to "sbd-lease"
+  # sbd.dataset = "sbd-lease";
 
   virtualIP    = "VIP_ADDRESS";
   interface    = "eth0";
@@ -274,7 +298,87 @@ services.dplaneos.ha = {
 };
 ```
 
-**Note on SBD without a witness:** SBD alone in a two-node cluster cannot distinguish "peer failed" from "I am the isolated side." Always pair SBD with the witness node in this topology.
+**Why watchdog is critical on Path B:** Without SCSI-3 PR, there is no hardware-level write exclusivity. The watchdog self-fence ensures a partitioned node resets itself before the survivor promotes - as long as a witness is configured to let the watchdog distinguish "I am isolated" from "peer died." Without a witness, the watchdog cannot safely self-fence in a two-node cluster (see [Hardware Watchdog Self-Fence](#hardware-watchdog-self-fence)).
+
+**Dissolution:** The standby snapshot may lag behind the primary. Before disabling HA, compare ZFS TXG on both nodes to confirm which side has the most recent data:
+```bash
+zfs get -H -p txg <pool>   # run on each node; higher TXG = more recent
+```
+The UI prompts you to confirm before tearing down the replication link.
+
+---
+
+## Hardware Watchdog Self-Fence
+
+The hardware watchdog removes the BMC/PDU network-reachability assumption from fencing. Instead of requiring the survivor to reach and power off the peer, the loser resets itself via local kernel hardware.
+
+### How it works
+
+The daemon writes to `/dev/watchdog` on every heartbeat tick while the cluster has quorum. If quorum is lost, the daemon stops writing. The kernel resets the node after the timeout if petting is not resumed.
+
+**Isolation detection (safe two-node behavior):** The watchdog does not stop petting simply because the peer is unreachable. It stops only when:
+1. Quorum is lost (peer unreachable), AND
+2. At least one witness is configured, AND
+3. All configured witnesses are unreachable
+
+Without a witness configured, or when any witness is reachable, the watchdog keeps petting - indicating this node has network connectivity and is not the isolated side. This prevents the survivor from accidentally self-fencing when the peer simply dies without a partition.
+
+**Timing invariant:** `watchdog_timeout_secs` must be less than `failover_after_seconds` (from timing config). This guarantees the loser has fully reset before the survivor's failover threshold fires and begins promotion.
+
+### Driver
+
+On NixOS with `ha.watchdog.enable = true`, the `softdog` kernel module is loaded automatically as a fallback when no hardware watchdog driver is present. Hardware watchdog drivers (iTCO_wdt for Intel, sp5100_tco for AMD, bcm2835_wdt for Raspberry Pi) take precedence when the hardware is present.
+
+Verify the device is available:
+```bash
+ls -la /dev/watchdog   # or /dev/watchdog0
+systemctl status systemd-watchdog
+```
+
+### Configuration
+
+Via Settings - High Availability - Hardware Watchdog, or API:
+```
+GET  /api/ha/watchdog/configure
+POST /api/ha/watchdog/configure   (AAL2 required)
+```
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `enable` | false | Arms the watchdog; takes effect immediately in the running daemon |
+| `device` | `/dev/watchdog` | Device path; change requires daemon restart |
+| `timeout_secs` | 30 | Kernel resets node if not pet within this interval; must be < `failover_after_seconds` |
+| `pet_interval_sec` | 10 | How often the daemon writes to the device; must be < `timeout_secs` |
+
+---
+
+## SCSI-3 PR Capability Probe
+
+**Use the write probe, not a read-only check.** `sg_persist --in -k` and similar PRIN-only tests verify that the drive responds to read commands, but many drives (particularly SATA behind SAT translation layers, and some enterprise SATA SSDs) respond to PRIN while silently rejecting PROUT REGISTER. A cluster built on a false-positive PRIN result appears healthy but fails to fence during a real partition.
+
+The correct probe runs a full write round-trip:
+1. PROUT REGISTER - register a test key
+2. PRIN READ KEYS - verify the test key appears
+3. PROUT REGISTER (unregister) - clean up
+
+This proves the drive accepts write-side PR commands before you trust your split-brain protection to them.
+
+```
+POST /api/ha/scsi/probe
+{"devices": ["/dev/sg0", "/dev/sg1"]}   // optional; empty = auto-enumerate pool disks
+```
+
+Response includes per-device `supported: true/false` and exact firmware error text for any rejected device.
+
+**SATA hardware note:** Consumer SATA HDDs and SSDs do not support SCSI-3 PR. Enterprise SATA drives (Seagate Exos, WD Gold) occasionally do, but this depends on the specific SAT firmware implementation and must be verified with the write probe - not assumed. SATA drives behind a SAS HBA may or may not forward PROUT through the SAT layer, and when they do, the reservation is enforced by the HBA rather than the drive itself. If the write probe fails, move to Path B.
+
+### Checking live reservation state
+
+```
+GET /api/ha/scsi/status
+```
+
+Returns `"running": true/false`, the 8-byte reservation key currently in use, and the list of `/dev/sgN` devices holding active WERO reservations. Available from the UI under Settings - High Availability - SCSI-3 Persistent Reservations.
 
 ---
 
@@ -299,112 +403,118 @@ GET /api/ha/status
 }
 ```
 
-Also available in the UI under Settings: High Availability.
+Also available in the UI under Settings - High Availability.
 
 ### Manual Failover
-
-To fail over intentionally (e.g., for maintenance):
 
 ```bash
 # Graceful switchover via Patroni (no data loss)
 patronictl -c /etc/dplaneos/patroni.yaml switchover dplaneos
 
 # Or via the daemon API
-POST /api/ha/failover
-{"reason": "planned maintenance", "dry_run": false}
+POST /api/ha/switchover
 ```
 
-Patroni stops writes on the current primary, waits for the replica to fully catch up, promotes it, then demotes the old primary to replica. HAProxy and Keepalived detect the change within 2 seconds and the VIP moves.
+Patroni stops writes on the current primary, waits for the replica to catch up, promotes it, then demotes the old primary to replica. HAProxy and Keepalived detect the change within 2 seconds and the VIP moves.
 
 ### Maintenance Mode
 
-Maintenance mode suppresses automatic failover for a node:
-
+Suppresses automatic failover for a configurable duration:
 ```
 POST /api/ha/maintenance
-{"enable": true, "duration_minutes": 60}
+{"seconds": 1800}
 ```
 
-Enable this before rebooting or making changes to prevent a false-positive automated failover.
+Enable before rebooting or making changes to prevent false-positive automated failover. Auto-resumes after the timeout.
+
+### Tuning Cluster Timing
+
+```
+GET  /api/ha/timing
+POST /api/ha/timing   (AAL2 required)
+```
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `failover_after_seconds` | 45 | Peer must be unreachable this long before STONITH fires; minimum `heartbeat * 3` |
+| `heartbeat_interval_seconds` | 15 | How often nodes ping each other; takes effect after daemon restart |
+| `hysteresis_window_minutes` | 60 | Auto-failover suppressed for this long after a failover; takes effect immediately |
+
+If watchdog is enabled: `timeout_secs` must be less than `failover_after_seconds`. The recommended margin is at least `2 * heartbeat_interval_seconds` above the watchdog timeout.
 
 ### Rolling OTA Update (zero downtime)
 
-1. Put node B (standby) in maintenance mode
-2. Trigger OTA on node B: `sudo dplaneos-ota-update` (or via Settings - System - Updates in the web UI)
+1. Put Node B (standby) in maintenance mode
+2. Trigger OTA on Node B: Settings - System - Updates
 3. Node B reboots into the new system slot
-4. Verify node B is healthy: `GET /api/ha/status` from node B
-5. Switchover to node B: `POST /api/ha/failover`
-6. Put node A in maintenance mode
-7. Trigger OTA on node A
-8. Node A reboots and rejoins as standby on the new version
+4. Verify Node B is healthy: `GET /api/ha/status` from Node B
+5. Switchover to Node B: `POST /api/ha/switchover`
+6. Put Node A in maintenance mode
+7. Trigger OTA on Node A
+8. Node A reboots and rejoins as standby
 
 See also [OTA-UPDATES.md](OTA-UPDATES.md#ha-rolling-upgrade).
 
+### Quorum-Aware GitOps Reconciler
+
+When HA is enabled, the GitOps reconciler checks quorum before executing any pool ownership operation (pool create, reshape, destroy). If this node has no quorum, those operations are deferred to the next reconcile cycle rather than failing.
+
+This is a software-level guard that prevents an isolated node from acting on Git-desired state that says "create/import this pool." On Path A' (shared-SAS), SCSI-3 PR is the hardware backstop; on Path B (replicated), this guard is the primary software protection before an isolated node acts on pool declarations.
+
+Operations that are safe to run without quorum (dataset property changes, SMB/NFS shares, Docker stacks, user/group config) proceed normally on isolated nodes.
+
 ### Recovering from Node Failure
 
-When node A fails:
+When Node A fails:
 
 1. Patroni detects the failure via etcd membership loss
-2. etcd quorum is maintained by node B + the third member (witness or co-located)
-3. Fencing executes:
-   - **SCSI-3 PR:** Node B's `dplane-fenced` calls `FencedPreempt` for each shared disk. The controller evicts node A's registration; A's I/O is rejected at the controller with RESERVATION CONFLICT.
-   - **IPMI:** Node B powers off node A via its BMC, then waits for power confirmation.
+2. etcd quorum is maintained by Node B + the third member
+3. Fencing executes in order:
+   - **Hardware watchdog (if enabled):** Node A stops petting its watchdog (quorum lost, witnesses unreachable) and the kernel resets it after the timeout. Node B waits the guaranteed interval before promoting.
+   - **SCSI-3 PR (Path A'):** Node B's `dplane-fenced` calls `FencedPreempt` for each shared disk. The controller evicts Node A's registration; A's I/O is rejected with RESERVATION CONFLICT.
+   - **IPMI:** Node B powers off Node A via its BMC.
    - **SBD:** Node A's lease expires; it is treated as fenced.
-4. Patroni promotes node B's PostgreSQL
-5. HAProxy and Keepalived detect the new primary; VIP moves to node B
-6. Node B's ZFS gate imports the pools via `libzfs.PoolImportAll`; dataset `readonly` property and clone origins are updated
+4. Patroni promotes Node B's PostgreSQL
+5. HAProxy and Keepalived detect the new primary; VIP moves to Node B
+6. Node B's ZFS gate imports the pools
 7. The daemon reconnects to PostgreSQL (now local) and resumes operations
 
 Total RTO: approximately 10-30 seconds.
 
-**Client behavior during failover:** This is a stop-the-world failover, not live migration. NFS and SMB clients lose their connections when the VIP moves. Connections are not transferred. Clients will receive errors and reconnect automatically when the VIP is reachable on node B. Most NFS clients retry transparently within seconds; SMB clients show a brief reconnect dialog. Active byte-range locks (file locking) are not preserved across failover. Applications that depend on lock state continuity (database files over SMB, Outlook PSTs) will see lock loss and may need recovery. This is an inherent property of VIP-based active-passive failover: it is reconnect-on-failover, not transparent migration.
+**Client behavior during failover:** NFS and SMB clients lose their connections when the VIP moves and reconnect automatically. Active byte-range locks are not preserved. Applications that depend on lock state continuity across failover will need recovery. This is an inherent property of VIP-based active-passive failover.
 
-When node A is repaired and reboots, it rejoins as a Patroni replica, streams missing WAL from node B, and waits in standby with pools unmounted. To fail back:
-
+When Node A is repaired and reboots, it rejoins as a Patroni replica, streams missing WAL from Node B, and waits in standby with pools unmounted. To fail back:
 ```bash
 patronictl -c /etc/dplaneos/patroni.yaml switchover dplaneos --primary node-b --candidate node-a
 ```
 
 ### iSCSI ALUA and NVMe-oF ANA Path State Management
 
-For deployments with ALUA-enabled iSCSI targets or ANA-enabled NVMe-oF exports, the Keepalived `notify_backup` script performs path-state negotiation before pool export.
+For ALUA-enabled iSCSI targets or ANA-enabled NVMe-oF exports, the Keepalived `notify_backup` script performs path-state negotiation before pool export.
 
 **Daemon-up path (normal failover):**
+1. Keepalived detects role change to BACKUP
+2. `notify_backup` probes `GET /health` on the daemon socket (2-second timeout)
+3. If the daemon responds: calls `POST /api/ha/alua-standby` (ALUA targets to Standby), then `POST /api/ha/standby` (4-second pool export deadline, self-reboot on timeout)
 
-1. Keepalived detects role change to BACKUP.
-2. `notify_backup` probes `GET /health` on the daemon socket (2-second timeout).
-3. If the daemon responds: calls `POST /api/ha/alua-standby` (ALUA targets to Standby), then `POST /api/ha/standby` (4-second pool export deadline, self-reboot on timeout).
+**Daemon-down path:**
+If the daemon socket is unavailable, `notify_backup` falls back to direct `zpool export` via the `zpool(8)` binary. This path has no ALUA pre-notification but prevents the node from holding imported pools after the VIP has moved. All actions are logged to syslog at `daemon.crit` level.
 
-The path-state change before pool export allows initiators to see a clean Standby transition rather than an abrupt path loss. The NVMe-oF ANA write includes a 200ms propagation wait (configurable via `ANAPropagationDelay`) as a timing heuristic for AEN propagation. iSCSI ALUA changes are synchronous.
-
-**Daemon-down path (daemon crashed or restarting):**
-
-If the daemon socket is unavailable, the `|| true` on the curl calls is required to avoid wedging Keepalived's state machine, but it means the daemon-mediated export and the ALUA standby both silently fail. Without intervention, the VIP moves to the peer while this node still holds the pools - split-brain.
-
-The `notify_backup` script therefore falls back to direct `zpool export` via the `zpool(8)` binary when the daemon health probe fails. This path has no ALUA pre-notification and no daemon-enforced 4-second deadline, but it prevents the node from holding imported pools after the VIP has moved. All actions are logged to syslog at `daemon.crit` level.
-
-**Residual risk:** If both the daemon-mediated export and the direct `zpool export` fail (e.g., pool I/O stuck in D-state), the node cannot yield its pools. In this case the SCSI-3 PR fencing held by `dplane-fenced` is the last defence: the peer's promotion will preempt this node's reservations and take ownership. `dplane-fenced` runs in a separate systemd slice specifically to survive daemon restarts and continue holding reservations until an explicit release.
-
-### Adding a Disk to the Active Pool
-
-Disk operations (pool expansion, resilvering) only execute on the primary. The standby reflects changes automatically through ZFS replication. Use the Storage UI or API as normal; the HA daemon ensures write operations only run when Patroni confirms local primary status.
+**Residual risk:** If both the daemon-mediated export and the direct `zpool export` fail (pool I/O stuck in D-state), the node cannot yield its pools. SCSI-3 PR fencing held by `dplane-fenced` is the last defence: the peer's promotion preempts this node's reservations. `dplane-fenced` runs in a separate systemd slice specifically to survive daemon restarts.
 
 ---
 
 ## Failover Mechanics
 
-This section covers what the daemon does internally from the moment a peer goes silent to the moment the promoted node is serving traffic. It is useful when diagnosing failover timing or reasoning about behavior during network partitions.
-
 ### Heartbeat and Detection
 
-`heartbeatLoop` runs on both nodes, ticking every 15 seconds. Each tick:
+`heartbeatLoop` runs on both nodes, ticking at `heartbeat_interval_seconds` (default 15s, configurable via `POST /api/ha/timing`). Each tick:
 
-1. `pingAllPeers()` - sends an HTTP GET to each peer's `/api/cluster/ping` and records the last-seen timestamp and the peer's current ZFS TXG
+1. `pingAllPeers()` - sends an HTTP GET to each peer's `/health` and records the last-seen timestamp
 2. `checkFailover()` - evaluates whether the peer has been silent long enough to attempt promotion
+3. `petWatchdogIfQuorum()` - pets the hardware watchdog if quorum is healthy
 
-The failover threshold is 45 seconds. A peer must miss three consecutive heartbeats before the threshold is reached.
-
-**Important:** These values are compile-time constants (`FailoverAfter = 45s`, `HysteresisWindow = 60m` in `ha/cluster.go`), not database-configurable settings. They were chosen for the tested hardware profile: local LAN, sub-millisecond round-trip, no WAN links. Deployments with high-latency interconnects or bandwidth-limited management networks will see false-positive failovers. There is currently no per-deployment tuning knob; this is a known limitation for multi-site or WAN-linked configurations.
+The failover threshold is `failover_after_seconds` (default 45s, configurable). A peer must be unreachable for longer than this threshold before STONITH fires.
 
 ### Promotion Guards
 
@@ -413,50 +523,30 @@ The failover threshold is 45 seconds. A peer must miss three consecutive heartbe
 | Guard | Condition | Notes |
 |-------|-----------|-------|
 | SubordinateMode | Node must not be in subordinate mode | Set when a node boots with a stale ZFS TXG; cleared after TXG catch-up completes |
-| HysteresisWindow | 60 minutes must have elapsed since last promotion | Prevents rapid re-promotion after a flap |
-| Fencing method | At least one fencing method must be configured | No configured method means no STONITH and no promotion; the daemon refuses to promote without a confirmed fence path |
-| Quorum Witness | If a witness is configured, it must agree the peer is unreachable | Prevents false promotions when the inter-node link is down but the peer is still alive |
+| HysteresisWindow | Configurable window must have elapsed since last promotion | Prevents rapid re-promotion after a flap; configurable via timing API |
+| Fencing method | At least one fencing method must be configured | No configured method means no promotion; the daemon refuses to promote without a confirmed fence path |
+| Quorum Witness | If a witness is configured, at least the required number must agree the peer is unreachable | Prevents false promotions during network partition |
 | MaintenanceMode | Node must not be in maintenance mode | Set via `POST /api/ha/maintenance` before planned work |
-
-If any guard fails, `checkFailover()` returns without action. The heartbeat loop re-evaluates on the next 15-second tick.
 
 ### STONITH Execution
 
-When all guards pass, a STONITH goroutine runs (separate goroutine, so the heartbeat loop keeps ticking):
+When all guards pass, a STONITH goroutine runs:
 
 1. Try IPMI: `ipmitool -H <bmc_ip> power off`
 2. If IPMI fails, try PDU: HTTP call to the PDU outlet
-3. If both fail: **abort**. The daemon logs that fencing failed and returns without promoting. A node that cannot confirm the peer is fenced will never promote.
+3. If both fail: **abort**. A node that cannot confirm the peer is fenced will never promote.
 
-If fencing succeeds:
-
-- `ExecutePromotion()` runs: clears `SubordinateMode`, brings ZFS pools off readonly, writes the promotion event to the audit log, persists new cluster state to the DB via `persistClusterState()`
-- `promotionCallback()` fires: triggers post-promotion reconciliation (see below)
-
-**Self-reboot mechanics (v14.0.0):** `ForceSelfReboot` now calls `syscall.Reboot(LINUX_REBOOT_CMD_RESTART)` directly via `golang.org/x/sys/unix`, with `runtime.LockOSThread()` to ensure the syscall runs on a dedicated OS thread. The previous implementation called `sync()` before `reboot -f`, which caused deadlock: when a ZFS pool export blocked in D-state (uninterruptible sleep on a hung SCSI bus), `sync` joined the same D-state queue and the function never reached the reboot call. The fix removes `sync` entirely. The kernel reboot syscall is the primary path; `exec.Command("reboot", "-f")` is a fallback only.
+On Path A', the watchdog self-fence may fire before the IPMI/PDU path is reached (if the loser loses quorum and witnesses are unreachable). The survivor waits the guaranteed watchdog timeout + margin before importing pools, knowing the loser has reset.
 
 ### Post-Promotion Reconciliation and Git Reachability
 
-After promotion, `runPostPromotionStacksApply` runs asynchronously. It reads `state.yaml` from the local filesystem and reconciles Docker compose stacks against the desired state.
+After promotion, `runPostPromotionStacksApply` reads `state.yaml` from the local filesystem and reconciles Docker compose stacks against the desired state.
 
-**Git is never contacted during promotion.** The function calls `os.ReadFile(stateYAMLPath)` against a local path. There is no `git pull`, no HTTP call to a remote, and no network dependency in the promotion path. The git sync path and the promotion path are structurally decoupled:
+**Git is never contacted during promotion.** The function calls `os.ReadFile(stateYAMLPath)` against a local path. There is no `git pull`, no HTTP call to a remote, and no network dependency in the promotion path.
 
-```
-[Git remote] <-- polls every N minutes --> [StartAutoSync goroutine]
-                                                      |
-                                               writes state.yaml
-                                               to local disk
-                                                      |
-                                  (survives network partition)
-                                                      |
-               [promotionCallback] -- os.ReadFile --> state.yaml
-```
+**Quorum-aware reconciler:** Pool ownership operations (create, reshape, destroy) check `ha.Manager.Status().Quorum` before executing. An isolated node defers these operations rather than acting on a Git-desired state that says "create/import this pool." Non-ownership operations (dataset properties, shares, Docker stacks) proceed regardless of quorum state.
 
-`stacksOnlyPlan` further constrains what post-promotion reconciliation will apply: it only acts on Create, Modify, and NOP items for stacks. It never applies Delete, Blocked, Ambiguous, or Manual actions. The worst case during a stale-state failover is the promoted node running a subset of the intended stacks, not tearing down services or modifying storage.
-
-**Behavior when Git is unreachable at promotion time:** The promoted node proceeds on whatever `state.yaml` was last written to disk by the background auto-sync goroutine. It does not wait for Git reachability, does not fail the promotion, and does not defer stacks reconciliation.
-
-**Known limitation:** There is no Git-epoch check at promotion time. If the standby's last sync was behind the primary's at the moment of failure, the promoted node applies an older version of desired state until the next successful auto-sync restores the current version. This is an intentional tradeoff: storage availability (ZFS pools, NVMe-oF exports) is restored immediately; Docker stack alignment may lag by up to one sync interval. For environments where stack config divergence is unacceptable, shorten the auto-sync interval or ensure the Git remote is accessible from both nodes via a path that survives the expected failure modes.
+**Behavior when Git is unreachable at promotion time:** The promoted node proceeds on whatever `state.yaml` was last written to disk by the background auto-sync goroutine.
 
 ---
 
@@ -464,86 +554,78 @@ After promotion, `runPostPromotionStacksApply` runs asynchronously. It reads `st
 
 ### SCSI-3 Persistent Reservations (dplane-fenced)
 
-Each node registers an 8-byte key derived from `/etc/machine-id` at startup. The primary holds a Write Exclusive Registrants Only (WERO) reservation on every ZFS pool member disk. APTPL=1 ensures the reservation survives power cycles.
+Each node registers an 8-byte key derived from `/etc/machine-id` at startup. The primary holds a WERO reservation on every ZFS pool member disk. APTPL=1 ensures the reservation survives power cycles.
 
-**On graceful failover:** `dplaned` calls `FencedRelease()` via the fenced socket before exporting pools, releasing the WERO reservation cleanly.
+**On graceful failover:** `dplaned` calls `FencedRelease()` via the fenced socket before exporting pools, releasing the reservation cleanly.
 
-**On unclean failover:** The surviving node's `dplane-fenced` calls `FencedPreempt(device)` for each disk. The PROUT PREEMPT command evicts the faulted node's registration at the controller. Subsequent I/O from the faulted node receives RESERVATION CONFLICT, regardless of what that node believes about its own state. This guarantee comes from disk firmware, not software coordination.
+**On unclean failover:** The surviving node's `dplane-fenced` calls `FencedPreempt(device)` for each disk. The PROUT PREEMPT command evicts the faulted node's registration at the controller. Subsequent I/O from the faulted node receives RESERVATION CONFLICT. This guarantee comes from disk firmware, not software coordination.
 
-Requirements:
-- Disks must support SCSI-3 PR: `sg_persist --in -k /dev/sdX`
-- Disks physically accessible to both nodes (shared SAS JBOD or SAS switch)
-- `dplane-fenced.service` running on both nodes
+**Verifying PR support:** Use `POST /api/ha/scsi/probe` for the full PROUT write round-trip. Do not rely on `sg_persist --in -k` alone - it tests only read-side capability and produces false positives on drives that reject PROUT REGISTER.
+
+```
+GET  /api/ha/scsi/status   - reservation key + list of fenced /dev/sgN devices
+POST /api/ha/scsi/probe    - PROUT write round-trip probe per device
+```
 
 ```bash
-# Active reservations and key state
-GET /api/ha/fenced/status
-
 # Service and journal logs
 systemctl status dplane-fenced
 journalctl -u dplane-fenced -n 50
 ```
 
+### Hardware Watchdog
+
+See [Hardware Watchdog Self-Fence](#hardware-watchdog-self-fence) above.
+
+```
+GET  /api/ha/watchdog/configure
+POST /api/ha/watchdog/configure   (AAL2 required)
+```
+
+```bash
+# Verify device and driver
+ls -la /dev/watchdog
+dmesg | grep -E "watchdog|iTCO|sp5100|softdog"
+```
+
 ### IPMI / Redfish
 
-Powers off the peer node via BMC when a partition is detected and the node is confirmed as the non-isolated side via the witness.
+Powers off the peer node via BMC when a partition is detected and the node is confirmed as the non-isolated side via the witness. On Path A', secondary to SCSI-3 PR. On Path B, secondary to hardware watchdog.
 
-Requirements:
-- BMC interfaces on both data nodes, reachable from each other
-- IPMI credentials at the path set in `fence.ipmi.passwordFile`
-- `ipmitool` (included in the DPlaneOS system closure)
-
-Test the fence path before enabling automated fencing:
 ```bash
+# Test the fence path before enabling
 ipmitool -H PEER_BMC_IP -U admin -P PASSWORD chassis power status
 ```
 
-### SBD (STONITH Block Device)
+### SBD (ZFS Token)
 
-A shared block device serves as a "poison pill" mechanism. Each node writes a lease timestamp periodically; an expired lease triggers fencing.
+A ZFS dataset property serves as a poison-pill mechanism. Each node renews a lease periodically; an expired lease triggers fencing.
 
 Requirements:
-- Block device (zvol, LUN, or iSCSI target) accessible from both nodes
-- Must be paired with a witness node in two-node clusters (SBD cannot distinguish partition from failure without a quorum tiebreaker)
-
-The SBD lease dataset is created automatically at first boot by the `dplaneos-sbd-init` systemd service when `ha.sbd.pool` is non-empty. No manual initialization is needed.
-
-Verify the dataset exists:
-```bash
-zfs list <pool>/sbd-lease
-# or whatever ha.sbd.dataset is set to
-```
+- ZFS pool accessible from both nodes
+- Must be paired with a witness node in two-node clusters (SBD alone cannot distinguish partition from failure)
+- The SBD lease dataset is created automatically at first boot by `dplaneos-sbd-init` when `ha.sbd.pool` is non-empty
 
 ### Network Quorum Witness
 
-A neutral IP address or URL (rented VPS, cloud metadata endpoint, DNS nameserver) that both HA nodes independently probe to detect network isolation. No software installation is required on the target: it only needs to respond to TCP connections or HTTP requests.
+A neutral IP or URL that both nodes independently probe to detect network isolation. No software installation required on the target.
 
-**How it works:** Both nodes independently check if the witness target is reachable before a failover decision. The result determines whether a node is isolated:
-
-| Local reaches witness | Peer reaches witness | Decision |
-|----------------------|---------------------|----------|
+| This node reaches witness | Peer reaches witness | Decision |
+|--------------------------|---------------------|----------|
 | Yes | No | Peer is isolated - safe to promote |
 | No | No | Full partition - do not promote |
-| No | Yes | Local is isolated - do not promote |
-| Yes | Yes | Both have network; use IPMI/PDU fencing |
-
-This is Guard 4b in the promotion sequence. It is **additive**: it can only suppress an auto-promotion, never enable one when other guards have already blocked it. All existing guards (Subordinate Mode, Hysteresis, Fencing Method, etcd Witness, Maintenance Mode) remain independent.
-
-Configuration via Settings - High Availability - Network Quorum Witness, or API:
+| No | Yes | This node is isolated - do not promote |
+| Yes | Yes | Both have network; use IPMI/PDU/watchdog fencing |
 
 ```
-GET  /api/ha/network-witness       - read current configuration
-POST /api/ha/network-witness       - save configuration (AAL2 required)
-POST /api/ha/network-witness/probe - test connectivity to the target
+GET  /api/ha/network-witness          - read configuration
+POST /api/ha/network-witness          - save configuration (AAL2 required)
+POST /api/ha/network-witness/probe    - test connectivity
 ```
 
-**Probe method `icmp` (default):** Uses a TCP dial to port 80. TCP SYN reaching the host - even if the port is filtered or refused - proves network reachability without requiring raw socket privileges.
+**Probe method `icmp` (default):** TCP dial to port 80. SYN reaching the host - even if port is filtered - proves network reachability.
 
-**Probe method `http` / `https`:** Sends an HTTP GET. Any response (including 4xx/5xx) counts as reachable; only a connection failure counts as unreachable.
-
-**Choosing a target:** Any stable internet endpoint works: a rented VPS, `1.1.1.1` (Cloudflare DNS), `8.8.8.8` (Google DNS), a cloud provider's metadata service IP, or a CDN edge node. The target should be geographically and network-topologically independent from both HA nodes so it survives whatever failure scenario is being tested.
-
-**Limitations:** The network witness does not verify the peer's state on the witness - it only proves this node has network reachability. A peer that is alive but cannot reach the witness would be incorrectly treated as the isolated side. In practice this is the intended behavior: if neither node can reach a neutral third party, the cluster suspends automatic failover until network is restored.
+**Choosing a target:** Any stable internet endpoint works: a rented VPS, `1.1.1.1`, `8.8.8.8`, a cloud metadata IP, or an internal router. The target must be independent from both HA nodes.
 
 ---
 
@@ -555,10 +637,15 @@ POST /api/ha/network-witness/probe - test connectivity to the target
 | VIP not moving after failover | `journalctl -u keepalived` | Keepalived not running or daemon API unresponsive on new primary |
 | PostgreSQL replication lag increasing | `patronictl list` | Check network between nodes; check standby disk I/O |
 | ZFS pools not importing after promotion | `systemctl status dplaneos-zfs-gate` | Patroni must show node as Leader before gate opens |
-| SCSI-3 reservation not acquired | `dplane-fenced-ctl status` | Verify `dplane-fenced.service` is running; test PR support with `sg_persist` |
-| Old primary still writing after SCSI-3 failover | `sg_persist --in -k /dev/sdX` on old primary | RESERVATION CONFLICT confirms fencing is working; if writes succeed, the HBA or disk firmware does not support SCSI-3 PR |
-| `dplane-fenced` preempt fails | `journalctl -u dplane-fenced` | Check machine-id key derivation; verify physical disk path is reachable from both nodes |
+| SCSI-3 reservation not acquired | `GET /api/ha/scsi/status` | Verify `dplane-fenced.service` running; run PROUT probe to confirm drive PR support |
+| PR probe fails (supported: false) | `POST /api/ha/scsi/probe` | Drive does not support PROUT write commands; move to Path B or replace drive |
+| Old primary still writing after SCSI-3 failover | `GET /api/ha/scsi/status` on old primary | RESERVATION CONFLICT confirms fencing is working; if writes succeed, the HBA or drive firmware does not support SCSI-3 PR |
+| `dplane-fenced` preempt fails | `journalctl -u dplane-fenced` | Check machine-id key derivation; verify physical disk path reachable from both nodes |
 | etcd quorum lost | `etcdctl endpoint health` | At least 2 of 3 etcd members must be reachable |
 | Patroni not finding etcd | `journalctl -u patroni` | Verify etcd endpoints in `/etc/dplaneos/patroni.yaml`; check firewall on etcd ports |
 | Witness not reachable (Path B) | `etcdctl endpoint health http://WITNESS_IP:2379` | Check firewall rules; restart etcd on witness |
-| Docker stacks not matching desired state after failover | `GET /api/gitops/state` | Standby's last git sync may predate the primary's; stacks reconcile from the local state.yaml snapshot. Wait for auto-sync or trigger a manual sync to restore current desired state |
+| Watchdog not petting (armed but no quorum) | `journalctl -u dplaned \| grep WATCHDOG` | Expected if quorum is genuinely lost; check witness reachability. If false alarm, verify witness config |
+| Watchdog fires unexpectedly | `dmesg \| grep -i watchdog` after reboot | Node lost quorum AND could not reach witnesses; check witness endpoints are reachable from both nodes |
+| Node self-resets during maintenance | `journalctl -u dplaned -b-1` | Watchdog fired; ensure maintenance mode is set before taking a node offline |
+| Pool ownership operations deferred | `GET /api/gitops/status` | Quorum-aware reconciler held pool ops; check `GET /api/ha/status` for quorum state; resolves automatically on quorum restore |
+| Docker stacks not matching desired state after failover | `GET /api/gitops/state` | Standby's last git sync may predate the primary's; wait for auto-sync or trigger manual sync |
