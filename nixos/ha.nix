@@ -2,6 +2,12 @@
 
 let
   cfg = config.services.dplaneos.ha;
+  # Safe witness etcd client endpoint used in Patroni config.
+  # Evaluated lazily; the assertion in config.assertions catches the null case.
+  witnessEtcdHost =
+    if cfg.colocatedWitness then "${cfg.localAddress}:2381"
+    else if cfg.witnessAddress != null then "${cfg.witnessAddress}:2379"
+    else "";  # unreachable: assertion enforces one of the above
 in {
   options.services.dplaneos.ha = {
     enable = lib.mkEnableOption "DPlaneOS High Availability (Patroni + HAProxy)";
@@ -42,9 +48,21 @@ in {
     };
 
     witnessAddress = lib.mkOption {
-      type = lib.types.str;
-      description = "IP address of the etcd witness node.";
+      type    = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        IP address of the etcd witness node (Path B / three-machine setup).
+        Leave null when colocatedWitness = true - the witness etcd runs on this node.
+      '';
     };
+
+    colocatedWitness = lib.mkEnableOption ''
+      Run a co-located etcd witness member on port 2381 on this node (Path A').
+      When enabled, no separate witness machine is required: this node runs both
+      the data-path etcd (port 2379) and a vote-only witness etcd (port 2381).
+      The initialCluster and Patroni etcd3 hosts are configured automatically.
+      witnessAddress does not need to be set.
+    '';
 
     etcdEndpoints = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -116,6 +134,14 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
+    # ─── Assertions ───────────────────────────────────────────────────────
+    assertions = [
+      {
+        assertion = cfg.colocatedWitness || cfg.witnessAddress != null;
+        message   = "services.dplaneos.ha: set either colocatedWitness = true (Path A', no third machine) or witnessAddress = \"<IP>\" (Path B)";
+      }
+    ];
+
     # ─── Hardware watchdog self-fence ─────────────────────────────────────
     # When enabled, systemd opens the watchdog device and sets the runtime
     # timeout. The dplaned daemon pets it from the heartbeat loop; losing
@@ -155,10 +181,15 @@ in {
       2380  # etcd peer (raft) communication
       5432  # PostgreSQL - streaming replication between Patroni nodes
       8008  # Patroni REST API - HAProxy health checks against both nodes
+    ] ++ lib.optionals cfg.colocatedWitness [
+      2381  # co-located etcd witness client API (Path A')
+      2382  # co-located etcd witness peer (raft)
     ];
 
     # ─── Etcd ─────────────────────────────────────────────────────────────
-    # Standard 3-node etcd cluster for reliable DCS and Patroni leader election
+    # Three-member etcd cluster for reliable DCS and Patroni leader election.
+    # Path A' (colocatedWitness): witness runs on this node, port 2382 peer / 2381 client.
+    # Path B: witness is a separate machine on the standard port 2380.
     services.etcd = {
       enable = true;
       name = "etcd-${cfg.localAddress}";
@@ -166,12 +197,50 @@ in {
       listenPeerUrls = [ "http://0.0.0.0:2380" ];
       advertiseClientUrls = [ "http://${cfg.localAddress}:2379" ];
       initialAdvertisePeerUrls = [ "http://${cfg.localAddress}:2380" ];
-      initialCluster = [
-        "etcd-${cfg.localAddress}=http://${cfg.localAddress}:2380"
-        "etcd-${cfg.peerAddress}=http://${cfg.peerAddress}:2380"
-        "etcd-witness=http://${cfg.witnessAddress}:2380"
-      ];
+      initialCluster =
+        if cfg.colocatedWitness then [
+          "etcd-${cfg.localAddress}=http://${cfg.localAddress}:2380"
+          "etcd-${cfg.peerAddress}=http://${cfg.peerAddress}:2380"
+          "etcd-witness=http://${cfg.localAddress}:2382"   # co-located witness peer port
+        ] else [
+          "etcd-${cfg.localAddress}=http://${cfg.localAddress}:2380"
+          "etcd-${cfg.peerAddress}=http://${cfg.peerAddress}:2380"
+          "etcd-witness=http://${cfg.witnessAddress}:2380"
+        ];
       initialClusterState = "new";
+    };
+
+    # ─── Co-located etcd witness (Path A') ────────────────────────────────
+    # A second etcd process on this node. Uses port 2381 (client) and 2382
+    # (peer raft). Data stored in /var/lib/etcd-witness so it does not conflict
+    # with the data-path etcd. Runs as the etcd OS user created by services.etcd.
+    systemd.services.etcd-witness = lib.mkIf cfg.colocatedWitness {
+      description = "DPlaneOS co-located etcd witness (port 2381)";
+      after    = [ "network.target" ];
+      wantedBy = [ "multi-user.target" ];
+      environment = {
+        ETCD_NAME                        = "etcd-witness";
+        ETCD_DATA_DIR                    = "/var/lib/etcd-witness";
+        ETCD_LISTEN_CLIENT_URLS          = "http://0.0.0.0:2381";
+        ETCD_ADVERTISE_CLIENT_URLS       = "http://${cfg.localAddress}:2381";
+        ETCD_LISTEN_PEER_URLS            = "http://0.0.0.0:2382";
+        ETCD_INITIAL_ADVERTISE_PEER_URLS = "http://${cfg.localAddress}:2382";
+        ETCD_INITIAL_CLUSTER             = lib.concatStringsSep "," [
+          "etcd-${cfg.localAddress}=http://${cfg.localAddress}:2380"
+          "etcd-${cfg.peerAddress}=http://${cfg.peerAddress}:2380"
+          "etcd-witness=http://${cfg.localAddress}:2382"
+        ];
+        ETCD_INITIAL_CLUSTER_STATE = "new";
+      };
+      serviceConfig = {
+        Type           = "simple";
+        User           = "etcd";
+        Group          = "etcd";
+        ExecStart      = "${pkgs.etcd}/bin/etcd";
+        Restart        = "always";
+        RestartSec     = "5s";
+        StateDirectory = "etcd-witness";
+      };
     };
 
     # ─── Patroni config auto-generation ──────────────────────────────────
@@ -207,7 +276,7 @@ restapi:
   connect_address: ${cfg.localAddress}:8008
 
 etcd3:
-  hosts: ${cfg.localAddress}:2379,${cfg.peerAddress}:2379,${cfg.witnessAddress}:2379
+  hosts: ${cfg.localAddress}:2379,${cfg.peerAddress}:2379,${witnessEtcdHost}
 
 bootstrap:
   dcs:

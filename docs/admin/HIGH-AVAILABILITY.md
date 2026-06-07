@@ -113,15 +113,12 @@ services.dplaneos.ha = {
   enable = true;
   role   = "primary";    # "secondary" on Node B
 
-  localAddress   = "NODE_A_IP";
-  peerAddress    = "NODE_B_IP";
-  witnessAddress = "NODE_A_IP";  # co-located on Node A; see etcd note above
+  localAddress = "NODE_A_IP";
+  peerAddress  = "NODE_B_IP";
 
-  etcdEndpoints = [
-    "http://NODE_A_IP:2379"
-    "http://NODE_B_IP:2379"
-    "http://NODE_A_IP:2381"    # co-located witness etcd member
-  ];
+  # co-located etcd witness - no third machine required (Path A')
+  # Starts a vote-only etcd process on port 2381/2382 on Node A automatically.
+  colocatedWitness = true;
 
   # Hardware watchdog self-fence (recommended - removes BMC requirement)
   watchdog = {
@@ -159,7 +156,7 @@ Returns `"running": true`, the reservation key, and the list of currently reserv
 #### Step 5: Verify Patroni and etcd
 
 ```bash
-# All three etcd members should be healthy
+# All three etcd members should be healthy (co-located witness on Node A port 2381)
 etcdctl --endpoints=http://NODE_A_IP:2379,http://NODE_B_IP:2379,http://NODE_A_IP:2381 endpoint health
 
 # Patroni cluster state

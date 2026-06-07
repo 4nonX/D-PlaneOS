@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v14.3.0 (2026-06-08) - "Quorum"
+
+Upgrade from: v14.2.0 - No schema migration required. No breaking API changes. No breaking configuration changes.
+
+This release closes the NixOS module gap in the Path A' two-node setup, ships a rewritten command palette, adds stable-layout polling to four pages, and introduces inline list filters. Three correctness fixes from a post-release audit of the v14.2.0 HA watchdog are also included.
+
+### Added
+
+- **`colocatedWitness` NixOS option (`nixos/ha.nix`)**: When `colocatedWitness = true`, the ha.nix module starts a second etcd process on this node (port 2381 client / 2382 raft peer) alongside the data-path etcd (port 2379). The `initialCluster` for both etcd processes and the Patroni `etcd3.hosts` list are wired automatically. No `witnessAddress` required; no separate witness machine needed. Ports 2381 and 2382 are added to the firewall automatically. This makes the "no third node required" statement in the Path A' docs accurate: the previous ha.nix generated all three etcd members on port 2380, so pointing `witnessAddress` at Node A's IP would create an address collision.
+
+- **Command palette rewrite (`app-react/src/components/ui/GlobalSearch.tsx`)**: Cmd/Ctrl+K now shows an empty state with recent pages (last 5 navigations, stored in `localStorage`) and quick-action items before any query is typed. Active queries produce scored results grouped by category with section headers. Scoring ranks: exact match > word-prefix > acronym > substring > subsequence. Search sources: nav items (instant), pools/datasets/containers/shares (API), HA cluster nodes (React Query cache, zero extra requests). Updated ARIA labels and keyboard help description to reflect the richer behaviour.
+
+- **`useFrozenLayout` hook (`app-react/src/hooks/useFrozenLayout.ts`)**: Separates structural layout from live metrics for polling pages. Maintains a `snapshot` (which items exist and in what order - updated only when items are added or removed) and a `liveById` map (always current). Renders iterate over `snapshot` for stable key/position assignments and read values from `liveById`, eliminating the layout shifts and scroll-position resets that occurred when polling returned updated data with the same item set. Applied to pools on `PoolsPage` and `DashboardPage`, and to HA cluster nodes on `HAPage` with a `nodeRefreshKey` that forces a structural update after add/remove/promote mutations.
+
+- **`listFilter` utility (`app-react/src/lib/listFilter.ts`)**: Opacity-based inline filtering. Items that do not match the query are rendered at 0.15 opacity and made non-interactive rather than removed from the DOM. This keeps items in their original positions so operators can see what they searched past. Exports `itemOpacity`, `itemMatches`, and `matchCount`.
+
+- **Inline container filter (`app-react/src/pages/DockerPage.tsx`)**: A search input appears above the container/stack list when there are more than three containers. Filters by container name or image using `itemOpacity`; matching items stay full-opacity and interactive, non-matching items fade to 0.15.
+
+- **Inline share filter (`app-react/src/pages/SharesPage.tsx`)**: Same pattern as the container filter - appears when more than three shares are present, filters by name or path.
+
+- **Doc-freshness gate (`scripts/release-check.sh`, Check 7)**: Hard error if any file under `daemon/internal/ha/` changed since the previous tag but `docs/admin/HIGH-AVAILABILITY.md` did not. Warning if any file under `daemon/internal/gitops/` changed but the GitOps reference docs did not. Hard error if no file under `docs/` changed at all since the previous tag.
+
+### Fixed
+
+- **CRITICAL - `StateUnknown` peers counted as quorum-reachable (`daemon/internal/ha/cluster.go`)**: The quorum calculation used `n.State != StateUnreachable` to count reachable peers. A peer that has never responded starts in `StateUnknown`, not `StateHealthy`, so it was being counted as reachable before the first heartbeat was received. The hardware watchdog was therefore petting before any peer was verified alive - defeating the startup safety invariant. Fixed to `n.State == StateHealthy`. Only peers with a confirmed live heartbeat count toward quorum.
+
+- **MEDIUM - Watchdog pet interval validation too permissive (`daemon/internal/handlers/ha_handler.go`)**: `POST /api/ha/watchdog/configure` accepted any `pet_interval_sec < timeout_secs`. The correct invariant is `pet_interval_sec * 2 <= timeout_secs`: the node needs at least two chances to pet before the timeout fires, otherwise a single transient missed write can trigger an unexpected reset. Existing valid configurations are unaffected.
+
+- **LOW - SCSI-3 PR cleanup unregister failure silently discarded (`daemon/internal/scsipr/scsipr_linux.go`)**: The PROUT REGISTER cleanup step at the end of `SupportsReservations()` was ignoring errors with `_, _ = sgIOIoctl(...)`. A cleanup failure means the test key (`0xdeadbeefcafe0001`) may remain registered on the device. The failure is now logged as a warning with the device path and error text.
+
+### Changed
+
+- **`witnessAddress` is now optional in ha.nix**: Changed from `lib.types.str` (required) to `lib.types.nullOr lib.types.str` (default null). Set it when using a separate witness machine (Path B). Leave it unset when `colocatedWitness = true` (Path A'). An assertion fires at `nixos-rebuild` time if neither is provided.
+
+- **`PoolsPage` and `DashboardPage` use frozen layout for pool lists**: Pool cards no longer jump or re-order on the 60-second poll tick; health and capacity values update in place. A structural update fires only when pools are added or removed.
+
+- **`HAPage` node list uses frozen layout**: Node cards no longer re-order on the 15-second heartbeat poll. `nodeRefreshKey` increments after add-peer, remove-peer, and promote mutations to force a structural update immediately after the API call.
+
+- **`HIGH-AVAILABILITY.md` Path A' install example** now uses `colocatedWitness = true` instead of the manual `witnessAddress`/`etcdEndpoints` port-2381 entries.
+
 ## v14.2.0 (2026-06-07) - "Arbiter"
 
 Upgrade from: v14.1.0 - Schema migration required (migration adds `ha_watchdog_config` table for hardware watchdog self-fence; applied automatically at startup). No breaking API changes. No breaking configuration changes.
