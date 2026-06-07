@@ -366,6 +366,14 @@ func main() {
 	clusterMgr.Start()
 	defer clusterMgr.Stop()
 
+	// Start hardware watchdog self-fence if configured. The watchdog is pet on
+	// every heartbeat tick when quorum is healthy; if quorum is lost the daemon
+	// stops petting it and the kernel hard-resets the node after the timeout.
+	// This removes the BMC/PDU network-reachability assumption from fencing.
+	if wdCfg, err := ha.GetWatchdogConfig(db); err == nil {
+		clusterMgr.StartWatchdog(wdCfg)
+	}
+
 	// Start SBD lease manager if configured (no-op on unconfigured / single-node).
 	if sbdCfg, err := ha.GetSBDConfig(db); err == nil {
 		ha.GlobalSBD.Start(sbdCfg)
@@ -845,6 +853,17 @@ func main() {
 	gitopsHandler := handlers.NewGitOpsHandler(db, *gitopsStatePath, *smbConfPath, wsHub)
 	defer gitopsHandler.Stop()
 
+	// Quorum-aware reconciler: pool create/reshape/destroy operations are deferred
+	// when HA is enabled and this node does not hold quorum. On replicated topologies
+	// there is no hardware backstop (SCSI-3 PR is only on shared-SAS), so this
+	// software gate is the only protection before an isolated node acts on
+	// Git-desired state that says "import/create this pool".
+	if nixWriter.State().HAEnable {
+		gitopsHandler.SetOwnershipGuard(func() bool {
+			return clusterMgr.Status().Quorum
+		})
+	}
+
 	// Start GitOps drift detector - polls every 5 minutes and broadcasts
 	// "gitops.drift" WS events so GitOpsPage reacts in real time.
 	driftDetector := gitops.NewDriftDetector(db, *gitopsStatePath, 5*time.Minute, wsHub)
@@ -1321,6 +1340,8 @@ func main() {
 	r.Handle("/api/ha/toggle", permRoute("system", "admin", haHandler.ToggleHA)).Methods("POST")
 	r.Handle("/api/ha/timing", permRoute("system", "admin", haHandler.GetClusterTiming)).Methods("GET")
 	r.Handle("/api/ha/timing", middleware.RequireAAL2(permRoute("system", "admin", haHandler.SaveClusterTiming))).Methods("POST")
+	r.Handle("/api/ha/watchdog/configure", permRoute("system", "admin", haHandler.GetWatchdogConfig)).Methods("GET")
+	r.Handle("/api/ha/watchdog/configure", middleware.RequireAAL2(permRoute("system", "admin", haHandler.SaveWatchdogConfig))).Methods("POST")
 
 	// BMC / out-of-band hardware management (iLO, iDRAC, IPMI)
 	bmcHandler := handlers.NewBMCHandler(db)

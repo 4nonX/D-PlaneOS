@@ -225,6 +225,74 @@ func Preempt(device string, ourKey, victimKey RegistrationKey) error {
 	return err
 }
 
+// SupportsReservations probes a device for SCSI-3 Persistent Reservation support
+// by performing a full PROUT round-trip: register our key, verify it appears in
+// PRIN READ KEYS, then unregister. All three steps must succeed.
+//
+// This is the only trustworthy check. PRIN-only tests (sg_persist --in -k) produce
+// false positives: a drive that answers READ KEYS may still reject REGISTER, because
+// PROUT is a write-side command that SAT layers commonly leave unimplemented. A
+// false positive here routes users to the shared-storage path and silently
+// fails at the moment of a real failover.
+//
+// The test is safe: we register and immediately unregister using a test key
+// (0xdeadbeefcafe0001) that is distinct from any operational key, so there is no
+// interference with a running cluster. If the device is already part of a live
+// cluster that holds a reservation, our register will still succeed (REGISTER with
+// APTPL=0 is always allowed for unregistered keys), and we clean up immediately.
+func SupportsReservations(device string) error {
+	testKey := RegistrationKey{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x00, 0x01}
+
+	fd, closeFn, err := openSGDev(device)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", device, err)
+	}
+	defer closeFn()
+
+	// Step 1: PROUT REGISTER - register testKey with APTPL=0.
+	param := make([]byte, 24)
+	copy(param[8:16], testKey[:]) // service action reservation key = testKey
+	// APTPL=0 so the test registration does not persist through power loss.
+	cdb := []byte{scsiPROUT, proutRegister, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x00}
+	if _, err := sgIOIoctl(fd, cdb, param, sgDxferToDev); err != nil {
+		return fmt.Errorf("PROUT REGISTER failed (drive does not support PR write commands): %w", err)
+	}
+
+	// Step 2: PRIN READ KEYS - verify testKey appears in the registration list.
+	buf := make([]byte, 512)
+	readKeysCDB := []byte{scsiPRIN, prinReadKeys, 0x00, 0x00, 0x00, 0x00, 0x00, byte(len(buf) >> 8), byte(len(buf)), 0x00}
+	data, err := sgIOIoctl(fd, readKeysCDB, buf, sgDxferFromDev)
+	found := false
+	if err == nil && len(data) >= 8 {
+		addLen := int(data[4])<<24 | int(data[5])<<16 | int(data[6])<<8 | int(data[7])
+		keys := data[8:]
+		if len(keys) > addLen {
+			keys = keys[:addLen]
+		}
+		for len(keys) >= 8 {
+			var k RegistrationKey
+			copy(k[:], keys[:8])
+			if k == testKey {
+				found = true
+				break
+			}
+			keys = keys[8:]
+		}
+	}
+
+	// Step 3: PROUT REGISTER with key=0 to unregister testKey (cleanup).
+	unregParam := make([]byte, 24)
+	copy(unregParam[0:8], testKey[:]) // reservation key = testKey (current)
+	// service action key = 0 means unregister
+	unregCDB := []byte{scsiPROUT, proutRegister, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x00}
+	_, _ = sgIOIoctl(fd, unregCDB, unregParam, sgDxferToDev) // best-effort cleanup
+
+	if !found {
+		return fmt.Errorf("PROUT REGISTER succeeded but key not visible in PRIN READ KEYS - unreliable SAT translation")
+	}
+	return nil
+}
+
 // ReadKeys sends PERSISTENT RESERVE IN - READ KEYS and READ RESERVATION
 // to return the current registration state of the device.
 func ReadKeys(device string) (PRStatus, error) {

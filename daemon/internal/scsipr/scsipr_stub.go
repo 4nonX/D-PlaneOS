@@ -12,3 +12,4 @@ func Reserve(device string, key RegistrationKey) error     { return errUnsupport
 func Release(device string, key RegistrationKey) error     { return errUnsupported }
 func Preempt(device, target string, ourKey, victimKey RegistrationKey) error { return errUnsupported }
 func ReadKeys(device string) (PRStatus, error)             { return PRStatus{}, errUnsupported }
+func SupportsReservations(device string) error             { return errUnsupported }

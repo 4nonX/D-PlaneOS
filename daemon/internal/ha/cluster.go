@@ -387,6 +387,10 @@ func SaveClusterTimingConfig(db *sql.DB, cfg ClusterTimingConfig) error {
 
 // heartbeatLoop pings all peers at the configured interval.
 // Timing is read from the database on startup; changes take effect after restart.
+// When a hardware watchdog is enabled, the loop pets it on each healthy tick and
+// intentionally stops petting when quorum is lost so the kernel hard-resets the
+// node - this is the hardware floor that removes the BMC/network reachability
+// assumption from the fencing chain.
 func (m *Manager) heartbeatLoop() {
 	defer m.wg.Done()
 	timing := GetClusterTimingConfig(m.db)
@@ -395,12 +399,105 @@ func (m *Manager) heartbeatLoop() {
 	for {
 		select {
 		case <-m.stopCh:
+			shutdownWatchdog()
 			return
 		case <-ticker.C:
 			m.pingAllPeers()
 			m.checkFailover()
+			m.petWatchdogIfQuorum()
 		}
 	}
+}
+
+// petWatchdogIfQuorum writes to the hardware watchdog device unless this node
+// is demonstrably isolated. The rule:
+//
+//   - Full quorum (majority reachable): always pet.
+//   - No peers registered (single-node): always pet.
+//   - Quorum lost AND at least one witness is configured AND all witnesses are
+//     unreachable: stop petting - we may be the isolated side, let the kernel
+//     reset us after the watchdog timeout.
+//   - Quorum lost AND no witnesses configured: pet (cannot safely determine
+//     isolation; IPMI/PDU fencing is the protection in this topology).
+//   - Quorum lost AND at least one witness is reachable: pet (we can see the
+//     external network - we are not the isolated side).
+//
+// This design matches the SBD-diskless pattern: self-fence only fires when an
+// external tiebreaker confirms the isolation. Without a tiebreaker, a dead peer
+// (hardware failure) is indistinguishable from a partition, so we fall back to
+// IPMI/PDU fencing rather than self-fencing the healthy survivor.
+func (m *Manager) petWatchdogIfQuorum() {
+	status := m.Status()
+	if status.Quorum {
+		petWatchdog()
+		return
+	}
+
+	// Check whether any witness is configured. If none is, we cannot safely
+	// determine isolation in a two-node cluster, so keep petting.
+	witnessConfigured := false
+	canReachAny := false
+
+	nwCfg, nwErr := GetNetworkWitnessConfig(m.db)
+	if nwErr == nil && nwCfg.Enable {
+		witnessConfigured = true
+		result := ProbeNetworkWitness(nwCfg)
+		if result.Reachable {
+			canReachAny = true
+		}
+	}
+
+	witnessCfg, wErr := GetWitnessConfig(m.db)
+	if wErr == nil && witnessCfg.Enable {
+		witnessConfigured = true
+		if canReachWitness(witnessCfg) {
+			canReachAny = true
+		}
+	}
+
+	if !witnessConfigured || canReachAny {
+		// No witnesses configured (rely on IPMI/PDU), or we can reach at least
+		// one witness (we are the connected side). Keep petting.
+		petWatchdog()
+		return
+	}
+
+	// Quorum lost + witnesses configured + all witnesses unreachable.
+	// We are demonstrably isolated. Stop petting - the kernel will reset us
+	// after the watchdog timeout, guaranteeing the survivor can promote.
+	log.Printf("HA WATCHDOG: quorum lost and all witnesses unreachable - watchdog self-fence armed (node resets in ~%ds)", 30)
+}
+
+// StartWatchdog opens the hardware watchdog device for the given config and
+// begins petting it from the heartbeat loop. Must be called after Start().
+// No-op if cfg.Enable is false or if the device cannot be opened.
+func (m *Manager) StartWatchdog(cfg WatchdogConfig) {
+	if !cfg.Enable {
+		return
+	}
+	if err := openWatchdog(cfg.Device); err != nil {
+		log.Printf("HA WATCHDOG: cannot open %s: %v (watchdog self-fence disabled - BMC/PDU fencing required)", cfg.Device, err)
+		return
+	}
+	log.Printf("HA WATCHDOG: opened %s (timeout %ds) - node will self-reset on quorum loss", cfg.Device, cfg.TimeoutSecs)
+}
+
+// GetWatchdogConfig exposes watchdog config read access on the Manager.
+func (m *Manager) GetWatchdogConfig() (WatchdogConfig, error) {
+	return GetWatchdogConfig(m.db)
+}
+
+// SaveWatchdogConfig exposes watchdog config write access on the Manager.
+func (m *Manager) SaveWatchdogConfig(cfg WatchdogConfig) error {
+	return SaveWatchdogConfig(m.db, cfg)
+}
+
+// StopWatchdog gracefully closes the hardware watchdog device (writes magic 'V').
+// Call when the operator disables watchdog self-fence via the UI so the node does
+// not reboot after the timeout expires.
+func (m *Manager) StopWatchdog() {
+	shutdownWatchdog()
+	log.Printf("HA WATCHDOG: disabled by operator - graceful close sent")
 }
 
 // checkFailover assesses peer health and triggers fencing/promotion if STONITH is enabled.
@@ -748,6 +845,15 @@ func (m *Manager) ensureSchema() error {
 		description TEXT NOT NULL DEFAULT ''
 	)`)
 	m.db.Exec(`INSERT INTO ha_network_witness (id) VALUES (1) ON CONFLICT (id) DO NOTHING`)
+
+	m.db.Exec(`CREATE TABLE IF NOT EXISTS ha_watchdog_config (
+		id              INTEGER PRIMARY KEY CHECK (id = 1),
+		enable          BOOLEAN NOT NULL DEFAULT FALSE,
+		device          TEXT    NOT NULL DEFAULT '/dev/watchdog',
+		timeout_secs    INTEGER NOT NULL DEFAULT 30,
+		pet_interval_sec INTEGER NOT NULL DEFAULT 10
+	)`)
+	m.db.Exec(`INSERT INTO ha_watchdog_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`)
 
 	return nil
 }

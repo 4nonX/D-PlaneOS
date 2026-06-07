@@ -66,6 +66,15 @@ type ApplyContext struct {
 	DB             *sql.DB
 	SmbConfPath    string // path to write smb.conf, e.g. /etc/samba/smb.conf
 	NFSExportsPath string // path to write /etc/exports
+
+	// OwnershipGuard, when non-nil, is called before any pool ownership operation
+	// (pool create, reshape, destroy). Returning false defers those operations
+	// until the next reconcile cycle. This is the software-level single-writer
+	// guard: on shared-SAS the SCSI-3 PR is the hardware backstop; on replicated
+	// topologies this function is the only gate before a partitioned node acts
+	// on Git-desired state that says "import/create this pool".
+	// Nil means no restriction (single-node or non-HA deployment).
+	OwnershipGuard func() bool
 }
 
 // ApplyPlan executes the plan against the live system.
@@ -112,6 +121,18 @@ func ApplyPlan(ctx ApplyContext, plan *Plan, desired *DesiredState) (*ApplyResul
 
 		if item.Kind == KindSMART && item.Action != ActionNOP {
 			smartChanged = true
+		}
+
+		// Pool ownership operations require quorum when HA is active. An isolated
+		// node must not import, create, reshape, or destroy a pool - on replicated
+		// topologies there is no hardware backstop and this is the sole software
+		// gate against dual-writer corruption.
+		if item.Kind == KindPool && item.Action != ActionNOP && item.Action != ActionModify {
+			if ctx.OwnershipGuard != nil && !ctx.OwnershipGuard() {
+				log.Printf("GITOPS APPLY: pool ownership operation %s %q deferred - no quorum (HA partition guard)", item.Action, item.Name)
+				result.Applied = append(result.Applied, fmt.Sprintf("[DEFERRED no-quorum] %s pool %s", item.Action, item.Name))
+				continue
+			}
 		}
 
 		switch item.Action {

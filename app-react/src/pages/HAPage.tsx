@@ -23,6 +23,10 @@
  *   POST /api/ha/sbd/configure
  *   GET  /api/ha/replication/configure
  *   POST /api/ha/replication/configure
+ *   GET  /api/ha/watchdog/configure
+ *   POST /api/ha/watchdog/configure
+ *   GET  /api/ha/timing
+ *   POST /api/ha/timing
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -138,6 +142,19 @@ interface SBDResponse {
 interface ClusterSecretStatus {
   success:    boolean
   configured: boolean
+}
+
+interface WatchdogConfig {
+  enable:           boolean
+  device:           string   // /dev/watchdog or /dev/watchdog0
+  timeout_secs:     number   // kernel fires reset after this many seconds without a pet
+  pet_interval_sec: number   // how often the daemon writes to the device
+}
+
+interface TimingConfig {
+  failover_after_seconds:     number
+  hysteresis_window_minutes:  number
+  heartbeat_interval_seconds: number
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1105,6 +1122,232 @@ function ReplicationConfigForm() {
   )
 }
 
+// ─── WatchdogConfigForm ───────────────────────────────────────────────────────
+
+function WatchdogConfigForm() {
+  const qc = useQueryClient()
+  const q  = useQuery({
+    queryKey: ['ha', 'watchdog'],
+    queryFn:  ({ signal }) => api.get<{ success: boolean; config: WatchdogConfig }>('/api/ha/watchdog/configure', signal),
+  })
+
+  const [enable,  setEnable]  = useState(false)
+  const [device,  setDevice]  = useState('/dev/watchdog')
+  const [timeout, setTimeoutS] = useState(30)
+  const [pet,     setPet]     = useState(10)
+
+  useEffect(() => {
+    if (q.data?.config) {
+      const c = q.data.config
+      setEnable(c.enable)
+      setDevice(c.device || '/dev/watchdog')
+      setTimeoutS(c.timeout_secs || 30)
+      setPet(c.pet_interval_sec || 10)
+    }
+  }, [q.data])
+
+  const save = useMutation({
+    mutationFn: (cfg: WatchdogConfig) => api.post('/api/ha/watchdog/configure', cfg),
+    onSuccess: () => {
+      toast.success('Watchdog self-fence configuration saved')
+      qc.invalidateQueries({ queryKey: ['ha', 'watchdog'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  function submit() {
+    if (enable && pet >= timeout) {
+      toast.error('Pet interval must be less than timeout')
+      return
+    }
+    save.mutate({ enable, device: device.trim(), timeout_secs: timeout, pet_interval_sec: pet })
+  }
+
+  return (
+    <div className="card" style={{
+      borderRadius: 'var(--radius-lg)', padding: '20px 24px', marginTop: 24,
+      borderLeft: enable ? '4px solid var(--warning)' : '4px solid var(--border)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <Icon name="timer" size={24} style={{ color: enable ? 'var(--warning)' : 'var(--text-tertiary)' }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700 }}>Hardware Watchdog Self-Fence</div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+            Node hard-resets itself on quorum loss - removes BMC/PDU network dependency from fencing
+          </div>
+        </div>
+        <div style={{
+          padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', fontWeight: 600,
+          background: enable ? 'var(--warning-bg)' : 'var(--surface)',
+          border: `1px solid ${enable ? 'var(--warning-border)' : 'var(--border)'}`,
+          color: enable ? 'var(--warning)' : 'var(--text-tertiary)',
+        }}>
+          {enable ? 'Armed' : 'Disabled'}
+        </div>
+      </div>
+
+      {enable && (
+        <div className="alert alert-warning" style={{ marginBottom: 16, padding: '10px 14px' }}>
+          <Icon name="warning" size={16} />
+          <div style={{ fontSize: 'var(--text-xs)', lineHeight: 1.5 }}>
+            <strong>Self-fence is active.</strong> If this node loses quorum and cannot reach any configured witness,
+            it will stop petting the watchdog and the kernel will hard-reset it after <strong>{timeout}s</strong>.
+            Ensure <code>timeout_secs</code> is less than <code>failover_after_seconds</code> in timing config so the
+            survivor knows the loser is gone before promoting.
+          </div>
+        </div>
+      )}
+
+      {!enable && (
+        <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--surface)', border: '1px solid var(--border)', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          When enabled, the daemon writes to the watchdog device on every heartbeat while the cluster has quorum.
+          If quorum is lost <em>and</em> no witness can be reached, the daemon stops writing and the kernel resets
+          the node after the timeout - guaranteeing the survivor can promote without needing to reach the peer's BMC.
+          Works on any Linux system with <code>/dev/watchdog</code>; hardware watchdogs (iTCO, sp5100_tco) are preferred
+          but <code>softdog</code> (loaded automatically on NixOS) works as a fallback.
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 120px', gap: 12, marginBottom: 12, alignItems: 'end' }}>
+        <label className="field">
+          <span className="field-label">Watchdog Device</span>
+          <input value={device} onChange={e => setDevice(e.target.value)}
+            placeholder="/dev/watchdog"
+            className="input" style={{ fontFamily: 'var(--font-mono)' }}
+            disabled={q.isLoading} />
+        </label>
+        <label className="field">
+          <span className="field-label">Timeout (s)</span>
+          <input type="number" min={10} max={300} value={timeout}
+            onChange={e => setTimeoutS(Math.max(10, parseInt(e.target.value) || 30))}
+            className="input" disabled={q.isLoading} />
+        </label>
+        <label className="field">
+          <span className="field-label">Pet Interval (s)</span>
+          <input type="number" min={1} max={timeout - 1} value={pet}
+            onChange={e => setPet(Math.max(1, parseInt(e.target.value) || 10))}
+            className="input" disabled={q.isLoading} />
+        </label>
+        <label className="field">
+          <span className="field-label">Enable</span>
+          <select value={enable ? 'yes' : 'no'} onChange={e => setEnable(e.target.value === 'yes')} className="input" disabled={q.isLoading}>
+            <option value="no">Disabled</option>
+            <option value="yes">Armed</option>
+          </select>
+        </label>
+      </div>
+
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 14, lineHeight: 1.5 }}>
+        Changes to device path and timeout require a daemon restart to fully take effect.
+        The enable/disable change is applied immediately to the running daemon.
+      </div>
+
+      <button onClick={submit} disabled={save.isPending || q.isLoading} className="btn btn-primary">
+        <Icon name="save" size={15} />{save.isPending ? 'Saving…' : 'Save Watchdog Config'}
+      </button>
+    </div>
+  )
+}
+
+// ─── TimingConfigForm ──────────────────────────────────────────────────────────
+
+function TimingConfigForm() {
+  const qc = useQueryClient()
+  const q  = useQuery({
+    queryKey: ['ha', 'timing'],
+    queryFn:  ({ signal }) => api.get<{ success: boolean; note?: string } & TimingConfig>('/api/ha/timing', signal),
+  })
+
+  const [failover,    setFailover]    = useState(45)
+  const [hysteresis,  setHysteresis]  = useState(60)
+  const [heartbeat,   setHeartbeat]   = useState(15)
+
+  useEffect(() => {
+    if (q.data) {
+      setFailover(q.data.failover_after_seconds     ?? 45)
+      setHysteresis(q.data.hysteresis_window_minutes ?? 60)
+      setHeartbeat(q.data.heartbeat_interval_seconds ?? 15)
+    }
+  }, [q.data])
+
+  const save = useMutation({
+    mutationFn: (cfg: TimingConfig) => api.post('/api/ha/timing', cfg),
+    onSuccess: () => {
+      toast.success('Timing configuration saved')
+      qc.invalidateQueries({ queryKey: ['ha', 'timing'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  function submit() {
+    if (failover < heartbeat * 3) {
+      toast.error(`Failover threshold must be >= heartbeat × 3 (${heartbeat * 3}s)`)
+      return
+    }
+    save.mutate({
+      failover_after_seconds:     failover,
+      hysteresis_window_minutes:  hysteresis,
+      heartbeat_interval_seconds: heartbeat,
+    })
+  }
+
+  const minFailover = heartbeat * 3
+
+  return (
+    <div className="card" style={{ borderRadius: 'var(--radius-lg)', padding: '20px 24px', marginTop: 24, borderLeft: '4px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <Icon name="schedule" size={24} style={{ color: 'var(--text-tertiary)' }} />
+        <div>
+          <div style={{ fontWeight: 700 }}>Cluster Timing</div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+            Failover threshold, heartbeat interval, and flap-guard window
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <label className="field">
+          <span className="field-label">Failover After (s)</span>
+          <input type="number" min={minFailover} max={300} value={failover}
+            onChange={e => setFailover(Math.max(minFailover, parseInt(e.target.value) || 45))}
+            className="input" disabled={q.isLoading}
+            title={`Peer must be unreachable for this many seconds before STONITH fires. Minimum: heartbeat × 3 = ${minFailover}s`} />
+        </label>
+        <label className="field">
+          <span className="field-label">Heartbeat (s)</span>
+          <input type="number" min={5} max={60} value={heartbeat}
+            onChange={e => setHeartbeat(Math.max(5, parseInt(e.target.value) || 15))}
+            className="input" disabled={q.isLoading}
+            title="How often this node pings its peers. Shorter = faster detection, higher network load." />
+        </label>
+        <label className="field">
+          <span className="field-label">Flap Guard (min)</span>
+          <input type="number" min={1} max={1440} value={hysteresis}
+            onChange={e => setHysteresis(Math.max(1, parseInt(e.target.value) || 60))}
+            className="input" disabled={q.isLoading}
+            title="Auto-failover is suppressed for this many minutes after a failover to prevent flapping." />
+        </label>
+      </div>
+
+      {failover < minFailover && (
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--error)', marginBottom: 10 }}>
+          Failover threshold must be at least {minFailover}s (heartbeat × 3) to allow three missed beats before triggering STONITH.
+        </div>
+      )}
+
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 14, lineHeight: 1.5 }}>
+        <strong>Hysteresis</strong> (flap guard) takes effect immediately.
+        <strong> Failover threshold</strong> and <strong>heartbeat interval</strong> require a daemon restart.
+        {q.data?.note && <span> {q.data.note}</span>}
+      </div>
+
+      <button onClick={submit} disabled={save.isPending || q.isLoading || failover < minFailover} className="btn btn-primary">
+        <Icon name="save" size={15} />{save.isPending ? 'Saving…' : 'Save Timing Config'}
+      </button>
+    </div>
+  )
+}
+
 // ─── MaintenanceModeCard ──────────────────────────────────────────────────────
 
 function MaintenanceModeCard({ active, until, onToggle }: {
@@ -1345,7 +1588,7 @@ export function HAPage() {
 
   // ── Setup Wizard ────────────────────────────────────────────────────────────
   if (wizardStep !== null) {
-    const TOTAL_STEPS = 7
+    const TOTAL_STEPS = 8
     return (
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <div style={{ marginBottom: 32 }}>
@@ -1504,14 +1747,43 @@ export function HAPage() {
             </p>
             <FencingConfigForm />
             <PDUConfigForm />
+            <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
+              <button onClick={() => setWizardStep(6)} className="btn btn-ghost">Previous</button>
+              <button onClick={() => setWizardStep(8)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                Next: Watchdog Self-Fence
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 8 - Hardware Watchdog */}
+        {wizardStep === 8 && (
+          <div className="fade-in">
+            <h2 style={{ marginBottom: 8 }}>Step 8: Hardware Watchdog Self-Fence</h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Optional but recommended for mini-PC hardware without IPMI BMC. The watchdog removes the
+              network-reachability requirement from fencing: if this node loses quorum and cannot reach
+              any witness, it hard-resets itself - the survivor then waits the timeout interval and
+              promotes, knowing the peer is gone.
+            </p>
+            <div className="alert alert-info" style={{ marginBottom: 24 }}>
+              <Icon name="info" size={18} />
+              <div style={{ lineHeight: 1.5 }}>
+                <strong>No hardware required.</strong> The <code>softdog</code> kernel module is loaded
+                automatically by the NixOS HA module as a fallback when no hardware watchdog is
+                present - it works on any x86 or ARM node. Set <code>ha.watchdog.enable = true</code> in
+                your <code>ha.nix</code> to also configure the systemd watchdog timeout at the OS level.
+              </div>
+            </div>
+            <WatchdogConfigForm />
             <div className="alert alert-success" style={{ marginTop: 32, marginBottom: 24 }}>
               <Icon name="check_circle" size={18} />
               <div>Setup complete! You can now monitor the cluster from the main dashboard.</div>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setWizardStep(6)} className="btn btn-ghost">Previous</button>
+              <button onClick={() => setWizardStep(7)} className="btn btn-ghost">Previous</button>
               <button onClick={() => setWizardStep(null)} className="btn btn-success" style={{ flex: 1, justifyContent: 'center' }}>
-                Finish & Go to Dashboard
+                Finish &amp; Go to Dashboard
               </button>
             </div>
           </div>
@@ -1931,10 +2203,12 @@ export function HAPage() {
       <div id="fencing-config-section">
         <FencingConfigForm />
         <PDUConfigForm />
+        <WatchdogConfigForm />
       </div>
       <SBDConfigForm />
       <NetworkWitnessForm />
       <ReplicationConfigForm />
+      <TimingConfigForm />
 
       <ConfirmDialog />
     </div>

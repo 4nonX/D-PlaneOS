@@ -48,6 +48,27 @@ type GitOpsHandler struct {
 	// Key: "<kind>/<name>". Cleared after a successful apply.
 	approvalsMu sync.Mutex
 	approvals   map[string]bool
+
+	// ownershipGuardMu protects ownershipGuard.
+	ownershipGuardMu sync.RWMutex
+	// ownershipGuard is called before pool ownership operations in applies
+	// triggered through this handler. Nil means no restriction.
+	ownershipGuard func() bool
+}
+
+// SetOwnershipGuard registers the quorum check function. When set, pool
+// create/destroy/reshape operations in operator-triggered applies are deferred
+// if the function returns false. Wire this to clusterMgr.Status().Quorum.
+func (h *GitOpsHandler) SetOwnershipGuard(fn func() bool) {
+	h.ownershipGuardMu.Lock()
+	h.ownershipGuard = fn
+	h.ownershipGuardMu.Unlock()
+}
+
+func (h *GitOpsHandler) getOwnershipGuard() func() bool {
+	h.ownershipGuardMu.RLock()
+	defer h.ownershipGuardMu.RUnlock()
+	return h.ownershipGuard
 }
 
 // NewGitOpsHandler constructs the handler and starts the drift detector.
@@ -237,8 +258,9 @@ func (h *GitOpsHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := gitops.ApplyContext{
-		DB:          h.db,
-		SmbConfPath: h.smbConfPath,
+		DB:             h.db,
+		SmbConfPath:    h.smbConfPath,
+		OwnershipGuard: h.getOwnershipGuard(),
 	}
 
 	result, applyErr := gitops.ApplyPlan(ctx, plan, desired)

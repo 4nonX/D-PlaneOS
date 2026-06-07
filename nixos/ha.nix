@@ -87,9 +87,55 @@ in {
         description = "Dataset name within ha.sbd.pool used for lease fencing (e.g. sbd-lease).";
       };
     };
+
+    watchdog = {
+      enable = lib.mkEnableOption ''
+        Hardware watchdog self-fence. When enabled, the daemon pets /dev/watchdog
+        on every heartbeat tick while quorum is healthy. If quorum is lost the
+        daemon stops petting it; the kernel hard-resets the node after the timeout.
+        This removes the BMC/PDU network-reachability assumption from the fencing
+        chain and is the correct safety floor for mini-PC hardware without IPMI.
+        The timeout MUST be less than failover_after_seconds in the HA timing config.
+      '';
+      device = lib.mkOption {
+        type    = lib.types.str;
+        default = "/dev/watchdog";
+        description = "Watchdog device path. Use /dev/watchdog0 on systems with multiple watchdogs.";
+      };
+      timeoutSecs = lib.mkOption {
+        type    = lib.types.int;
+        default = 30;
+        description = ''
+          Hardware watchdog timeout in seconds. The kernel resets the node if
+          the watchdog is not pet within this interval. Must be less than
+          ha.failoverAfterSecs (if set) to guarantee the loser has reset before
+          the survivor promotes. Default 30s matches the SBD lease TTL default.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
+    # ─── Hardware watchdog self-fence ─────────────────────────────────────
+    # When enabled, systemd opens the watchdog device and sets the runtime
+    # timeout. The dplaned daemon pets it from the heartbeat loop; losing
+    # quorum stops the petting and the kernel hard-resets the node. This
+    # removes the IPMI/PDU network-reachability requirement for fencing.
+    # softdog is the software fallback for VMs and boards without a hardware
+    # watchdog device; it resets via kernel panic rather than hardware reset.
+    systemd.watchdog = lib.mkIf cfg.watchdog.enable {
+      runtimeTime = "${toString cfg.watchdog.timeoutSecs}s";
+      rebootTime  = "${toString (cfg.watchdog.timeoutSecs * 2)}s";
+    };
+
+    # Load softdog if the device is the default /dev/watchdog and no hardware
+    # watchdog driver is present. A real hardware watchdog (iTCO, sp5100_tco,
+    # etc.) takes precedence; softdog only claims the device when no other
+    # driver does.
+    boot.kernelModules = lib.mkIf (cfg.watchdog.enable && cfg.watchdog.device == "/dev/watchdog") [
+      "softdog"
+    ];
+
     # ─── ZFS hostId ───────────────────────────────────────────────────────
     # module.nix sets boot.supportedFilesystems = ["zfs"], which triggers the
     # NixOS assertion that networking.hostId must be set. HA nodes are already

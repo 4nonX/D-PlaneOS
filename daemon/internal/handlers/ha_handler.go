@@ -1086,6 +1086,66 @@ func (h *HAHandler) SaveClusterTiming(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetWatchdogConfig returns the hardware watchdog self-fence configuration.
+// GET /api/ha/watchdog/configure
+func (h *HAHandler) GetWatchdogConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := h.mgr.GetWatchdogConfig()
+	if err != nil {
+		// Row may not exist yet; return safe defaults.
+		cfg = ha.WatchdogConfig{
+			Enable:         false,
+			Device:         "/dev/watchdog",
+			TimeoutSecs:    30,
+			PetIntervalSec: 10,
+		}
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"config":  cfg,
+	})
+}
+
+// SaveWatchdogConfig saves the hardware watchdog self-fence configuration and
+// starts or stops the watchdog device according to the new enable flag.
+// POST /api/ha/watchdog/configure
+func (h *HAHandler) SaveWatchdogConfig(w http.ResponseWriter, r *http.Request) {
+	var req ha.WatchdogConfig
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+	if req.Device == "" {
+		req.Device = "/dev/watchdog"
+	}
+	if req.TimeoutSecs <= 0 {
+		req.TimeoutSecs = 30
+	}
+	if req.PetIntervalSec <= 0 {
+		req.PetIntervalSec = 10
+	}
+	if req.Enable && req.TimeoutSecs < 10 {
+		respondErrorSimple(w, "timeout_secs must be >= 10 when watchdog is enabled", http.StatusBadRequest)
+		return
+	}
+	if req.Enable && req.PetIntervalSec >= req.TimeoutSecs {
+		respondErrorSimple(w, "pet_interval_sec must be less than timeout_secs", http.StatusBadRequest)
+		return
+	}
+	if err := h.mgr.SaveWatchdogConfig(req); err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to save watchdog config", err)
+		return
+	}
+	if req.Enable {
+		h.mgr.StartWatchdog(req)
+	} else {
+		h.mgr.StopWatchdog()
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "Watchdog self-fence configuration saved",
+	})
+}
+
 // ALUAStandby sets all ALUA-enabled iSCSI targets to Standby access state.
 // This must be called BEFORE POST /api/ha/standby during a planned failover so
 // that initiators see a clean path-state transition (Optimized -> Standby) rather
