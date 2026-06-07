@@ -94,10 +94,40 @@ A pipeline review identified that the tarball binary (tested by all CI jobs) and
 
 - **Frontend lint** (`eslint`): Added `eslint@10` with `typescript-eslint` and `eslint-plugin-react-hooks@7`. `npm run lint` runs in `prepare` after `tsc --noEmit`. Eight real bugs fixed in the process: ternary expressions used as statements in toggle-set handlers (expressions whose return values were silently discarded), empty `catch {}` blocks, `Math.random()` called during render (moved to `useMemo`), a useless null initialisation in the WebSocket store, a `useState` declaration appearing after the `useEffect` that uses its setter, and a ternary used as a statement in an `onSuccess` callback. The safety UX (STONITH confirmation gate, FAILOVER confirmation, IQN deletion gate) is now covered by a lint rule that will catch regressions.
 
+### HA: network quorum witness and bulletproof enable/disable
+
+- **Network quorum witness** (`daemon/internal/ha/network_witness.go`, migration 00010): A neutral IP or URL (rented VPS, cloud metadata endpoint, DNS nameserver) that both HA nodes independently probe to detect network isolation. No software needed on the target - it only needs to respond to TCP connections or HTTP requests. Configured under Settings → HA → Network Quorum Witness with live Test Connectivity. Guard 4b in `checkFailover()`: if the node cannot reach the witness it may be the isolated side - promotion suppressed. Additive-only: never enables failover alone. API: `GET/POST /api/ha/network-witness`, `POST /api/ha/network-witness/probe`.
+
+- **HA enable/disable bulletproofed** (`daemon/internal/handlers/ha_handler.go`):
+  - Enable pre-flight: blocks if STONITH fencing is in progress. Blocks with guided panel if no fencing method is configured (`code: "no_fencing"`).
+  - Disable sequence (in order): (1) Patroni graceful demotion via `POST localhost:8008/demote`, polls `/primary` until 503 (max 20s) so the peer becomes PostgreSQL primary before services stop. Blocked unless `force:true` if demotion times out. (2) etcd graceful leave via `/v3/cluster/member/remove` so remaining members maintain quorum cleanly. (3) `nixos-rebuild switch` stops HA services via systemd. ZFS pools are NOT exported on disable - this node stays operational as a standalone. (4) On rebuild failure, the `ha_enable` JSON flag is reverted so `ha_enabled` in the UI reflects reality.
+  - `POST /api/ha/switchover` (new, AAL2): graceful Patroni primary handoff to the standby node. Returns a job ID for frontend progress tracking. Used by the guided UI workflow before disable.
+  - `Manager.IsFencingInProgress()` exposed as a public method.
+
+- **HA on/off toggle** (`app-react/src/pages/HAPage.tsx`): HA is off by default after installation. The Settings → HA page shows a clear "Enable High Availability" button in the disabled state. The main dashboard header has a "Disable HA" button. HA can be enabled and disabled at any time; all NAS features (ZFS, SMB, NFS, iSCSI, Docker) remain fully operational in both states. The setup wizard is for HA configuration, not required for initial system use.
+
+### Guided error UX and systematic error sanitization
+
+- **`error_sanitize.go`** (`daemon/internal/handlers/error_sanitize.go`): Systematic error sanitization framework eliminating raw Go errors, CLI commands, system paths, and library internals from API responses. Provides `SanitizeSSH()`, `SanitizeZFS()`, `SanitizeDomainJoin()`, `SanitizeDB()`, `SanitizeServiceControl()`, `SanitizeHTTP()` functions that map technical errors to user-readable messages by category (auth failed, connection refused, no space, host key changed, etc.). Every sanitizer logs the raw error at WARNING level while returning only a safe message to the client. `userErr(code, message, guide)` and `respondUserErr()` helpers enforce the structured format.
+
+- **Guided UX for blocked HA operations**: When an operation is blocked, the API returns a structured `{error, code, guide, action}` response (200 OK with `success:false`) instead of a raw error string. The UI renders a guided panel - not a toast - with a context-appropriate action button:
+  - `patroni_primary` (disable while primary): panel shows "Hand off the primary role to the standby node first" + **Switch Primary to Standby** button → calls `POST /api/ha/switchover` → job progress tracker. After switchover, retry disable.
+  - `no_fencing` (enable without fencing): panel shows why fencing matters + **Configure Fencing** button → scrolls directly to the fencing section on the same page.
+  - Force Disable available as explicit fallback after seeing the `patroni_primary` guided panel.
+
+- **Applied to highest-risk handlers**: `ad_join.go` (domain join, NTP pre-check, wbinfo verification - no more raw Kerberos/Samba output in responses), `replication_remotes.go` (SSH errors via `SanitizeSSH()` - no more cipher negotiation details, host key specifics, or authentication method lists), `zfs.go` line 99 (ALL ZFS commands now return structured errors with `code` and `guide` fields), `ftp.go`, `minio.go`, `nfs_handler.go` (service start/stop/restart and database errors).
+
+- **HA guard test coverage** (`daemon/internal/ha/failover_integration_test.go`): `promotionWouldFire()` helper now mirrors all 6 guards in `checkFailover()` including Guard 4b. Two new tests: `TestFailover_NetworkWitnessUnreachable_DoesNotPromote` and `TestFailover_NetworkWitnessReachable_ClearsGuard`. CI gate expanded from 7 to 9 required guard tests.
+
+### Dependency security
+
+- **16 CVEs resolved** by bumping Go from 1.25.7 to 1.26.3 (stdlib CVEs in `crypto/tls`, `crypto/x509`, `net`, `net/http`, `net/url`, `os`, `net/textproto`) and modules: `golang.org/x/crypto` v0.50.0 → v0.52.0 (4 SSH CVEs: infinite loop, FIDO bypass, RSA/DSA DoS, server deadlock), `golang.org/x/net` v0.53.0 → v0.55.0 (Punycode label bypass in idna), `github.com/go-jose/go-jose/v4` v4.1.3 → v4.1.4 (JWE decryption panic). Two stdlib CVEs (GO-2026-5039, GO-2026-5037) remain tracked pending nixpkgs updating to go1.26.4.
+
 ### Known gaps
 
 - `flake.lock` is committed automatically by CI on each main-branch push. A committed `flake.lock` will be present in the repository from this release onward.
 - ARM64 ZFS integration tests (degraded-pool, interrupted-send, promotion mechanics) require a self-hosted arm64 runner with the ZFS kernel module loaded. The GitHub-hosted `ubuntu-22.04-arm` runner does not support it. The amd64 CGO path covers ZFS integration fully; the arm64 gap is infrastructure, not code.
+- Two stdlib CVEs (GO-2026-5039: `net/textproto`, GO-2026-5037: `crypto/x509`) require go1.26.4 which nixpkgs 26.05 does not yet ship. govulncheck reports them; the CI gate is set to allow exactly 2 known tracked CVEs and fails on any additional.
 
 ---
 

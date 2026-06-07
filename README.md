@@ -27,12 +27,13 @@ Feature maturity, honestly:
 | SMB, NFS, iSCSI sharing | Stable | Samba + kernel NFS + LIO. |
 | Container management (Docker, Compose) | Stable | Including ZFS-clone sandboxes. |
 | Hot-swap detection and auto-import | Stable | udev + ZED, exercised regularly. |
-| LDAP / Active Directory integration | Beta | Works, less battle-tested than local auth. |
+| LDAP / Active Directory integration | Beta | Winbind NSS integration shipped in v14.1.0: AD users resolve in `ls -l`, ACLs, and SMB. |
 | OIDC / SSO (Authorization Code + PKCE) | Beta | Keycloak, Authentik, Dex, Entra ID, and any OIDC-compliant provider. |
 | A/B OTA updates with auto-revert | Beta | Mechanism is sound, sample size is small. |
 | GitOps reconciliation | Beta | Structural sync (pools, datasets, shares, stacks) and capture-from-live both work. Safety rails (block destroy on used data, block pool destroy unconditionally) are well-tested. Edge cases at the property-coverage frontier still surfacing. |
+| Out-of-band hardware management (BMC) | Beta | Redfish (iLO 5+, iDRAC 9+), iLO 4 legacy REST, generic IPMI. TOFU TLS certificate pinning. Sensors, event log, power management. |
 | PostgreSQL HA (Patroni + etcd) | Experimental | Tested in lab, never under real load. |
-| Replicated-topology HA with witness | Experimental | Same. Read the [Showstopper Mitigation Guide](docs/reference/SHOWSTOPPER-MITIGATION-GUIDE.md) first. |
+| Replicated-topology HA with witness | Experimental | Same. Read the [Showstopper Mitigation Guide](docs/reference/SHOWSTOPPER-MITIGATION-GUIDE.md) first. Network quorum witness (VPS ping-based) added in v14.1.0. |
 | Shared-SAS HA with SCSI-3 PR fencing | Experimental | Tested on one hardware configuration. Yours will differ. |
 | NVMe-oF over TCP | Experimental | Functional, not yet stress-tested. |
 
@@ -88,12 +89,15 @@ Full license inventory and attribution in [NOTICE.md](NOTICE.md).
 |------|-------------|
 | **Storage** | ZFS pools, datasets, snapshots, `zfs send` replication, native encryption, quotas, S.M.A.R.T., POSIX ACLs, file explorer with chunked uploads |
 | **Hot-swap** | udev detects disk add/remove; daemon auto-imports FAULTED/UNAVAIL pools and suggests vdev replacements in the UI |
-| **Sharing** | SMB (with Time Machine via `vfs_fruit`), NFS, iSCSI, configured from the UI |
-| **Containers** | Docker, Compose stacks, ephemeral ZFS-clone sandboxes, atomic updates with rollback, in-browser terminal |
+| **Sharing** | SMB (with Time Machine via `vfs_fruit`), NFS, iSCSI, NVMe-oF, configured from the UI |
+| **Containers** | Docker, Compose stacks, ephemeral ZFS-clone sandboxes, atomic updates with rollback, in-browser terminal. Intel VA-API hardware transcoding supported (Jellyfin, Plex). |
 | **Network** | Interface config, bonding, VLANs, routing, DNS |
-| **Identity** | Local users, LDAP / AD with group-to-role mapping, OIDC SSO (Authorization Code + PKCE), TOTP 2FA, API tokens |
-| **Security** | RBAC (4 roles, 34 permissions), HMAC audit chain, CSRF protection, firewall, TLS, allowlist-validated exec calls |
-| **System** | Dashboard, logs, UPS (NUT), IPMI / sensors, hardware auto-tuning, cloud sync (rclone), HA node monitoring |
+| **Identity** | Local users, LDAP / AD with Winbind NSS integration (AD users visible in `ls -l`, ACLs, SMB), OIDC SSO (Authorization Code + PKCE), TOTP 2FA, SCRAM-SHA-512, API tokens |
+| **Security** | RBAC (4 roles, 34 permissions), HMAC audit chain, CSRF protection, firewall, TLS, allowlist-validated exec calls, govulncheck in CI |
+| **Hardware** | BMC management via Redfish (iLO 5+, iDRAC 9+), iLO 4, or IPMI. TOFU TLS certificate pinning. Temperature, fan, power sensors. Power management and event log. |
+| **Monitoring** | Prometheus/OpenMetrics at `/metrics`: ZFS pool health (4-level), dataset usage/quota, scrub progress, HA peer health, replication status, BMC sensors, build info |
+| **HA** | Optional, off by default. Enable/disable from the UI with a single toggle. Two paths: shared-SAS with SCSI-3 PR fencing (no witness needed); replicated ZFS with IPMI/PDU/SBD/network-quorum witness. Graceful primary handoff (Patroni switchover) before disable. |
+| **System** | Dashboard, logs, UPS (NUT), hardware auto-tuning, cloud sync (rclone), HA node monitoring |
 | **GitOps** | Git-sync repositories, bi-directional reconciliation, drift detection. Manages structure (pools, dataset properties, shares, stacks, users), not data. Destructive operations on used datasets and pools are blocked by default. |
 
 ---
@@ -114,7 +118,9 @@ dd if=dplaneos-v*.iso of=/dev/sdX bs=4M status=progress conv=fsync
 
 **Download:** [Latest release](https://github.com/4nonX/DPlaneOS/releases/latest). Grab `dplaneos-v*-installer-amd64.iso` (x86_64) or `...-arm64.iso` (aarch64, including Raspberry Pi 5). The combined installer handles NAS installation and, for replicated-topology HA clusters, witness-node installation via a boot menu. Shared-SAS clusters need only the two data-node ISOs.
 
-**Offline / air-gapped:** the ISO contains the complete NixOS closure. No internet access needed during installation.
+**Offline / air-gapped:** the ISO contains the complete NixOS closure. No internet access needed during installation. Note: Intel VA-API hardware transcoding packages (`intel-media-driver`, `intel-compute-runtime`) are not included in the ISO to keep it under 2 GB. Run `nixos-rebuild` once the system is online to install them. All core NAS features work immediately from an offline install.
+
+**Cosign / provenance:** every ISO is signed with [cosign](https://github.com/sigstore/cosign) and accompanied by an SPDX SBOM. Verify with `cosign verify-blob --bundle dplaneos-v*.iso.bundle dplaneos-v*.iso`.
 
 **Rebuilding from source:** `nix build .#iso`. See [nixos/README.md](nixos/README.md).
 
@@ -148,8 +154,10 @@ Browser
 | Frontend | React 19 + TypeScript + Vite, pre-built, no Node.js at runtime |
 | Backend | Go daemon, allowlist-validated exec, no shell invocation anywhere in the codebase |
 | Database | PostgreSQL 15+ (Patroni for HA topologies) |
-| Auth | bcrypt (local accounts), LDAP bind (directory accounts), OIDC Authorization Code + PKCE (SSO accounts), TOTP 2FA, 32-byte session tokens, CSRF double-submit |
+| Auth | SCRAM-SHA-512 (RFC 5802, 100k PBKDF2 iterations), bcrypt (web login over HTTPS), LDAP bind (directory accounts), OIDC Authorization Code + PKCE (SSO accounts), TOTP 2FA, AAL1/AAL2 session assurance levels, CSRF double-submit |
 | ZFS events | ZED hook delivers pool fault, scrub, and resilver events in real time |
+| BMC | Redfish (iLO 5+, iDRAC 9+), iLO 4 legacy REST, generic IPMI. TOFU TLS fingerprint pinning - no InsecureSkipVerify. |
+| Observability | Prometheus/OpenMetrics at `/metrics` (no auth). ZFS, HA, replication, BMC sensor metrics. govulncheck on every CI run. cosign-signed releases with SPDX SBOMs. |
 
 Deeper reading: [Architecture](docs/reference/ARCHITECTURE.md), [Design Philosophy](docs/reference/PHILOSOPHY.md), [NixOS Rationale](docs/reference/NIXOS-RATIONALE.md).
 
@@ -208,7 +216,8 @@ sudo dplaneos-ota-update
 | [Administrator Guide](docs/admin/ADMIN-GUIDE.md) | Users, roles, permissions, storage, containers, LDAP/AD, security |
 | [Git-Driven NAS](docs/admin/GITOPS-DRIVEN-NAS.md) | Operating DPlaneOS entirely via state.yaml: bootstrap, auto-apply, rollback, PR workflow, HA |
 | [Backup and Replication](docs/admin/BACKUP-REPLICATION.md) | Snapshots, ZFS send/receive, cloud sync, cold tier, rsync, DB backup, recovery |
-| [High Availability](docs/admin/HIGH-AVAILABILITY.md) | Shared-SAS with SCSI-3 PR fencing, replicated ZFS with witness, Patroni, Keepalived, STONITH, rolling upgrades |
+| [High Availability](docs/admin/HIGH-AVAILABILITY.md) | HA is optional and off by default. Shared-SAS with SCSI-3 PR fencing, replicated ZFS with witness (etcd, network quorum, VPS ping), Patroni, Keepalived, STONITH, rolling upgrades |
+| [Integration Guide](docs/admin/INTEGRATION-GUIDE.md) | Prometheus scrape config, Active Directory/Winbind, SMB HA behaviour, NVMe-oF client setup, iSCSI ALUA, GitOps/CI, HA timing, Docker hardware transcoding, GPU passthrough |
 | [OTA Updates](docs/admin/OTA-UPDATES.md) | A/B slots, health check, auto-revert, manual rollback, HA rolling upgrades |
 | [Optional Protocols](docs/admin/OPTIONAL-PROTOCOLS.md) | iSCSI, NVMe-oF, FTP/FTPS, MinIO S3-compatible object store |
 | [Alerts and Authentication](docs/admin/ALERTS.md) | SMTP, webhook, Telegram alerting, TOTP 2FA setup and backup codes |
