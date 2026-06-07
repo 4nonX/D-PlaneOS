@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -460,7 +459,10 @@ func (h *HAHandler) ToggleHA(w http.ResponseWriter, r *http.Request) {
 		// without replication catchup or client draining. Operator should run
 		// 'patronictl switchover' first to hand off leadership gracefully.
 		if !req.Force && isPatroniPrimary() {
-			respondJSON(w, http.StatusConflict, map[string]any{
+			// Return 200 OK so the frontend onSuccess handler receives the code
+			// and can surface the "Force Disable" button. 409 would go to onError
+			// where structured codes are not accessible to the UI.
+			respondJSON(w, http.StatusOK, map[string]any{
 				"success": false,
 				"error":   "This node is the Patroni PostgreSQL primary. Disabling HA now would cause an abrupt primary loss without graceful replication handoff. Run 'patronictl switchover' to promote the standby first, then disable HA. To override this check, set force:true in the request.",
 				"code":    "patroni_primary",
@@ -713,13 +715,11 @@ func leaveEtcdCluster() error {
 		return fmt.Errorf("this node (%s) not found in etcd cluster (%d members)", hostname, len(memberList.Members))
 	}
 
-	// Step 2: Remove this member
-	// The ID field in etcd v3 API is a uint64 encoded as a decimal string
-	idInt, err := strconv.ParseUint(myMemberID, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid member ID %q: %w", myMemberID, err)
-	}
-	removeBody, _ := json.Marshal(map[string]any{"ID": idInt})
+	// Step 2: Remove this member.
+	// etcd v3 gRPC-gateway encodes uint64 IDs as JSON strings to avoid
+	// JavaScript precision loss. The remove request must send the ID as a
+	// string, not a number: {"ID":"12345678901234567890"}.
+	removeBody, _ := json.Marshal(map[string]string{"ID": myMemberID})
 	removeResp, err := hc.Post(etcdEndpoint+"/v3/cluster/member/remove",
 		"application/json", bytes.NewReader(removeBody))
 	if err != nil {
