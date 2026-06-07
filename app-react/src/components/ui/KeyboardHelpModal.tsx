@@ -21,9 +21,9 @@ const SECTIONS: ShortcutSection[] = [
   {
     title: 'Interface',
     shortcuts: [
-      { keys: ['Ctrl', 'K'],    desc: 'Open global search' },
+      { keys: ['Ctrl', 'K'],    desc: 'Command palette - search pages, pools, actions' },
       { keys: ['?'],            desc: 'Show keyboard shortcuts' },
-      { keys: ['Esc'],          desc: 'Close dialog / search' },
+      { keys: ['Esc'],          desc: 'Close dialog / palette' },
     ],
   },
   {

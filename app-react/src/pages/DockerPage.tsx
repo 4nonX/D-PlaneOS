@@ -21,6 +21,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { itemOpacity } from '@/lib/listFilter'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -589,7 +590,7 @@ function LogsModal({ containerName, onClose }: { containerName: string; onClose:
 // ContainerRow
 // ---------------------------------------------------------------------------
 
-function ContainerRow({ container, onRefresh }: { container: Container; onRefresh: () => void }) {
+function ContainerRow({ container, onRefresh, style: _rowStyle }: { container: Container; onRefresh: () => void; style?: React.CSSProperties }) {
   const iconMapQ = useQuery({
     queryKey: ['docker', 'icon-map'],
     queryFn: ({ signal }) => api.get<IconMapResponse>('/api/docker/icon-map', signal),
@@ -821,6 +822,7 @@ function ContainersTab() {
   const [viewMode, setViewMode] = useState<'grid' | 'stacks' | 'list'>(
     () => (localStorage.getItem('docker.viewMode') as 'grid' | 'stacks' | 'list') ?? 'grid'
   )
+  const [containerFilter, setContainerFilter] = useState('')
 
   function refresh() { qc.invalidateQueries({ queryKey: ['docker', 'containers'] }) }
 
@@ -856,6 +858,25 @@ function ContainersTab() {
           </div>
         ))}
       </div>
+
+      {/* Filter input - only shown when there are containers */}
+      {allContainers.length > 3 && (
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <Icon name="search" size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
+          <input
+            value={containerFilter}
+            onChange={e => setContainerFilter(e.target.value)}
+            placeholder="Filter containers…"
+            className="input"
+            style={{ paddingLeft: 32, height: 34, fontSize: 'var(--text-sm)' }}
+          />
+          {containerFilter && (
+            <button onClick={() => setContainerFilter('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', padding: 2 }}>
+              <Icon name="close" size={14} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* View toggle + actions */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -897,19 +918,25 @@ function ContainersTab() {
         allContainers.length === 0
           ? <EmptyContainers />
           : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 16 }}>
-              {allContainers.map(c => <ContainerCard key={c.id || c.name} container={c} onRefresh={refresh} />)}
+              {allContainers.map(c => (
+                <div key={c.id || c.name} style={{ opacity: itemOpacity(containerFilter, c.name, c.image ?? ''), transition: 'opacity 0.12s', pointerEvents: itemOpacity(containerFilter, c.name, c.image ?? '') < 1 ? 'none' : undefined }}>
+                  <ContainerCard container={c} onRefresh={refresh} />
+                </div>
+              ))}
             </div>
       )}
       {viewMode === 'stacks' && stacks.length === 0 && containers.length === 0 && (
         <EmptyContainers />
       )}
       {viewMode === 'stacks' && stacks.map(stack => (
-        <StackSection key={stack.name ?? '__standalone'} stack={stack} onRefresh={refresh} />
+        <div key={stack.name ?? '__standalone'} style={{ opacity: itemOpacity(containerFilter, stack.name ?? ''), transition: 'opacity 0.12s', pointerEvents: itemOpacity(containerFilter, stack.name ?? '') < 1 ? 'none' : undefined }}>
+          <StackSection stack={stack} onRefresh={refresh} />
+        </div>
       ))}
       {viewMode === 'list' && (
         allContainers.length === 0
           ? <EmptyContainers />
-          : <ContainerTable containers={allContainers} onRefresh={refresh} />
+          : <ContainerTable containers={allContainers.map(c => ({ ...c, _opacity: itemOpacity(containerFilter, c.name, c.image ?? '') }))} onRefresh={refresh} />
       )}
     </>
   )
@@ -946,7 +973,7 @@ function StackSection({ stack, onRefresh }: { stack: Stack; onRefresh: () => voi
   )
 }
 
-function ContainerTable({ containers, onRefresh, topBorder = true }: { containers: Container[]; onRefresh: () => void; topBorder?: boolean }) {
+function ContainerTable({ containers, onRefresh, topBorder = true, filter = '' }: { containers: Container[]; onRefresh: () => void; topBorder?: boolean; filter?: string }) {
   return (
     <div className="card" style={{ background: 'var(--surface)', ...(topBorder ? { borderRadius: 'var(--radius-lg)' } : { borderTop: 'none', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }), overflow: 'hidden' }}>
       <table className="data-table">
@@ -973,7 +1000,14 @@ function ContainerTable({ containers, onRefresh, topBorder = true }: { container
           </tr>
         </thead>
         <tbody>
-          {containers.map(c => <ContainerRow key={c.id || c.name} container={c} onRefresh={onRefresh} />)}
+          {containers.map(c => (
+            <ContainerRow
+              key={c.id || c.name}
+              container={c}
+              onRefresh={onRefresh}
+              style={{ opacity: itemOpacity(filter, c.name, c.image ?? ''), transition: 'opacity 0.12s', pointerEvents: itemOpacity(filter, c.name, c.image ?? '') < 1 ? 'none' : undefined }}
+            />
+          ))}
         </tbody>
       </table>
     </div>

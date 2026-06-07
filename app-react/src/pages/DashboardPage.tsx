@@ -17,6 +17,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { api } from '@/lib/api'
 import { useWsStore } from '@/stores/ws'
 import { ErrorState } from '@/components/ui/ErrorState'
+import { useFrozenLayout } from '@/hooks/useFrozenLayout'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { Icon } from '@/components/ui/Icon'
 
@@ -467,6 +468,7 @@ export function DashboardPage() {
   const memTotal = live?.memory?.total   ?? metricsQ.data?.memory.total     ?? 0
   const iowait   = live?.iowait          ?? metricsQ.data?.iowait           ?? 0
   const pools    = poolsQ.data?.data     ?? []
+  const { snapshot: poolSnapshot, liveById: poolLive } = useFrozenLayout(pools, p => p.name)
   const containers = containersQ.data?.containers ?? []
   const running  = containers.filter((c) => c.State === 'running')
   const ups      = live?.ups ?? upsQ.data?.data
@@ -681,7 +683,7 @@ export function DashboardPage() {
                   <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>No ZFS pools configured</div>
                 </div>
               )}
-              {pools.map(p => <PoolRow key={p.name} pool={p} onClick={() => navigate({ to: '/pools' })} />)}
+              {(poolSnapshot ?? pools).map(sp => <PoolRow key={sp.name} pool={poolLive.get(sp.name) ?? sp} onClick={() => navigate({ to: '/pools' })} />)}
             </SectionCard>
           )}
 

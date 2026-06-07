@@ -37,6 +37,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
 import { ErrorState } from '@/components/ui/ErrorState'
+import { useFrozenLayout } from '@/hooks/useFrozenLayout'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { toast } from '@/hooks/useToast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
@@ -1687,23 +1688,39 @@ export function HAPage() {
     queryFn:  ({ signal }) => api.get<ClusterSecretStatus>('/api/ha/cluster-secret/configure', signal),
   })
 
+  // nodeRefreshKey increments after structural mutations (add/remove peer, promote)
+  // so useFrozenLayout updates the snapshot even if the poll hasn't fired yet.
+  const [nodeRefreshKey, setNodeRefreshKey] = useState(0)
+
   const addPeer = useMutation({
     mutationFn: (peer: { id: string; name: string; address: string; role: string }) =>
       api.post('/api/ha/peers', peer),
-    onSuccess: () => { toast.success('Peer registered - heartbeat starting'); qc.invalidateQueries({ queryKey: ['ha', 'status'] }) },
+    onSuccess: () => {
+      toast.success('Peer registered - heartbeat starting')
+      qc.invalidateQueries({ queryKey: ['ha', 'status'] })
+      setNodeRefreshKey(k => k + 1)
+    },
     onError: (e: Error) => toast.error(e.message),
   })
 
   const removePeer = useMutation({
     mutationFn: (id: string) => api.delete(`/api/ha/peers/${encodeURIComponent(id)}`),
-    onSuccess: () => { toast.success('Peer removed'); qc.invalidateQueries({ queryKey: ['ha', 'status'] }) },
+    onSuccess: () => {
+      toast.success('Peer removed')
+      qc.invalidateQueries({ queryKey: ['ha', 'status'] })
+      setNodeRefreshKey(k => k + 1)
+    },
     onError: (e: Error) => toast.error(e.message),
   })
 
   const promotePeer = useMutation({
     mutationFn: ({ id }: { id: string; name: string }) =>
       api.post(`/api/ha/peers/${encodeURIComponent(id)}/role`, { role: 'active' }),
-    onSuccess: (_data, { name }) => { toast.success(`${name} promoted to active`); qc.invalidateQueries({ queryKey: ['ha', 'status'] }) },
+    onSuccess: (_data, { name }) => {
+      toast.success(`${name} promoted to active`)
+      qc.invalidateQueries({ queryKey: ['ha', 'status'] })
+      setNodeRefreshKey(k => k + 1)
+    },
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -1855,6 +1872,12 @@ export function HAPage() {
 
   const peers    = cluster.peers ?? []
   const allNodes = localNode ? [localNode, ...peers] : peers
+
+  // Frozen layout: node list structure is stable across 15s poll ticks.
+  // Only adds/removes update the DOM order; health/state metrics update in place.
+  const { snapshot: nodeSnapshot, liveById: nodeLive, forceRefresh: refreshNodes } =
+    useFrozenLayout(allNodes, n => n.id, nodeRefreshKey)
+
   const hasQuorum = cluster.quorum === true
   const haEnabled = cluster.ha_enabled === true
   const activeNode = cluster.active_node ?? allNodes.find(n => n.role === 'active')
@@ -2334,6 +2357,7 @@ export function HAPage() {
           <button onClick={() => {
             qc.invalidateQueries({ queryKey: ['ha', 'status'] })
             qc.invalidateQueries({ queryKey: ['ha', 'local'] })
+            refreshNodes()
           }} className="btn btn-ghost">
             <Icon name="refresh" size={14} />Refresh
           </button>
@@ -2581,36 +2605,40 @@ export function HAPage() {
       {/* ── Node List ────────────────────────────────────────────────────────── */}
       <div style={{ fontWeight: 700, marginBottom: 12 }}>Nodes</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {allNodes.map(node => (
-          <NodeCard
-            key={node.id}
-            node={node}
-            isLocal={node.id === localID}
-            canPromote={allNodes.length >= 2}
-            onPromote={async () => {
-              if (node.id === localID) {
-                if (await confirm({ title: 'Assume Primary Role Locally?', message: 'This node will force-import all storage pools and execute the failover protocol. Ensure the current active node is offline or fenced first to prevent split-brain.', danger: true, confirmLabel: 'Failover Now', confirmText: 'FAILOVER' })) {
-                  localPromote.mutate()
+        {(nodeSnapshot ?? allNodes).map(snapshotNode => {
+          // Structure from snapshot (stable across polls), metrics from live data
+          const node = nodeLive.get(snapshotNode.id) ?? snapshotNode
+          return (
+            <NodeCard
+              key={node.id}
+              node={node}
+              isLocal={node.id === localID}
+              canPromote={(nodeSnapshot ?? allNodes).length >= 2}
+              onPromote={async () => {
+                if (node.id === localID) {
+                  if (await confirm({ title: 'Assume Primary Role Locally?', message: 'This node will force-import all storage pools and execute the failover protocol. Ensure the current active node is offline or fenced first to prevent split-brain.', danger: true, confirmLabel: 'Failover Now', confirmText: 'FAILOVER' })) {
+                    localPromote.mutate()
+                  }
+                } else {
+                  if (await confirm({ title: `Promote ${node.name ?? node.id}?`, message: 'Registers this peer as the active node. Promotion propagates through Patroni.', danger: false, confirmLabel: 'Promote' })) {
+                    promotePeer.mutate({ id: node.id, name: node.name ?? node.id })
+                  }
                 }
-              } else {
-                if (await confirm({ title: `Promote ${node.name ?? node.id}?`, message: 'Registers this peer as the active node. Promotion propagates through Patroni.', danger: false, confirmLabel: 'Promote' })) {
-                  promotePeer.mutate({ id: node.id, name: node.name ?? node.id })
+              }}
+              onRemove={async () => {
+                if (await confirm({ title: `Remove ${node.name ?? node.id}?`, message: 'This node will be removed from the cluster tracking pool.', danger: true, confirmLabel: 'Remove' })) {
+                  removePeer.mutate(node.id)
                 }
-              }
-            }}
-            onRemove={async () => {
-              if (await confirm({ title: `Remove ${node.name ?? node.id}?`, message: 'This node will be removed from the cluster tracking pool.', danger: true, confirmLabel: 'Remove' })) {
-                removePeer.mutate(node.id)
-              }
-            }}
-            onFence={async () => {
-              if (await confirm({ title: `STONITH: Terminate ${node.name ?? node.id}?`, message: 'Issues a chassis power-off via out-of-band management (IPMI BMC or PDU). Data loss may occur if the node has unsynchronised writes. Proceed?', danger: true, confirmLabel: 'Terminate Chassis', confirmText: 'STONITH' })) {
-                fencePeer.mutate(node.id)
-              }
-            }}
-            pending={pending}
-          />
-        ))}
+              }}
+              onFence={async () => {
+                if (await confirm({ title: `STONITH: Terminate ${node.name ?? node.id}?`, message: 'Issues a chassis power-off via out-of-band management (IPMI BMC or PDU). Data loss may occur if the node has unsynchronised writes. Proceed?', danger: true, confirmLabel: 'Terminate Chassis', confirmText: 'STONITH' })) {
+                  fencePeer.mutate(node.id)
+                }
+              }}
+              pending={pending}
+            />
+          )
+        })}
 
         {allNodes.length === 0 && (
           <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: 12, borderRadius: 'var(--radius-lg)' }}>

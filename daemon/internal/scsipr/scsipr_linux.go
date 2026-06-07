@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"unsafe"
@@ -285,7 +286,9 @@ func SupportsReservations(device string) error {
 	copy(unregParam[0:8], testKey[:]) // reservation key = testKey (current)
 	// service action key = 0 means unregister
 	unregCDB := []byte{scsiPROUT, proutRegister, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x00}
-	_, _ = sgIOIoctl(fd, unregCDB, unregParam, sgDxferToDev) // best-effort cleanup
+	if _, err := sgIOIoctl(fd, unregCDB, unregParam, sgDxferToDev); err != nil {
+		log.Printf("SCSIPR: cleanup unregister failed on %s (test key may remain until next probe): %v", device, err)
+	}
 
 	if !found {
 		return fmt.Errorf("PROUT REGISTER succeeded but key not visible in PRIN READ KEYS - unreliable SAT translation")

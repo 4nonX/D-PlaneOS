@@ -37,6 +37,7 @@ import { useWsStore } from '@/stores/ws'
 import { Modal } from '@/components/ui/Modal'
 import { useRouter } from '@tanstack/react-router'
 import { PoolTopologyView, PoolTopology, VDev } from '@/components/zfs/PoolTopology'
+import { useFrozenLayout } from '@/hooks/useFrozenLayout'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -2343,6 +2344,12 @@ export function PoolsPage() {
   const pools    = poolsQ.data?.pools ?? poolsQ.data?.data ?? []
   const datasets = datasetsQ.data?.data ?? []
 
+  // Frozen layout: pool list structure is stable across 60s polls + WS events.
+  // Health/capacity values update in place; pools are only added/removed on
+  // explicit user action so structural updates happen via poolRefreshKey.
+  const { snapshot: poolSnapshot, liveById: poolLive, forceRefresh: refreshPoolLayout } =
+    useFrozenLayout(pools, p => p.name)
+
   // Compute global match count for the search bar summary
   const { totalDatasets, filteredDatasetCount } = useMemo(() => {
     const total = datasets.length
@@ -2361,6 +2368,7 @@ export function PoolsPage() {
   function refresh() {
     qc.invalidateQueries({ queryKey: ['zfs', 'pools'] })
     qc.invalidateQueries({ queryKey: ['zfs', 'datasets'] })
+    refreshPoolLayout()
   }
 
   const TABS: { id: Tab; label: string; icon: string }[] = [
@@ -2435,13 +2443,16 @@ export function PoolsPage() {
             />
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {pools.map(pool => (
-              <PoolCard key={pool.name} pool={pool}
-                datasets={datasets.filter(d => d.name === pool.name || d.name.startsWith(pool.name + '/'))}
-                filter={datasetFilter}
-                onRefresh={refresh}
-              />
-            ))}
+            {(poolSnapshot ?? pools).map(snapshotPool => {
+              const pool = poolLive.get(snapshotPool.name) ?? snapshotPool
+              return (
+                <PoolCard key={pool.name} pool={pool}
+                  datasets={datasets.filter(d => d.name === pool.name || d.name.startsWith(pool.name + '/'))}
+                  filter={datasetFilter}
+                  onRefresh={refresh}
+                />
+              )
+            })}
           </div>
         </>
       )}

@@ -245,11 +245,15 @@ func (m *Manager) Status() *ClusterStatus {
 		activeNode = local
 	}
 
-	// Quorum: majority of registered nodes (including self) must be reachable
+	// Quorum: majority of registered nodes (including self) must be CONFIRMED healthy.
+	// StateUnknown (initial state before first heartbeat) is NOT counted as reachable.
+	// A peer in StateUnknown has never been verified alive and must not be assumed
+	// reachable - doing so would allow the watchdog to be petted before any peer
+	// has responded, defeating the startup safety requirement.
 	total := len(m.nodes) + 1 // include self
 	reachable := 1             // self is always reachable
 	for _, n := range m.nodes {
-		if n.State != StateUnreachable {
+		if n.State == StateHealthy {
 			reachable++
 		}
 	}

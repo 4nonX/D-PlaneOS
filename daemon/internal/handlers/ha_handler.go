@@ -1353,8 +1353,12 @@ func (h *HAHandler) SaveWatchdogConfig(w http.ResponseWriter, r *http.Request) {
 		respondErrorSimple(w, "timeout_secs must be >= 10 when watchdog is enabled", http.StatusBadRequest)
 		return
 	}
-	if req.Enable && req.PetIntervalSec >= req.TimeoutSecs {
-		respondErrorSimple(w, "pet_interval_sec must be less than timeout_secs", http.StatusBadRequest)
+	if req.Enable && req.PetIntervalSec*2 > req.TimeoutSecs {
+		// Pet interval must be <= timeout/2. The kernel needs to fire the watchdog
+		// after the timeout, and the daemon needs at least two pet intervals before
+		// that to confirm it is still alive. pet_interval*2 > timeout means a single
+		// missed pet could expire the watchdog without the daemon getting a second chance.
+		respondErrorSimple(w, "pet_interval_sec must be <= timeout_secs/2 (allows two missed pets before reset)", http.StatusBadRequest)
 		return
 	}
 	if err := h.mgr.SaveWatchdogConfig(req); err != nil {

@@ -18,6 +18,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
+import { itemOpacity } from '@/lib/listFilter'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Skeleton } from '@/components/ui/LoadingSpinner'
 import { Modal } from '@/components/ui/Modal'
@@ -372,6 +373,7 @@ export function SharesPage() {
   const [tab, setTab] = useState<'shares' | 'sessions'>('shares')
   const [showCreate, setShowCreate] = useState(false)
   const [editingShare, setEditingShare] = useState<Share|null>(null)
+  const [shareFilter, setShareFilter] = useState('')
 
   const sharesQ = useQuery({
     queryKey: ['shares', 'list'],
@@ -461,9 +463,28 @@ export function SharesPage() {
                 <div style={{ fontSize: 'var(--text-sm)', marginTop: 4 }}>Create a share to access data over the network</div>
               </div>
             )}
+            {shares.length > 3 && (
+              <div style={{ position: 'relative', marginBottom: 12 }}>
+                <Icon name="search" size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
+                <input
+                  value={shareFilter}
+                  onChange={e => setShareFilter(e.target.value)}
+                  placeholder="Filter shares…"
+                  className="input"
+                  style={{ paddingLeft: 32, height: 34, fontSize: 'var(--text-sm)' }}
+                />
+                {shareFilter && (
+                  <button onClick={() => setShareFilter('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', padding: 2 }}>
+                    <Icon name="close" size={14} />
+                  </button>
+                )}
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {shares.map(share => (
-                <ShareCard key={share.name} share={share} onDeleted={refresh} onEdit={() => setEditingShare(share)} />
+                <div key={share.name} style={{ opacity: itemOpacity(shareFilter, share.name, share.path ?? ''), transition: 'opacity 0.12s', pointerEvents: itemOpacity(shareFilter, share.name, share.path ?? '') < 1 ? 'none' : undefined }}>
+                  <ShareCard share={share} onDeleted={refresh} onEdit={() => setEditingShare(share)} />
+                </div>
               ))}
             </div>
           </>
