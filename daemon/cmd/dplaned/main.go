@@ -1342,6 +1342,7 @@ func main() {
 	r.Handle("/api/ha/timing", middleware.RequireAAL2(permRoute("system", "admin", haHandler.SaveClusterTiming))).Methods("POST")
 	r.Handle("/api/ha/watchdog/configure", permRoute("system", "admin", haHandler.GetWatchdogConfig)).Methods("GET")
 	r.Handle("/api/ha/watchdog/configure", middleware.RequireAAL2(permRoute("system", "admin", haHandler.SaveWatchdogConfig))).Methods("POST")
+	r.Handle("/api/ha/hardware/detect", permRoute("system", "read", haHandler.DetectHAHardware)).Methods("GET")
 	r.Handle("/api/ha/scsi/status", permRoute("system", "read", haHandler.GetSCSIStatus)).Methods("GET")
 	r.Handle("/api/ha/scsi/probe", permRoute("system", "admin", haHandler.ProbeSCSIDevices)).Methods("POST")
 

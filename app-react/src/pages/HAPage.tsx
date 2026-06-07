@@ -29,6 +29,7 @@
  *   POST /api/ha/timing
  *   GET  /api/ha/scsi/status
  *   POST /api/ha/scsi/probe
+ *   GET  /api/ha/hardware/detect
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -182,6 +183,24 @@ interface TimingConfig {
   heartbeat_interval_seconds: number
 }
 
+// HAPath identifies which HA topology this cluster is using.
+// shared_storage = Path A': SCSI-3 PR hardware arbitrates writes (SAS/enterprise NVMe-oF)
+// replicated     = Path B:  ZFS replication + watchdog self-fence (SATA/NVMe consumer)
+type HAPath = 'shared_storage' | 'replicated' | 'unknown'
+
+interface HWDetectResult {
+  success:                boolean
+  watchdog_available:     boolean
+  watchdog_device:        string
+  fenced_running:         boolean
+  fenced_devices:         string[]
+  pool_sg_devices:        string[]
+  provisional_path:       HAPath
+  provisional_path_label: string
+  provisional_reason:     string
+  probe_required:         boolean
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(s?: string): string {
@@ -202,6 +221,42 @@ function fmtAgo(ts?: number): string {
   if (secs < 60)   return `${secs}s ago`
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
   return `${Math.floor(secs / 3600)}h ago`
+}
+
+// ─── PathBadge ────────────────────────────────────────────────────────────────
+// Small inline badge displayed on the dashboard showing which HA path is active.
+
+function PathBadge({ path, label, reason, probeRequired }: {
+  path:          HAPath
+  label:         string
+  reason:        string
+  probeRequired: boolean
+}) {
+  const isShared = path === 'shared_storage'
+  const isUnknown = path === 'unknown'
+  const color = isShared ? 'var(--success)' : isUnknown ? 'var(--text-tertiary)' : 'var(--primary)'
+  const bg    = isShared ? 'var(--success-bg)' : isUnknown ? 'var(--surface)' : 'var(--primary-bg)'
+  const border = isShared ? 'var(--success-border)' : isUnknown ? 'var(--border)' : 'hsla(var(--hue-primary),100%,72%,.2)'
+  const icon  = isShared ? 'storage' : isUnknown ? 'help_outline' : 'sync'
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px',
+      background: bg, border: `1px solid ${border}`, borderRadius: 'var(--radius-md)',
+      marginBottom: 16,
+    }}>
+      <Icon name={icon} size={16} style={{ color, flexShrink: 0, marginTop: 1 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 'var(--text-xs)', color }}>{label}</div>
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2 }}>{reason}</div>
+        {probeRequired && (
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--warning)', marginTop: 3 }}>
+            Run the PROUT probe in the SCSI-3 PR section below to confirm PR write support.
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ─── NodeCard ─────────────────────────────────────────────────────────────────
@@ -1739,6 +1794,37 @@ export function HAPage() {
 
   const [wizardStep, setWizardStep] = useState<number | null>(null)
 
+  // selectedPath is the HA topology the operator chose (or detected) for this cluster.
+  // It drives the path-aware wizard steps and the dissolution RPO warning.
+  const [selectedPath, setSelectedPath] = useState<HAPath | null>(null)
+
+  // Hardware detection: non-destructive scan run once per page load.
+  // Full PROUT write probe is operator-triggered via SCSIFencingCard.
+  const hwDetectQ = useQuery({
+    queryKey: ['ha', 'hardware-detect'],
+    queryFn:  ({ signal }) => api.get<HWDetectResult>('/api/ha/hardware/detect', signal),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Effective path: operator selection overrides auto-detection.
+  const effectivePath: HAPath = selectedPath ?? hwDetectQ.data?.provisional_path ?? 'unknown'
+
+  // RPO-aware disable: for replicated clusters warn about the non-zero RPO
+  // before tearing down the replication link.
+  async function handleDisableHA(force = false) {
+    if (!force && effectivePath === 'replicated') {
+      const ok = await confirm({
+        title:        'Disable HA - Non-Zero RPO',
+        message:      'This cluster uses ZFS replication. The standby copy may lag behind the active node by up to the replication interval. Before disabling: note which node holds the most recent data, and ensure no writes are in progress. The standby will keep its last-replicated snapshot.',
+        danger:       true,
+        confirmLabel: 'Disable HA',
+        confirmText:  'DISABLE',
+      })
+      if (!ok) return
+    }
+    toggleHA.mutate({ enable: false, force })
+  }
+
   const ws = useWsStore()
   const [haReplProgress, setHaReplProgress] = useState<Record<string, unknown> | null>(null)
   const haReplClearRef = useRef<number | undefined>(undefined)
@@ -1781,9 +1867,12 @@ export function HAPage() {
     <ErrorState error={statusQ.error} onRetry={() => qc.invalidateQueries({ queryKey: ['ha', 'status'] })} />
   )
 
-  // ── Setup Wizard ────────────────────────────────────────────────────────────
+  // ── Setup Wizard (path-aware) ────────────────────────────────────────────────
   if (wizardStep !== null) {
+    const isSharedStorage = effectivePath === 'shared_storage'
     const TOTAL_STEPS = 8
+    const detect = hwDetectQ.data
+
     return (
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <div style={{ marginBottom: 32 }}>
@@ -1791,6 +1880,13 @@ export function HAPage() {
             <Icon name="arrow_back" size={14} />Cancel Wizard
           </button>
           <h1 className="page-title">High Availability Setup</h1>
+          {/* Path pill in wizard header */}
+          {effectivePath !== 'unknown' && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '3px 10px', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', fontWeight: 600, background: isSharedStorage ? 'var(--success-bg)' : 'var(--primary-bg)', color: isSharedStorage ? 'var(--success)' : 'var(--primary)', border: `1px solid ${isSharedStorage ? 'var(--success-border)' : 'hsla(var(--hue-primary),100%,72%,.2)'}` }}>
+              <Icon name={isSharedStorage ? 'storage' : 'sync'} size={12} />
+              {isSharedStorage ? 'Path A’: Shared Storage' : 'Path B: Replicated ZFS'}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 4, marginTop: 16 }}>
             {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map(s => (
               <div key={s} style={{ height: 4, flex: 1, borderRadius: 2, background: s <= wizardStep ? 'var(--primary)' : 'var(--border)', opacity: s === wizardStep ? 1 : 0.4 }} />
@@ -1799,28 +1895,102 @@ export function HAPage() {
           <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Step {wizardStep} of {TOTAL_STEPS}</div>
         </div>
 
-
-        {/* Step 1 - Introduction */}
+        {/* ── Step 1: Hardware Detection + Path Selection ── */}
         {wizardStep === 1 && (
           <div className="card fade-in" style={{ padding: 32 }}>
-            <Icon name="topology" size={48} style={{ color: 'var(--primary)', marginBottom: 20 }} />
-            <h2 style={{ marginBottom: 12 }}>Introduction to D-PlaneOS HA</h2>
+            <Icon name="hardware" size={48} style={{ color: 'var(--primary)', marginBottom: 20 }} />
+            <h2 style={{ marginBottom: 12 }}>Step 1: Hardware Detection</h2>
             <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 24 }}>
-              D-PlaneOS High Availability transforms your standalone server into a resilient cluster.
-              It uses <strong>Patroni</strong> and <strong>etcd</strong> for database consensus,
-              and <strong>Keepalived</strong> for Virtual IP failover.
+              D-PlaneOS HA supports two topologies. The right one depends on your hardware.
+              The system has scanned your node and is recommending a path below.
             </p>
-            <div className="alert alert-info" style={{ marginBottom: 32 }}>
-              <Icon name="info" size={18} />
-              <div><strong>Prerequisite:</strong> Two nodes with static IPs on the same management network. A third network-reachable endpoint (router, public DNS) is recommended as a quorum witness.</div>
-            </div>
-            <button onClick={() => setWizardStep(2)} className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}>
-              Start Configuration <Icon name="arrow_forward" size={16} />
+
+            {hwDetectQ.isLoading && (
+              <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                <Icon name="radar" size={28} style={{ marginBottom: 8, display: 'block', margin: '0 auto 8px' }} />
+                Scanning hardware…
+              </div>
+            )}
+
+            {detect && (
+              <>
+                {/* Hardware summary chips */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+                  <span style={{ padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', fontWeight: 600, background: detect.watchdog_available ? 'var(--success-bg)' : 'var(--surface)', border: `1px solid ${detect.watchdog_available ? 'var(--success-border)' : 'var(--border)'}`, color: detect.watchdog_available ? 'var(--success)' : 'var(--text-tertiary)' }}>
+                    <Icon name="timer" size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                    Watchdog: {detect.watchdog_available ? detect.watchdog_device : 'not found'}
+                  </span>
+                  <span style={{ padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', fontWeight: 600, background: detect.fenced_running ? 'var(--success-bg)' : 'var(--surface)', border: `1px solid ${detect.fenced_running ? 'var(--success-border)' : 'var(--border)'}`, color: detect.fenced_running ? 'var(--success)' : 'var(--text-tertiary)' }}>
+                    <Icon name="lock" size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                    dplane-fenced: {detect.fenced_running ? `${detect.fenced_devices.length} device(s) reserved` : 'not running'}
+                  </span>
+                  <span style={{ padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', fontWeight: 600, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                    <Icon name="storage" size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                    SG devices: {detect.pool_sg_devices.length} in pool
+                  </span>
+                </div>
+
+                {/* Path choice */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+                  {(['shared_storage', 'replicated'] as HAPath[]).map(p => {
+                    const isP = p === 'shared_storage'
+                    const chosen = effectivePath === p
+                    const recommended = detect.provisional_path === p
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setSelectedPath(p)}
+                        style={{
+                          padding: '16px', textAlign: 'left', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+                          background: chosen ? (isP ? 'var(--success-bg)' : 'var(--primary-bg)') : 'var(--surface)',
+                          border: `2px solid ${chosen ? (isP ? 'var(--success)' : 'var(--primary)') : 'var(--border)'}`,
+                          transition: 'border-color 0.15s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <Icon name={isP ? 'storage' : 'sync'} size={18} style={{ color: chosen ? (isP ? 'var(--success)' : 'var(--primary)') : 'var(--text-tertiary)' }} />
+                          <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>
+                            {isP ? 'Path A’: Shared Storage' : 'Path B: Replicated ZFS'}
+                          </span>
+                          {recommended && <span className="badge badge-primary" style={{ fontSize: 'var(--text-2xs)', marginLeft: 'auto' }}>Detected</span>}
+                        </div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                          {isP
+                            ? 'SAS/enterprise storage with SCSI-3 PR. Hardware arbitrates writes - zero RPO, clean dissolution, no replication lag.'
+                            : 'SATA/NVMe consumer hardware. ZFS replication + watchdog self-fence. Non-zero RPO; dissolution requires choosing canonical copy.'}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {detect.probe_required && effectivePath === 'shared_storage' && (
+                  <div className="alert alert-warning" style={{ marginBottom: 20 }}>
+                    <Icon name="warning" size={16} />
+                    <div style={{ fontSize: 'var(--text-xs)' }}>
+                      Confirm SCSI-3 PR write support in Step 5. The PROUT probe is the only reliable test - drives that pass the read-only check can still reject writes.
+                    </div>
+                  </div>
+                )}
+
+                {effectivePath === 'replicated' && (
+                  <div className="alert alert-info" style={{ marginBottom: 20 }}>
+                    <Icon name="info" size={16} />
+                    <div style={{ fontSize: 'var(--text-xs)' }}>
+                      <strong>Non-zero RPO.</strong> The standby may lag behind by up to the replication interval. A quorum witness is required in Step 7 for the hardware watchdog to safely distinguish a partition from a dead peer.
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <button onClick={() => setWizardStep(2)} disabled={effectivePath === 'unknown'} className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}>
+              Continue with {effectivePath === 'shared_storage' ? 'Shared Storage' : effectivePath === 'replicated' ? 'Replicated ZFS' : '…'} <Icon name="arrow_forward" size={16} />
             </button>
           </div>
         )}
 
-        {/* Step 2 - Enable HA */}
+        {/* ── Step 2: Enable HA ── */}
         {wizardStep === 2 && (
           <div className="card fade-in" style={{ padding: 32 }}>
             <h2 style={{ marginBottom: 8 }}>Step 2: Enable HA Service Mesh</h2>
@@ -1857,7 +2027,7 @@ export function HAPage() {
           </div>
         )}
 
-        {/* Step 3 - Peer Registration */}
+        {/* ── Step 3: Peer Registration ── */}
         {wizardStep === 3 && (
           <div className="fade-in">
             <h2 style={{ marginBottom: 8 }}>Step 3: Register Peer Nodes</h2>
@@ -1876,7 +2046,7 @@ export function HAPage() {
           </div>
         )}
 
-        {/* Step 4 - Cluster Security */}
+        {/* ── Step 4: Peer Authentication ── */}
         {wizardStep === 4 && (
           <div className="fade-in">
             <h2 style={{ marginBottom: 8 }}>Step 4: Peer Authentication</h2>
@@ -1885,97 +2055,211 @@ export function HAPage() {
             </p>
             <div className="alert alert-warning" style={{ marginBottom: 24 }}>
               <Icon name="warning" size={18} />
-              <div>Without a secret, any host on the management network that can reach port 9000 can inject itself as a cluster peer and affect failover decisions. This step is strongly recommended for any multi-node deployment.</div>
+              <div>Without a secret, any host on the management network that can reach port 9000 can inject itself as a cluster peer and affect failover decisions.</div>
             </div>
             <ClusterSecretForm />
             <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
               <button onClick={() => setWizardStep(3)} className="btn btn-ghost">Previous</button>
               <button onClick={() => setWizardStep(5)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-                Next: Storage Replication
+                Next: {isSharedStorage ? 'SCSI-3 PR Validation' : 'Storage Replication'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 5 - Replication */}
+        {/* ── Step 5: Storage Layer (PATH-AWARE) ── */}
         {wizardStep === 5 && (
           <div className="fade-in">
-            <h2 style={{ marginBottom: 8 }}>Step 5: Storage Replication</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>Configure ZFS snapshot shipping so data is available on all nodes.</p>
-            <ReplicationConfigForm />
+            {isSharedStorage ? (
+              <>
+                <h2 style={{ marginBottom: 8 }}>Step 5: Verify SCSI-3 PR Support</h2>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  Run the PROUT write probe to confirm your pool disks support SCSI-3 Persistent Reservations.
+                  This is the hardware mechanism that prevents dual-write corruption - the disk controller
+                  rejects writes from any node that does not hold the reservation.
+                </p>
+                <div className="alert alert-warning" style={{ marginBottom: 24 }}>
+                  <Icon name="warning" size={18} />
+                  <div style={{ lineHeight: 1.5 }}>
+                    <strong>Do not skip this step.</strong> Drives that answer PRIN READ KEYS (read-only check)
+                    can still silently reject PROUT REGISTER (the write that arms fencing). A false positive
+                    here means the cluster will appear healthy but fail to fence during a real partition.
+                  </div>
+                </div>
+                <SCSIFencingCard />
+              </>
+            ) : (
+              <>
+                <h2 style={{ marginBottom: 8 }}>Step 5: Storage Replication</h2>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  Configure continuous ZFS snapshot shipping from the active node to the standby.
+                  This is how data reaches the standby in Path B - the standby receives periodic snapshots
+                  and lags by up to the replication interval (non-zero RPO).
+                </p>
+                <div className="alert alert-info" style={{ marginBottom: 24 }}>
+                  <Icon name="info" size={18} />
+                  <div>
+                    The standby pool is kept read-only between snapshots. On failover, the promoter
+                    sets readonly=off and promotes any clones before restarting services.
+                  </div>
+                </div>
+                <ReplicationConfigForm />
+              </>
+            )}
             <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
               <button onClick={() => setWizardStep(4)} className="btn btn-ghost">Previous</button>
               <button onClick={() => setWizardStep(6)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                Next: {isSharedStorage ? 'Fencing' : 'Fencing'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 6: Fencing (PATH-AWARE) ── */}
+        {wizardStep === 6 && (
+          <div className="fade-in">
+            <h2 style={{ marginBottom: 8 }}>Step 6: Fencing</h2>
+            {isSharedStorage ? (
+              <>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  The hardware watchdog is the recommended fencing floor for Path A’.
+                  SCSI-3 PR already prevents dual-write at the disk level - the watchdog
+                  removes the BMC/PDU network dependency so the survivor never needs to
+                  reach the peer to confirm it is gone.
+                </p>
+                <div className="alert alert-info" style={{ marginBottom: 16 }}>
+                  <Icon name="info" size={18} />
+                  <div style={{ lineHeight: 1.5 }}>
+                    IPMI and PDU are optional secondary methods on Path A’.
+                    The disk reservation provides hardware-level write exclusivity even without them.
+                    Add them for defence in depth if your hardware has BMC.
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  On Path B there is no disk-level arbiter - the watchdog self-fence is your primary
+                  protection. Configure it first. IPMI and PDU are important secondary methods.
+                </p>
+                <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+                  <Icon name="warning" size={18} />
+                  <div style={{ lineHeight: 1.5 }}>
+                    <strong>Watchdog is critical on Path B.</strong> Without it, a network partition where
+                    both nodes are alive but cannot see each other has no automatic resolution - the cluster
+                    stalls until operator intervention. With the watchdog and a configured witness, the
+                    isolated side self-fences and the connected side promotes automatically.
+                  </div>
+                </div>
+              </>
+            )}
+            <WatchdogConfigForm />
+            <FencingConfigForm />
+            <PDUConfigForm />
+            <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
+              <button onClick={() => setWizardStep(5)} className="btn btn-ghost">Previous</button>
+              <button onClick={() => setWizardStep(7)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
                 Next: Quorum Witness
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 6 - Witness */}
-        {wizardStep === 6 && (
-          <div className="fade-in">
-            <h2 style={{ marginBottom: 8 }}>Step 6: Quorum Witness</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
-              A witness proves this node has network access before firing STONITH - preventing split-brain when the peer is unreachable due to a network partition rather than a real failure.
-            </p>
-            <div className="alert alert-info" style={{ marginBottom: 24 }}>
-              <Icon name="info" size={18} />
-              <div>Add your local gateway, a public DNS server (1.1.1.1 or 8.8.8.8), or any stable HTTP endpoint that is reachable from both nodes but independent of the peer.</div>
-            </div>
-            <WitnessConfigForm />
-            <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
-              <button onClick={() => setWizardStep(5)} className="btn btn-ghost">Previous</button>
-              <button onClick={() => setWizardStep(7)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-                Next: Fencing (STONITH)
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 7 - Fencing */}
+        {/* ── Step 7: Witness (PATH-AWARE) ── */}
         {wizardStep === 7 && (
           <div className="fade-in">
-            <h2 style={{ marginBottom: 8 }}>Step 7: Automated Fencing (STONITH)</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
-              Configure at least one out-of-band power control method. IPMI uses the BMC over the management network; PDU cuts the physical outlet - both bypass the peer OS entirely.
-            </p>
-            <FencingConfigForm />
-            <PDUConfigForm />
+            <h2 style={{ marginBottom: 8 }}>Step 7: Quorum Witness</h2>
+            {isSharedStorage ? (
+              <>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  A quorum witness is recommended on Path A’. SCSI-3 PR already prevents
+                  dual-write, so the witness adds an extra layer of safety for the control plane
+                  (Patroni promotion decisions) rather than being the primary split-brain guard.
+                </p>
+                <div className="alert alert-info" style={{ marginBottom: 24 }}>
+                  <Icon name="info" size={18} />
+                  <div>Add your local gateway, a public DNS (1.1.1.1 or 8.8.8.8), or any stable HTTP endpoint reachable from both nodes but independent of the peer.</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  A quorum witness is <strong>required</strong> on Path B when the hardware watchdog is enabled.
+                  Without it, a two-node partition where both nodes are alive and the peer is simply unreachable
+                  looks identical to a dead peer - the watchdog cannot distinguish between them and will self-fence
+                  the survivor along with the loser.
+                </p>
+                <div className="alert alert-warning" style={{ marginBottom: 24 }}>
+                  <Icon name="warning" size={18} />
+                  <div style={{ lineHeight: 1.5 }}>
+                    <strong>Required for safe self-fence.</strong> The watchdog only stops petting when
+                    quorum is lost <em>and</em> all witnesses are unreachable. Without at least one witness,
+                    any peer unreachability event (maintenance, reboot, cable pull) will trigger an
+                    unintended self-fence.
+                  </div>
+                </div>
+              </>
+            )}
+            <WitnessConfigForm />
+            <NetworkWitnessForm />
             <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
               <button onClick={() => setWizardStep(6)} className="btn btn-ghost">Previous</button>
               <button onClick={() => setWizardStep(8)} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-                Next: Watchdog Self-Fence
+                Next: Review &amp; Finish
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 8 - Hardware Watchdog */}
+        {/* ── Step 8: Finish (PATH-AWARE) ── */}
         {wizardStep === 8 && (
           <div className="fade-in">
-            <h2 style={{ marginBottom: 8 }}>Step 8: Hardware Watchdog Self-Fence</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
-              Optional but recommended for mini-PC hardware without IPMI BMC. The watchdog removes the
-              network-reachability requirement from fencing: if this node loses quorum and cannot reach
-              any witness, it hard-resets itself - the survivor then waits the timeout interval and
-              promotes, knowing the peer is gone.
-            </p>
-            <div className="alert alert-info" style={{ marginBottom: 24 }}>
-              <Icon name="info" size={18} />
-              <div style={{ lineHeight: 1.5 }}>
-                <strong>No hardware required.</strong> The <code>softdog</code> kernel module is loaded
-                automatically by the NixOS HA module as a fallback when no hardware watchdog is
-                present - it works on any x86 or ARM node. Set <code>ha.watchdog.enable = true</code> in
-                your <code>ha.nix</code> to also configure the systemd watchdog timeout at the OS level.
-              </div>
-            </div>
-            <WatchdogConfigForm />
-            <div className="alert alert-success" style={{ marginTop: 32, marginBottom: 24 }}>
-              <Icon name="check_circle" size={18} />
-              <div>Setup complete! You can now monitor the cluster from the main dashboard.</div>
-            </div>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <h2 style={{ marginBottom: 8 }}>Step 8: Setup Complete</h2>
+            {isSharedStorage ? (
+              <>
+                <div className="alert alert-success" style={{ marginBottom: 24 }}>
+                  <Icon name="check_circle" size={18} />
+                  <div>
+                    <strong>Path A’: Shared Storage cluster configured.</strong> The disk controller
+                    arbitrates writes via SCSI-3 PR. Failover is hardware-guaranteed: the losing node's
+                    writes are rejected at the controller level before the survivor imports the pool.
+                  </div>
+                </div>
+                <div className="card" style={{ padding: '16px 20px', marginBottom: 16, borderLeft: '4px solid var(--success)' }}>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Dissolution (Disable HA)</div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    Clean and lossless. Disable HA from the dashboard - this node keeps the pool imported
+                    with every byte intact. No replication lag, no canonical-copy decision, no data migration.
+                    The second node can be repurposed immediately.
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="alert alert-success" style={{ marginBottom: 24 }}>
+                  <Icon name="check_circle" size={18} />
+                  <div>
+                    <strong>Path B: Replicated ZFS cluster configured.</strong> ZFS replication provides
+                    the standby copy. The hardware watchdog self-fence ensures the loser resets before the
+                    survivor promotes.
+                  </div>
+                </div>
+                <div className="card" style={{ padding: '16px 20px', marginBottom: 16, borderLeft: '4px solid var(--warning)' }}>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                    <Icon name="warning" size={14} style={{ verticalAlign: 'middle', marginRight: 6, color: 'var(--warning)' }} />
+                    Dissolution (Disable HA) - Non-Zero RPO
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    Before disabling HA, confirm which node holds the most recent data
+                    (compare ZFS TXG or check the last replication timestamp). The standby snapshot may
+                    lag by up to the replication interval. The system will prompt you to confirm before
+                    tearing down the replication link.
+                  </div>
+                </div>
+              </>
+            )}
+            <SBDConfigForm />
+            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
               <button onClick={() => setWizardStep(7)} className="btn btn-ghost">Previous</button>
               <button onClick={() => setWizardStep(null)} className="btn btn-success" style={{ flex: 1, justifyContent: 'center' }}>
                 Finish &amp; Go to Dashboard
@@ -2010,7 +2294,7 @@ export function HAPage() {
             <Icon name="toggle_on" size={18} />
             {toggleHA.isPending ? 'Enabling…' : 'Enable High Availability'}
           </button>
-          <button onClick={() => setWizardStep(1)} className="btn btn-ghost">
+          <button onClick={() => { setSelectedPath(null); qc.invalidateQueries({ queryKey: ['ha', 'hardware-detect'] }); setWizardStep(1) }} className="btn btn-ghost">
             <Icon name="settings" size={14} />Setup Wizard
           </button>
         </div>
@@ -2044,7 +2328,7 @@ export function HAPage() {
           <p className="page-subtitle">High availability - nodes, quorum and failover</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => setWizardStep(1)} className="btn btn-ghost">
+          <button onClick={() => { setSelectedPath(null); qc.invalidateQueries({ queryKey: ['ha', 'hardware-detect'] }); setWizardStep(1) }} className="btn btn-ghost">
             <Icon name="settings" size={14} />Setup Wizard
           </button>
           <button onClick={() => {
@@ -2054,7 +2338,7 @@ export function HAPage() {
             <Icon name="refresh" size={14} />Refresh
           </button>
           <button
-            onClick={() => toggleHA.mutate({ enable: false })}
+            onClick={() => handleDisableHA()}
             disabled={toggleHA.isPending}
             className="btn btn-ghost"
             style={{ color: 'var(--error)', borderColor: 'var(--error-border)' }}
@@ -2065,7 +2349,7 @@ export function HAPage() {
           </button>
           {haBlock?.code === 'patroni_primary' && (
             <button
-              onClick={() => toggleHA.mutate({ enable: false, force: true })}
+              onClick={() => handleDisableHA(true)}
               disabled={toggleHA.isPending}
               className="btn btn-ghost"
               style={{ color: 'var(--error)', fontSize: 'var(--text-xs)' }}
@@ -2282,6 +2566,16 @@ export function HAPage() {
             <Icon name="check_circle" size={14} />{clearFault.isPending ? 'Clearing…' : 'Clear Fault'}
           </button>
         </div>
+      )}
+
+      {/* ── Topology path indicator ──────────────────────────────────────────── */}
+      {hwDetectQ.data && (
+        <PathBadge
+          path={effectivePath}
+          label={hwDetectQ.data.provisional_path_label}
+          reason={hwDetectQ.data.provisional_reason}
+          probeRequired={hwDetectQ.data.probe_required && effectivePath === 'shared_storage'}
+        />
       )}
 
       {/* ── Node List ────────────────────────────────────────────────────────── */}

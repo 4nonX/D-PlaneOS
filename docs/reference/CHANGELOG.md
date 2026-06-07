@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v14.2.0 (2026-06-07) - "Arbiter"
+
+Upgrade from: v14.1.0 - Schema migration required (migration adds `ha_watchdog_config` table for hardware watchdog self-fence; applied automatically at startup). No breaking API changes. No breaking configuration changes.
+
+This release closes the hardware-agnostic HA gap: homelab hardware without enterprise SAS or IPMI BMC now has a complete, safe HA path. The disk controller as write arbiter (SCSI-3 PR) and the hardware watchdog as self-fence floor are first-class citizens in both the backend and the UI.
+
+### Added
+
+- **Hardware watchdog self-fence (`daemon/internal/ha/watchdog.go`, `watchdog_linux.go`, `watchdog_other.go`, migration adds `ha_watchdog_config`)**: The daemon opens `/dev/watchdog` and pets it on every heartbeat tick while the cluster has quorum. When quorum is lost and all configured witnesses are unreachable, petting stops and the kernel hard-resets the node after the timeout. This removes the BMC/PDU network-reachability assumption from fencing: the loser self-fences via local hardware, the survivor waits the guaranteed fence interval and promotes - no outbound network reach to the peer required. Isolation detection is correct for two-node clusters: self-fence only fires when at least one witness is configured and all witnesses are unreachable. Without a witness, or when a witness is reachable, the watchdog keeps petting (IPMI/PDU remain the fencing path). On NixOS, `ha.watchdog.enable = true` loads `softdog` as a fallback driver on hardware without a native watchdog device.
+  - `GET /api/ha/watchdog/configure` returns current config (defaults if unconfigured)
+  - `POST /api/ha/watchdog/configure` (AAL2) saves config and applies enable/disable to the running daemon immediately
+  - `nixos/ha.nix`: `ha.watchdog.{enable,device,timeoutSecs}` NixOS options; `systemd.watchdog.runtimeTime` set automatically when enabled
+
+- **Quorum-aware GitOps reconciler (`daemon/internal/gitops/apply.go`, `daemon/internal/handlers/gitops_handler.go`)**: `ApplyContext.OwnershipGuard func() bool` gates pool create, reshape, and destroy operations when HA is active and this node has no quorum. On shared-SAS topologies the SCSI-3 PR is the hardware backstop; on replicated topologies this software gate is the only protection between an isolated node and acting on Git-desired state that says "create/import this pool". Ownership operations are deferred (not failed) so the next reconcile cycle retries once quorum is restored. Wired to `clusterMgr.Status().Quorum` in main.go when `ha.enable = true`.
+
+- **SCSI-3 PR write probe - `SupportsReservations()` (`daemon/internal/scsipr/scsipr_linux.go`, `scsipr_stub.go`)**: A full PROUT round-trip check: register a test key, read back to verify it appears, unregister. This is the only reliable test. PRIN READ KEYS (the previous approach) is a read-only probe that passes on drives which reject PROUT REGISTER - the false positive that arms the cluster with silent broken fencing. The test key (`0xdeadbeefcafe0001`) is distinct from any operational key and is cleaned up immediately, making it safe to run against a live cluster.
+
+- **SCSI-3 PR probe and status API endpoints (`daemon/internal/handlers/ha_handler.go`)**:
+  - `GET /api/ha/scsi/status`: queries dplane-fenced via Unix socket; returns running state, reservation key, and list of currently reserved `/dev/sgN` devices
+  - `POST /api/ha/scsi/probe`: runs `SupportsReservations()` on specified devices or auto-enumerates pool disks via `zpool status -P` + sysfs. Returns per-device pass/fail with exact firmware error text for any rejected device
+
+- **Hardware detection endpoint (`daemon/internal/handlers/ha_handler.go`, `GET /api/ha/hardware/detect`)**: Non-destructive scan returning watchdog availability (`/dev/watchdog`), dplane-fenced reservation status, pool SG device count, and a provisional HA path recommendation. No PROUT writes on this path. Path A' (shared_storage) is recommended when SG devices are present or dplane-fenced is running; Path B (replicated) is recommended otherwise. The frontend uses this for the dashboard topology badge and wizard auto-detection.
+
+- **Path-aware HA setup wizard (`app-react/src/pages/HAPage.tsx`)**: The wizard now detects hardware on Step 1 and presents two distinct paths with different step content:
+  - Path A' (Shared Storage): Step 5 = SCSI-3 PR PROUT probe with false-positive warning; Step 6 = Watchdog floor (recommended) + IPMI/PDU optional; Step 7 = Witness recommended; Step 8 = clean dissolution summary (zero RPO, no migration)
+  - Path B (Replicated ZFS): Step 5 = ZFS replication config + RPO explanation; Step 6 = Watchdog critical warning + IPMI/PDU important; Step 7 = Witness required for watchdog isolation detection; Step 8 = non-zero RPO dissolution warning with TXG comparison note
+  - Operator can override the auto-detected path via the two-card chooser in Step 1
+
+- **`SCSIFencingCard` UI component**: Shows dplane-fenced running state, reservation key, fenced device list with green lock badges, and a "Probe PR Support" button that calls `POST /api/ha/scsi/probe`. Per-device results include firmware error text for any device that fails the PROUT round-trip. Wired into the fencing config section on the main HA dashboard.
+
+- **`WatchdogConfigForm` UI component**: Enable toggle, device path, timeout, pet-interval fields. Active state shows a warning with the exact timeout value and the self-fence semantics. Explains `softdog` fallback for hardware without native watchdog. Notes that device/timeout changes require daemon restart; enable/disable takes effect immediately.
+
+- **`TimingConfigForm` UI component**: Three-field form for `failover_after_seconds`, `heartbeat_interval_seconds`, and `hysteresis_window_minutes`. Client-side enforcement of the `failover >= heartbeat * 3` invariant (error shown inline before save). Notes which values require daemon restart vs take effect immediately.
+
+- **`PathBadge` topology indicator**: Small badge on the main HA dashboard showing current detected topology (Path A' green / Path B blue / unknown grey) with reason text. Warns when the PROUT probe is still needed to confirm shared-storage capability.
+
+- **RPO-aware HA dissolution**: `handleDisableHA()` replaces the direct `toggleHA.mutate({ enable: false })` calls. For replicated clusters (`effectivePath === 'replicated'`) it shows a confirmation dialog describing the replication lag risk before proceeding. Force-disable bypasses the RPO dialog.
+
+### Changed
+
+- **`dplane-fenced` enumeration logic (`daemon/internal/handlers/ha_handler.go`)**: `enumPoolSGDevices()` and `blockDevToSG()` helpers in the handler mirror the `dplane-fenced` enumeration so the setup probe and runtime fencing operate on the same device set. Keeps the two code paths consistent without introducing a shared library dependency.
+
+- **HA timing config note surfaced in UI**: `TimingConfigForm` displays the `note` field from `GET /api/ha/timing` response explaining the restart requirement, rather than repeating it in static text.
+
+### Security
+
+- **SCSI-3 PR false-positive detection**: Closes the class of misconfigurations where a shared-storage HA cluster appeared healthy but had non-functional fencing because the setup probe passed a read-only capability check on drives that reject write commands. Any deployment using shared-storage fencing should run `POST /api/ha/scsi/probe` to confirm their specific hardware. The probe is safe to run against a live cluster.
+
 ## v14.1.0 (2026-06-05) - "Beacon"
 
 Upgrade from: v14.0.0 - Schema migration required (migration 00008 adds `ha_cluster_config` table for runtime-configurable HA timing; applied automatically at startup). No breaking API changes. No breaking configuration changes.

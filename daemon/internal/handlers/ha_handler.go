@@ -1089,6 +1089,77 @@ func (h *HAHandler) SaveClusterTiming(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DetectHAHardware performs a quick (non-destructive) hardware capability scan and
+// returns a provisional HA path recommendation. It checks watchdog availability and
+// queries dplane-fenced for current reservation status but does NOT run the PROUT
+// write round-trip - that is the operator's explicit action via POST /api/ha/scsi/probe.
+//
+// Path A' (shared_storage): SCSI-3 PR capable disks are in use - hardware arbitrates writes.
+// Path B (replicated):      No PR hardware - ZFS replication + watchdog self-fence.
+//
+// GET /api/ha/hardware/detect
+func (h *HAHandler) DetectHAHardware(w http.ResponseWriter, r *http.Request) {
+	// 1. Watchdog availability - check common device paths.
+	watchdogAvail := false
+	watchdogDevice := ""
+	for _, dev := range []string{"/dev/watchdog", "/dev/watchdog0"} {
+		if _, err := os.Stat(dev); err == nil {
+			watchdogAvail = true
+			watchdogDevice = dev
+			break
+		}
+	}
+
+	// 2. dplane-fenced status (quick socket call, no disk I/O).
+	fencedRunning := false
+	fencedDevices := []string{}
+	if status, err := ha.FencedStatus(); err == nil {
+		fencedRunning = true
+		if devs, ok := status["devices"].([]any); ok {
+			for _, d := range devs {
+				if s, ok2 := d.(string); ok2 {
+					fencedDevices = append(fencedDevices, s)
+				}
+			}
+		}
+	}
+
+	// 3. Count SG devices from pool (no probe write - just enumeration).
+	poolSGDevices, _ := enumPoolSGDevices()
+
+	// 4. Determine provisional recommendation.
+	// "shared_storage" if fenced is running with active reservations, or if we
+	// can see SG devices that could support PR. Confirmed only after the probe.
+	provPath := "replicated"
+	provLabel := "Path B: Replicated ZFS (Watchdog + Replication)"
+	provReason := "No SAS/SCSI pool disks found. Use ZFS replication with hardware watchdog self-fence and a quorum witness."
+	probeRequired := false
+
+	if len(poolSGDevices) > 0 || fencedRunning {
+		provPath = "shared_storage"
+		provLabel = "Path A': Shared Storage (SCSI-3 PR + Watchdog)"
+		probeRequired = true
+		if fencedRunning && len(fencedDevices) > 0 {
+			provReason = fmt.Sprintf("dplane-fenced holds reservations on %d device(s). Run the PROUT probe to confirm these devices reject writes from a second node.", len(fencedDevices))
+		} else {
+			provReason = fmt.Sprintf("%d SAS/SCSI pool disk(s) found. Run the PROUT probe to confirm SCSI-3 PR write support before enabling shared-storage HA.", len(poolSGDevices))
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success":               true,
+		"watchdog_available":    watchdogAvail,
+		"watchdog_device":       watchdogDevice,
+		"fenced_running":        fencedRunning,
+		"fenced_devices":        fencedDevices,
+		"pool_sg_devices":       poolSGDevices,
+		"provisional_path":      provPath,
+		"provisional_path_label": provLabel,
+		"provisional_reason":    provReason,
+		"probe_required":        probeRequired,
+	})
+}
+
 // GetSCSIStatus returns the current SCSI-3 PR reservation state from dplane-fenced.
 // The response includes which /dev/sgN devices are currently reserved, the
 // reservation key in use, and whether the fenced daemon is reachable.
