@@ -510,6 +510,37 @@ zfs list <pool>/sbd-lease
 # or whatever ha.sbd.dataset is set to
 ```
 
+### Network Quorum Witness
+
+A neutral IP address or URL (rented VPS, cloud metadata endpoint, DNS nameserver) that both HA nodes independently probe to detect network isolation. No software installation is required on the target: it only needs to respond to TCP connections or HTTP requests.
+
+**How it works:** Both nodes independently check if the witness target is reachable before a failover decision. The result determines whether a node is isolated:
+
+| Local reaches witness | Peer reaches witness | Decision |
+|----------------------|---------------------|----------|
+| Yes | No | Peer is isolated - safe to promote |
+| No | No | Full partition - do not promote |
+| No | Yes | Local is isolated - do not promote |
+| Yes | Yes | Both have network; use IPMI/PDU fencing |
+
+This is Guard 4b in the promotion sequence. It is **additive**: it can only suppress an auto-promotion, never enable one when other guards have already blocked it. All existing guards (Subordinate Mode, Hysteresis, Fencing Method, etcd Witness, Maintenance Mode) remain independent.
+
+Configuration via Settings - High Availability - Network Quorum Witness, or API:
+
+```
+GET  /api/ha/network-witness       - read current configuration
+POST /api/ha/network-witness       - save configuration (AAL2 required)
+POST /api/ha/network-witness/probe - test connectivity to the target
+```
+
+**Probe method `icmp` (default):** Uses a TCP dial to port 80. TCP SYN reaching the host - even if the port is filtered or refused - proves network reachability without requiring raw socket privileges.
+
+**Probe method `http` / `https`:** Sends an HTTP GET. Any response (including 4xx/5xx) counts as reachable; only a connection failure counts as unreachable.
+
+**Choosing a target:** Any stable internet endpoint works: a rented VPS, `1.1.1.1` (Cloudflare DNS), `8.8.8.8` (Google DNS), a cloud provider's metadata service IP, or a CDN edge node. The target should be geographically and network-topologically independent from both HA nodes so it survives whatever failure scenario is being tested.
+
+**Limitations:** The network witness does not verify the peer's state on the witness - it only proves this node has network reachability. A peer that is alive but cannot reach the witness would be incorrectly treated as the isolated side. In practice this is the intended behavior: if neither node can reach a neutral third party, the cluster suspends automatic failover until network is restored.
+
 ---
 
 ## Troubleshooting
