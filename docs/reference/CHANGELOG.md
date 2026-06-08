@@ -30,7 +30,7 @@ This release closes the NixOS module gap in the Path A' two-node setup, ships a 
 
 - **Doc-freshness gate (`scripts/release-check.sh`, Check 7)**: Hard error if HA code (`daemon/internal/ha/`, `nixos/ha.nix`) changed since the previous tag but `docs/admin/HIGH-AVAILABILITY.md` did not. Hard error if GitOps code (`daemon/internal/gitops/`) changed but `docs/admin/GITOPS-DRIVEN-NAS.md` did not (upgraded from warning). Hard error if no file under `docs/` changed at all since the previous tag.
 
-- **Quorum-gated pool operations documented (`docs/admin/GITOPS-DRIVEN-NAS.md`)**: New "Quorum-gated pool operations" section under "HA Environments" explains that pool `CREATE`, `RESHAPE`, and `DESTROY` plan items are deferred (not failed) when HA is active and the node has no quorum. Includes a table of which operations are and are not quorum-gated.
+- **Quorum-gated pool operations documented (`docs/admin/GITOPS-DRIVEN-NAS.md`)**: New "Quorum-gated pool operations" section under "HA Environments" explains that pool `CREATE`, `IMPORT`, `RESHAPE`, and `DESTROY` plan items are deferred (not failed) when HA is active and the node has no quorum. Includes a table of which operations are and are not quorum-gated.
 
 ### Fixed
 

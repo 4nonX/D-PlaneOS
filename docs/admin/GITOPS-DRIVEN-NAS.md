@@ -529,7 +529,7 @@ You trigger apply on the primary. In practice, direct the apply API call at the 
 
 ### Quorum-gated pool operations
 
-When HA is active, pool ownership operations - `CREATE`, `RESHAPE`, and `DESTROY` in the plan - are gated on cluster quorum. An isolated node (one that has lost contact with its peer and all witnesses) will not act on these plan items, regardless of what `state.yaml` says. The operations are **deferred**, not failed: they appear in the plan result as `[DEFERRED no-quorum]` and are retried automatically on the next reconcile cycle once quorum is restored.
+When HA is active, pool ownership operations - `CREATE`, `IMPORT`, `RESHAPE`, and `DESTROY` in the plan - are gated on cluster quorum. An isolated node (one that has lost contact with its peer and all witnesses) will not act on these plan items, regardless of what `state.yaml` says. The operations are **deferred**, not failed: they appear in the plan result as `[DEFERRED no-quorum]` and are retried automatically on the next reconcile cycle once quorum is restored.
 
 This is the sole software-level write guard for replicated-topology clusters (Path B). On shared-storage clusters (Path A'), the SCSI-3 PR hardware reservation is a physical backstop, but the quorum gate fires first in software.
 
@@ -537,7 +537,7 @@ This is the sole software-level write guard for replicated-topology clusters (Pa
 
 | Operation | Gated on quorum? | Reason |
 |---|---|---|
-| Pool `CREATE` / `RESHAPE` / `DESTROY` | Yes | Dual-writer corruption risk |
+| Pool `CREATE` / `IMPORT` / `RESHAPE` / `DESTROY` | Yes | Dual-writer corruption risk |
 | Dataset `CREATE` / `DELETE` / `MODIFY` | No | Dataset lives on already-imported pool |
 | SMB share `CREATE` / `DELETE` | No | Config-only, no block-level risk |
 | NFS export changes | No | Config-only |
