@@ -172,7 +172,7 @@ function GeneralTab() {
 
       <Field label="Message of the Day (MOTD)" hint="Shown on the dashboard and login page">
         <textarea value={motd} onChange={e => setMotd(e.target.value)}
-          rows={4} placeholder="Welcome to D-PlaneOS"
+          rows={4} placeholder="Welcome to DPlaneOS"
           className="input" style={{ resize: 'vertical', lineHeight: 1.6, fontFamily: 'var(--font-ui)' }} />
       </Field>
 
@@ -662,10 +662,125 @@ function MaintenanceTab() {
   )
 }
 
+// ---------------------------------------------------------------------------
+// LicenseTab
+// ---------------------------------------------------------------------------
+
+interface LicenseStatus {
+  active: boolean
+  customer?: string
+  audits_limit?: number
+  audits_remaining?: number
+  expires_at?: string
+  ce_installed?: boolean
+  ce_running?: boolean
+}
+
+function LicenseTab() {
+  const qc = useQueryClient()
+  const [licenseKey, setLicenseKey] = useState('')
+  const [isActivating, setIsActivating] = useState(false)
+
+  const licenseQ = useQuery({
+    queryKey: ['license', 'status'],
+    queryFn: ({ signal }) => api.get<LicenseStatus>('/api/system/license/status', signal),
+    refetchInterval: 30000,
+  })
+
+  const activate = useMutation({
+    mutationFn: (key: string) => api.post('/api/system/license/activate', { license_key: key }),
+    onSuccess: () => {
+      toast.success('License activated. Enterprise features loading...')
+      setLicenseKey('')
+      qc.invalidateQueries({ queryKey: ['license', 'status'] })
+    },
+    onError: (e: Error) => toast.error('Activation failed: ' + e.message),
+  })
+
+  const handleActivate = async () => {
+    if (!licenseKey.trim()) {
+      toast.error('Enter a license key')
+      return
+    }
+    setIsActivating(true)
+    try {
+      await activate.mutateAsync(licenseKey)
+    } finally {
+      setIsActivating(false)
+    }
+  }
+
+  const status = licenseQ.data
+  const isExpired = status?.active === false && status?.expires_at
+
+  return (
+    <div style={{ maxWidth: 620, display: 'flex', flexDirection: 'column', gap: 20, paddingTop: 24 }}>
+      {status?.active ? (
+        <div className="card" style={{ padding: 20, borderLeft: '4px solid var(--success)', background: 'rgba(34, 197, 94, 0.05)' }}>
+          <div style={{ fontWeight: 700, marginBottom: 12, color: 'var(--success)' }}>Enterprise License Active</div>
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', display: 'grid', gap: 6 }}>
+            <div>Customer: {status.customer}</div>
+            {status.audits_limit === -1 ? (
+              <div>Audits: Unlimited</div>
+            ) : (
+              <div>Audits: {status.audits_remaining} remaining of {status.audits_limit}</div>
+            )}
+            <div>Expires: {status.expires_at === 'never' ? 'Never' : status.expires_at}</div>
+            <div>Compliance Engine: {status.ce_installed ? (status.ce_running ? 'Running' : 'Installed (not running)') : 'Not installed'}</div>
+          </div>
+        </div>
+      ) : isExpired ? (
+        <div className="card" style={{ padding: 20, borderLeft: '4px solid var(--error)', background: 'rgba(200, 0, 0, 0.05)' }}>
+          <div style={{ fontWeight: 700, marginBottom: 12, color: 'var(--error)' }}>License Expired</div>
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 16 }}>
+            Expired on {status.expires_at}. To renew, enter a new license key below.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="password"
+              placeholder="Paste renewal key"
+              value={licenseKey}
+              onChange={e => setLicenseKey(e.target.value)}
+              disabled={isActivating}
+              style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 4 }}
+            />
+            <button onClick={handleActivate} disabled={isActivating || !licenseKey.trim()} className="btn btn-primary">
+              {isActivating ? 'Activating...' : 'Activate'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 20, borderLeft: '4px solid var(--border)' }}>
+          <div style={{ fontWeight: 700, marginBottom: 12 }}>Enterprise License</div>
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 16 }}>
+            Status: Not activated
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <input
+              type="password"
+              placeholder="Paste license key"
+              value={licenseKey}
+              onChange={e => setLicenseKey(e.target.value)}
+              disabled={isActivating}
+              style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 4 }}
+            />
+            <button onClick={handleActivate} disabled={isActivating || !licenseKey.trim()} className="btn btn-primary">
+              {isActivating ? 'Activating...' : 'Activate'}
+            </button>
+          </div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+            For licensing, refer to the DPlaneOS documentation or contact the maintainer.
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // SettingsPage
 // ---------------------------------------------------------------------------
 
-type Tab = 'general' | 'nixos' | 'oidc' | 'security' | 'maintenance'
+type Tab = 'general' | 'nixos' | 'oidc' | 'security' | 'license' | 'maintenance'
 
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>('general')
@@ -675,6 +790,7 @@ export function SettingsPage() {
     { id: 'nixos',       label: 'NixOS',       icon: 'terminal' },
     { id: 'oidc',        label: 'SSO / OIDC',  icon: 'key' },
     { id: 'security',    label: 'Security',    icon: 'lock' },
+    { id: 'license',     label: 'License',     icon: 'card_membership' },
     { id: 'maintenance', label: 'Maintenance', icon: 'database' },
   ]
 
@@ -697,6 +813,7 @@ export function SettingsPage() {
       {tab === 'nixos'       && <NixOSTab />}
       {tab === 'oidc'        && <OIDCTab />}
       {tab === 'security'    && <SecurityTab />}
+      {tab === 'license'     && <LicenseTab />}
       {tab === 'maintenance' && <MaintenanceTab />}
     </div>
   )

@@ -20,12 +20,22 @@ interface SidebarProps {
   onToggle: () => void
 }
 
+interface LicenseStatus {
+  active: boolean
+}
+
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const router   = useRouter()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const user     = useAuthStore((s) => s.user)
   const logout   = useAuthStore((s) => s.logout)
   const wsStatus = useWsStore((s) => s.status)
+
+  const licenseQ = useQuery({
+    queryKey: ['license', 'status'],
+    queryFn: ({ signal }) => api.get<LicenseStatus>('/api/system/license/status', signal),
+    staleTime: 30000,
+  })
 
   const activeEntry = findNavEntry(pathname)
   // manuallyOpenedGroups tracks groups the user has explicitly toggled open/closed.
@@ -90,7 +100,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               background: 'linear-gradient(90deg, #fff 0%, rgba(255,255,255,0.7) 100%)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               letterSpacing: '-0.3px', whiteSpace: 'nowrap'}}>
-              D-PlaneOS
+              DPlaneOS
             </span>
           </button>
         )}
@@ -113,17 +123,25 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '6px 0' }}>
         {NAV.map((item) => {
           if (item.kind === 'leaf') {
+            const leaf = item as NavLeaf
+            const isEnterprise = leaf.enterprise === true
+            if (isEnterprise && !licenseQ.data?.active) return null
+
             return (
-              <LeafItem key={item.id} leaf={item as NavLeaf}
-                isActive={pathname === (item as NavLeaf).route}
+              <LeafItem key={leaf.id} leaf={leaf}
+                isActive={pathname === leaf.route}
                 collapsed={collapsed}
-                onClick={() => navigate((item as NavLeaf).route)} />
+                onClick={() => navigate(leaf.route)} />
             )
           }
 
           const group = item as NavGroup
+          const filteredChildren = group.children.filter((c) => {
+            const isEnterprise = (c as any).enterprise === true
+            return !isEnterprise || licenseQ.data?.active
+          })
           const isOpen = openGroups.has(group.id)
-          const hasActive = group.children.some((c) => c.route === pathname)
+          const hasActive = filteredChildren.some((c) => c.route === pathname)
 
           return (
             <div key={group.id}>
@@ -183,7 +201,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               {/* Children */}
               {!collapsed && isOpen && (
                 <div id={`nav-group-${group.id}`}>
-                  {group.children.map((child) => (
+                  {filteredChildren.map((child) => (
                     <LeafItem key={child.id} leaf={child}
                       isActive={pathname === child.route}
                       collapsed={false} indent

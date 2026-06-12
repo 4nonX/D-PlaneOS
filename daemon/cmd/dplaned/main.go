@@ -664,6 +664,10 @@ func main() {
 	r.Handle("/api/system/poweroff", permRoute("system", "admin", systemHandler.Poweroff)).Methods("POST")
 	r.Handle("/api/system/diagnostics", permRoute("system", "read", systemHandler.RunDiagnostics)).Methods("POST", "OPTIONS")
 
+	// Enterprise license handlers
+	r.Handle("/api/system/license/activate", permRoute("system", "admin", handlers.LicenseActivateHandler(db))).Methods("POST")
+	r.Handle("/api/system/license/status", permRoute("system", "read", handlers.LicenseStatusHandler(db))).Methods("GET")
+
 	// SMART handlers
 	r.HandleFunc("/api/hardware/smart/cron-hook", handlers.RunSMARTCronHook).Methods("POST")
 	r.Handle("/api/hardware/smart/run-now", permRoute("system", "write", handlers.RunSMARTNow)).Methods("POST")
@@ -1459,6 +1463,15 @@ func main() {
 	// Start background monitors
 	handlers.StartCapacityMonitor()
 	log.Println("Capacity guardian started (checks every 5 min)")
+
+	// Start license expiration checker
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			handlers.CheckLicenseExpiration(db)
+		}
+	}()
 
 	// Start server in goroutine
 	go func() {
