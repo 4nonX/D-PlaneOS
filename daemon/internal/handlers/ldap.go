@@ -933,6 +933,22 @@ func (h *LDAPHandler) JoinDomain(w http.ResponseWriter, r *http.Request) {
 		// Step 4: sync IDMAP to nixwriter so next rebuild activates winbind.
 		syncIDMAPToNixwriter(db)
 
+		// Step 5: switch Samba to ADS security mode so winbind activates.
+		writer := nixwriter.DefaultWriter()
+		state := writer.State()
+		if err := writer.SetSambaGlobals(nixwriter.SambaGlobalOpts{
+			Workgroup:        state.SambaWorkgroup,
+			ServerString:     state.SambaServerString,
+			TimeMachine:      state.SambaTimeMachine,
+			AllowGuest:       state.SambaAllowGuest,
+			ExtraGlobal:      state.SambaExtraGlobal,
+			SecurityMode:     "ads",
+			Realm:            realm,
+			DomainController: server,
+		}); err != nil {
+			log.Printf("AD JOIN: failed to set Samba ADS mode: %v", err)
+		}
+
 		audit.Log(audit.AuditLog{
 			Level: audit.LevelInfo, Command: "AD_DOMAIN_JOIN",
 			User: user, Success: true,
@@ -1002,6 +1018,25 @@ func (h *LDAPHandler) LeaveDomain(w http.ResponseWriter, r *http.Request) {
 			log.Printf("AD: failed to update domain_joined for %s: %v", name, err)
 		}
 		syncIDMAPToNixwriter(db)
+
+		// Check if any domains are still joined. If not, revert to user mode.
+		var anyJoined int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ad_domains WHERE domain_joined=true AND enabled=true`).Scan(&anyJoined); err == nil && anyJoined == 0 {
+			writer := nixwriter.DefaultWriter()
+			state := writer.State()
+			if err := writer.SetSambaGlobals(nixwriter.SambaGlobalOpts{
+				Workgroup:        state.SambaWorkgroup,
+				ServerString:     state.SambaServerString,
+				TimeMachine:      state.SambaTimeMachine,
+				AllowGuest:       state.SambaAllowGuest,
+				ExtraGlobal:      state.SambaExtraGlobal,
+				SecurityMode:     "user",
+				Realm:            "",
+				DomainController: "",
+			}); err != nil {
+				log.Printf("AD LEAVE: failed to revert Samba to user mode: %v", err)
+			}
+		}
 
 		audit.Log(audit.AuditLog{
 			Level: audit.LevelInfo, Command: "AD_DOMAIN_LEAVE",
