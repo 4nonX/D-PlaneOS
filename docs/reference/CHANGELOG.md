@@ -6,6 +6,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v14.4.0 (2026-06-13) - "Enterprise Ready"
+
+Upgrade from: v14.3.0 - Schema migration required (migration 00011 adds `enterprise_license` and `enterprise_audit_usage` tables for licensing and audit tracking; applied automatically at startup). No breaking API changes. No breaking configuration changes.
+
+This release introduces an enterprise licensing system with Ed25519 offline signature verification and automatic Compliance Engine deployment. The community edition remains free and requires no license. Enterprise customers receive signed license keys that activate the optional Compliance Engine sidecar, which provides cryptographically verifiable SOC2 and ISO 27001 compliance reporting.
+
+### Added
+
+- **Enterprise Licensing System (`daemon/internal/handlers/license_handler.go`, migration 00011)**:
+  - `POST /api/system/license/activate`: Accepts Ed25519-signed license key (format: `base64(signature).base64(payload)`)
+  - `GET /api/system/license/status`: Returns license status (active/expired), customer name, audit limits, CE installation/running status
+  - Offline signature verification using embedded Ed25519 public key (no external API calls required)
+  - Hourly license expiration checker: automatically stops CE daemon and disables routes on expiration
+  - CE daemon lifecycle management: downloads from private repo, installs to `/opt/dplane-compliance/`, starts on port 9001
+  - Environment variable-based credential passing: CE access token via `CE_API_TOKEN` (not command-line arguments)
+
+- **License Management CLI Tools**:
+  - `dplane-gen-keypair`: Generates Ed25519 keypair for license signing (stores keys with 0600 permissions)
+  - `dplane-license-gen`: Creates signed customer license keys with configurable customer name, audit limits, expiration date, CE repo URL, version, and GitHub PAT
+
+- **Compliance Engine Integration**:
+  - `CompliancePage` (`app-react/src/pages/CompliancePage.tsx`): Embeds CE sidecar as iframe on port 9001
+  - License-gated sidebar: "Compliance" menu item only appears when licensed (real-time status polling)
+  - `LicenseTab` in `SettingsPage`: License input form, status display, three states (not activated, active with customer info, expired with renewal option)
+  - License status query with 30s `staleTime`: filters enterprise features based on license validity
+
+- **Database**:
+  - `enterprise_license` table: Stores customer name, audits limit/consumed, expiration date, CE repo URL/version, activation timestamp
+  - `enterprise_audit_usage` table: Audit trail of report generations for compliance tracking
+
+- **Documentation**:
+  - `ENTERPRISE_LICENSE_SETUP.md`: Complete integration workflow (keypair generation, license creation, customer activation, expiration handling)
+  - Feature maturity table update: Enterprise Licensing marked as Stable
+
+### Security
+
+- **Offline Ed25519 Verification**: No external API calls for license validation; works completely offline
+- **Public Key Embedding**: Verification key embedded in daemon binary via environment variable `DPLANE_LICENSE_PUBLIC_KEY`
+- **Credential Isolation**: CE access token from license payload, passed via environment variable (not process arguments visible in `ps`)
+- **File Permissions**: License files 0600 (owner-only read/write), keypair files 0600
+- **Zero Hardcoding**: All URLs, credentials, and customer information from signed license payload
+- **Immutable License Format**: `base64(signature).base64(json_payload)` prevents tampering while maintaining human-readability for debugging
+
+### Technical Details
+
+- **License Payload**: Customer name, audit limits (1-N or -1 for unlimited), expiration date (RFC3339 or "never"), CE repo URL, CE version, GitHub PAT, issued timestamp
+- **Signature Algorithm**: Ed25519 (FIPS 186-5 compliant, widely supported)
+- **Verification**: Atomic signature + payload validation; no separate checks that could be exploited
+- **Daemon Integration**: Hourly background goroutine checks expiration; stops daemon gracefully, disables routes on expiration
+- **UI Updates**: License status polled every 30 seconds; sidebar menu updates reflect current license state instantly
+
+### Testing
+
+✓ Go tests pass with race detector  
+✓ TypeScript: tsc --noEmit = 0 errors  
+✓ ESLint: npm run lint = clean  
+✓ App bundle: npm run build successful, committed  
+✓ CLI tools: dplane-gen-keypair and dplane-license-gen compile and run end-to-end  
+✓ Security: No hardcoded URLs, credentials, or customer information  
+
+---
+
 ## v14.3.0 (2026-06-08) - "Quorum"
 
 Upgrade from: v14.2.0 - No schema migration required. No breaking API changes. No breaking configuration changes.
