@@ -29,6 +29,7 @@ Feature maturity, honestly:
 | Hot-swap detection and auto-import | Stable | udev + ZED, exercised regularly. |
 | LDAP / Active Directory integration | Beta | Winbind NSS integration shipped in v14.1.0: AD users resolve in `ls -l`, ACLs, and SMB. |
 | OIDC / SSO (Authorization Code + PKCE) | Beta | Keycloak, Authentik, Dex, Entra ID, and any OIDC-compliant provider. |
+| Enterprise Licensing & Compliance Engine | Stable | Ed25519 offline license verification. Optional compliance reporting sidecar. Automatic activation and expiration handling. |
 | A/B OTA updates with auto-revert | Beta | Mechanism is sound, sample size is small. |
 | GitOps reconciliation | Beta | Structural sync (pools, datasets, shares, stacks) and capture-from-live both work. Safety rails (block destroy on used data, block pool destroy unconditionally) are well-tested. Edge cases at the property-coverage frontier still surfacing. |
 | Out-of-band hardware management (BMC) | Beta | Redfish (iLO 5+, iDRAC 9+), iLO 4 legacy REST, generic IPMI. TOFU TLS certificate pinning. Sensors, event log, power management. |
