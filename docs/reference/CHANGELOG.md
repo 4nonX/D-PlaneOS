@@ -12,76 +12,41 @@ Upgrade from: v14.3.0 - Schema migration required (migration 00011 adds `enterpr
 
 This release completes the full DPlaneOS v14.4.0 roadmap with all eight planned priorities shipped: enterprise licensing with Ed25519 verification, multi-forest Active Directory with automatic Samba security mode switching, comprehensive ZED event integration with 2-second progress polling, SES enclosure support (LED locate + full element status via direct SCSI ioctls), transactional storage operations, libzfs cgo bindings with thread-local handles, NFSv4 ACL layer with RFC 5661 translation, GitOps/CRUD race protection via RWMutex, and dplane-fenced SCSI-3 persistent reservations. The community edition remains free and requires no license. Enterprise customers receive signed license keys that activate the optional Compliance Engine sidecar.
 
-### Roadmap Completion (All 8 Priorities Shipped)
+### Storage & ZFS Operations
 
-#### Priority 1: Migration Framework
-- **Goose v3 migration system**: 11 numbered migrations (00001-00011) with version tracking and automatic skip of already-applied migrations
-- Automatic schema management at daemon startup: no manual migrations required
+- **ZED Event Integration (`daemon/internal/zfs/zed_listener.go`, 309 lines)**: Kernel ZED events delivered via Unix socket at `/run/dplaneos/dplaneos.sock` with support for 14+ event types (scrub/resilver/TRIM lifecycle, pool state changes, VDEV health, error conditions). Real-time WebSocket broadcasts to UI with 2-second progress polling for long operations and 30-second fallback polling for missed events. Integrated alert routing to SMTP/Webhook/Telegram with severity levels.
 
-#### Priority 2: ZED Event Integration
-- **ZED socket listener (`daemon/internal/zfs/zed_listener.go`, 309 lines)**: Unix socket at `/run/dplaneos/dplaneos.sock` receives kernel ZED events
-- **14+ event types handled**: scrub_start/finish/abort, resilver_start/finish, trim_start/finish/abort, pool_import, pool_destroy, statechange, vdev_online, vdev_clear, device_removal, data_loss, deadman, io_failure, checksum_failure
-- **2-second progress polling** for scrub/resilver (48-hour timeout) and TRIM (12-hour timeout)
-- **Fallback polling** in background goroutine (30-second intervals) for missed events
-- **WebSocket broadcasts** with typed event names (not generic events)
-- **Alert routing** to alert system (SMTP, Webhook, Telegram) with severity levels
-- **Hot-swap detection** via disk event handler: auto-pool import, disk replacement suggestions
+- **libzfs cgo Bindings (`daemon/internal/libzfs/zfs_cgo.go`, 615 lines)**: Direct C library bindings for all core ZFS operations (pool create/import/export/destroy, dataset create/set/delete, VDEV attach/detach/online/offline/remove/clear). Thread-local handle pattern ensures safe concurrent access from Go. Automatic CLI fallback if cgo unavailable.
 
-#### Priority 3: Multi-forest Active Directory with IDMAP
-- **`ad_domains` table**: Stores per-domain IDMAP config (backend: rid/ad/autorid/tdb, UID/GID ranges), Kerberos state (principal, ticket time), join status
-- **Multi-forest IDMAP sync** (`syncIDMAPToNixwriter()`): Reads all joined domains, generates per-domain `idmap config <name> : backend/range` lines in smb.conf
-- **Automatic Samba mode switching**: JoinDomain calls SetSambaGlobals(ads) to activate winbind; LeaveDomain reverts to user mode if last domain unjoined
-- **Kerberos renewal loop** (15-minute intervals): kinit -R or kinit -k with machine keytab fallback
-- **Full declarative NixOS integration**: dplane-state.json → dplane-generated.nix → samba.nix → smb.conf
-- **Winbind NSS resolution** automatically activated on domain join (no manual service restarts required)
+- **Storage Operations Transactional State** (`migrations/00003_storage_operations.sql`): Database-level guarantees prevent CRUD operations from racing with GitOps sync. Pre-flight validation, atomic state transitions (pending → committed → success/failed), per-operation error tracking.
 
-#### Priority 4a: SES Enclosure LED Locate Control
-- **`ListEnclosures()` API**: Enumerates all enclosures from `/sys/class/enclosure` sysfs
-- **Slot status per enclosure**: Index, name, status, locate LED state, fault flag, device type
-- **LED control via sysfs**: SetLocateLED writes 0 or 1 to `/sys/class/enclosure/{id}/{slot}/locate`
-- **Path traversal protection**: Clean path verification before sysfs write
-- **GET /api/enclosure**: List all enclosures with slot status
-- **PUT /api/enclosure/{id}/slot/{index}/locate**: Control locate LED (on/off)
+- **Hot-Swap Disk Detection**: Automatically detects new disks, imports available pools, suggests disk replacement for faulted vdevs. Integrated with hardware monitoring and WebSocket event streaming.
 
-#### Priority 4b: SES Enclosure Status via Direct SCSI ioctls
-- **Direct ioctl approach** (`daemon/internal/hardware/ses_ioctl.go`, 356 lines): Queries SES pages via SG_IO instead of sg_ses CLI tool
-- **SES page 0x01 (Configuration)**: Parses element type headers, counts, and text labels
-- **SES page 0x02 (Status)**: Reads element status codes + flags (IDENT, FAULT, OFF for device slots)
-- **SES page 0x07 (Element Descriptor)**: Enriches with friendly names (best-effort)
-- **32+ element types supported**: Device Slot, Array Device Slot, Power Supply, Cooling, Temperature Sensor, Door, Alarm, Controller, Nonvolatile Cache, UPS, Display, Key Pad, Enclosure, SCSI Port, Language, Communication Port, Voltage Sensor, Current Sensor, SCSI Target Port, SCSI Initiator Port, SAS Expander, SAS Connector, plus vendor-specific extensions
-- **Type-specific detail extraction**: Temperature sensors converted to Celsius, device slots decode status flags
-- **GET /api/enclosure/{id}/ses-status**: Returns element array with Type, Descriptor, Status, Details
-- **Zero external dependencies**: No sg_ses tool required; no CLI parsing fragility
+### Networking & Directory Services
 
-#### Priority 5a: Storage Operations with Transactional State
-- **`storage_operations` table** (`migrations/00003_storage_operations.sql`): Pre-flight validation, atomic state transitions (pending → committed → success/failed)
-- **Transactional guarantees**: CRUD operations cannot race with GitOps sync
-- **Per-operation state tracking**: Block operations with validation errors before executing
+- **Multi-Forest Active Directory Support**: Register and join multiple AD domains simultaneously with per-domain UID/GID mapping. Each forest can use different IDMAP backend (rid, ad, autorid, tdb) with independent ranges. Automatic Samba security mode switching on join/leave. Kerberos ticket renewal every 15 minutes with machine account keytab fallback.
 
-#### Priority 5b: libzfs cgo Bindings
-- **Direct C library bindings** (`daemon/internal/libzfs/zfs_cgo.go`, 615 lines): PoolCreate, PoolImport, PoolExport, PoolDestroy, DatasetCreate, DatasetSet, DatasetDelete, VdevAttach, VdevDetach, VdevOnline, VdevOffline, VdevRemove, VdevClear
-- **Thread-local handle pattern** via runtime.LockOSThread(): Safe concurrent access to libzfs from Go
-- **Fallback mode** (`zfs_fallback.go`): System can fall back to CLI if cgo fails to load
-- **All ZFS core operations** accessible via Go API without CLI tools
+- **Declarative AD Configuration** (`nixos/modules/samba.nix`, `dplane-state.json`): Domain settings, IDMAP ranges, and Samba security mode flow from database → JSON bridge → NixOS configuration → smb.conf at rebuild time. No imperative config files.
 
-#### Priority 6: GitOps/CRUD Race Protection
-- **RWMutex locks** (`daemon/internal/gitops/lock.go`): Read locks for concurrent CRUD, exclusive lock for GitOps commits
-- **Per-operation mutexes** in drift detection: Prevents concurrent apply + commit races
-- **No split-brain risk**: All configuration changes are atomic
+- **Winbind NSS Resolution**: Automatic daemon activation when any domain is joined. Transparent user/group resolution via standard NSS interfaces. Configurable per-domain UID/GID ranges prevent collisions across forests.
 
-#### Priority 7: NFSv4 ACL Layer
-- **RFC 5661 POSIX<→NFSv4 translation** (`daemon/internal/acl/acl.go`, 163 lines): Convert between POSIX mode bits and NFSv4 ACE list
-- **Full ACE type support**: ALLOW, DENY, AUDIT, ALARM
-- **Mask bits for all operations**: READ, WRITE, EXECUTE, DELETE, APPEND, READ_ACL, WRITE_ACL, WRITE_OWNER, SYNCHRONIZE, READ_ATTRIBUTES, WRITE_ATTRIBUTES, DELETE_CHILD, READ_NAMED_ATTRS, WRITE_NAMED_ATTRS
-- **Handler endpoints** (`handlers/nfs4acl_handler.go`): GET/PUT dataset ACLs
-- **Atomic ACE application**: No partial ACL states possible
+### Hardware & Enclosure Support
 
-#### Priority 8: dplane-fenced SCSI-3 Persistent Reservations
-- **Standalone binary** (`daemon/cmd/dplane-fenced/main.go`, 386 lines): Manages SCSI-3 persistent reservations for shared SAS HA environments
-- **Systemd-isolated service**: Runs independently from main daemon, survives daemon restarts
-- **Disk registration + reservation** on startup: Registers all disks, prevents concurrent access from peer
-- **Graceful release** on shutdown: Clears reservations so peer can acquire on failover
-- **Hardware-gated feature**: Requires shared SAS enclosure for full HA failover protection
+- **SES Enclosure LED Control**: List all SES enclosures from sysfs. Control identify (locate) LED on individual drive slots. Full path traversal protection on sysfs writes. GET/PUT API endpoints for automation and manual locate workflows.
+
+- **SES Enclosure Element Status** (`daemon/internal/hardware/ses_ioctl.go`, 356 lines): Query enclosure element status via direct SCSI ioctls (SG_IO). Parse configuration, status, and descriptor pages. Support 32+ element types (device slots, power supplies, cooling, temperature sensors, controllers, etc). Type-specific detail extraction (flags for slots, Celsius for temperature sensors). Zero external CLI tool dependencies; more reliable and faster than subprocess approach.
+
+### Data Integrity & Concurrency
+
+- **GitOps/CRUD Race Protection** (`daemon/internal/gitops/lock.go`): RWMutex-based locking prevents concurrent API mutations during GitOps syncs. Read locks for parallel CRUD, exclusive lock for Git operations. No split-brain risk; all configuration changes are atomic.
+
+- **NFSv4 ACL Layer** (`daemon/internal/acl/acl.go`, 163 lines): Full RFC 5661 POSIX mode<→NFSv4 ACE translation. Support for ALLOW/DENY/AUDIT/ALARM ACE types with all standard permission masks. API endpoints for getting/setting dataset ACLs with atomic application guarantees.
+
+- **HA Failover with SCSI-3** (`daemon/cmd/dplane-fenced/main.go`, 386 lines): Systemd-isolated binary manages persistent reservations on shared SAS enclosures. Registers disks on startup, releases on shutdown. Prevents split-brain by blocking peer access during failover. Hardware-gated to shared SAS environments.
+
+### Database & Migrations
+
+- **Goose v3 Migration Framework**: 11 numbered migrations (00001-00011) with automatic version tracking. Applied migrations are automatically skipped on subsequent startups. No manual intervention required.
 
 ### Fixed
 
