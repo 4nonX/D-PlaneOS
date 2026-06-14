@@ -235,14 +235,46 @@ const GO_ROUTES: Record<string, string> = {
 export function AppShell() {
   const navigate   = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [helpOpen, setHelpOpen]     = useState(false)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const connect    = useWsStore((s) => s.connect)
   const disconnect = useWsStore((s) => s.disconnect)
   const user       = useAuthStore((s) => s.user)
   const hasActiveJob = useJobStore((s) => !!s.activeJobId)
   const gPressedRef = useRef(false)
   const gTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Update mobile state on resize
+  useEffect(() => {
+    function handleResize() {
+      const newIsMobile = window.innerWidth < 768
+      setIsMobile(newIsMobile)
+      if (!newIsMobile && mobileMenuOpen) {
+        setMobileMenuOpen(false)
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [mobileMenuOpen])
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      setMobileMenuOpen(false)
+    }
+  }, [])
+
+  // Update body class for CSS mobile menu styling
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.classList.add('mobile-menu-open')
+    } else {
+      document.body.classList.remove('mobile-menu-open')
+    }
+    return () => document.body.classList.remove('mobile-menu-open')
+  }, [mobileMenuOpen])
 
   useEffect(() => {
     connect()
@@ -290,12 +322,19 @@ export function AppShell() {
     return <ForcePasswordChange />
   }
 
-  const sidebarWidth = collapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)'
+  const sidebarWidth = isMobile ? '0px' : (collapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)')
 
   return (
     <>
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
-      <TopBar sidebarCollapsed={collapsed} onSearchOpen={() => setSearchOpen(true)} onHelpOpen={() => setHelpOpen(true)} />
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} isMobile={isMobile} mobileMenuOpen={mobileMenuOpen} onMobileMenuClose={() => setMobileMenuOpen(false)} />
+      <TopBar
+        sidebarCollapsed={collapsed}
+        onSearchOpen={() => setSearchOpen(true)}
+        onHelpOpen={() => setHelpOpen(true)}
+        isMobile={isMobile}
+        mobileMenuOpen={mobileMenuOpen}
+        onMobileMenuToggle={() => setMobileMenuOpen((m) => !m)}
+      />
       {searchOpen && <GlobalSearch onClose={() => setSearchOpen(false)} />}
       {helpOpen && <KeyboardHelpModal onClose={() => setHelpOpen(false)} />}
       <main style={{
@@ -306,6 +345,7 @@ export function AppShell() {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
+        overflowY: 'auto',
         // Reserve space at the bottom when the taskbar is visible so content
         // is never obscured by the 40px collapsed strip.
         paddingBottom: hasActiveJob ? 40 : 0,
@@ -313,8 +353,10 @@ export function AppShell() {
         <div style={{
           width: '100%',
           maxWidth: '1440px',
-          padding: '32px 40px',
-          flex: 1
+          padding: isMobile ? '24px 16px' : '32px 40px',
+          flex: 1,
+          boxSizing: 'border-box',
+          transition: 'padding 0.2s ease',
         }}>
           <Outlet />
         </div>

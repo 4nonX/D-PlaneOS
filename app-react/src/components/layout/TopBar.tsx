@@ -31,9 +31,12 @@ interface TopBarProps {
   sidebarCollapsed: boolean
   onSearchOpen: () => void
   onHelpOpen?: () => void
+  isMobile?: boolean
+  mobileMenuOpen?: boolean
+  onMobileMenuToggle?: () => void
 }
 
-export function TopBar({ sidebarCollapsed, onSearchOpen, onHelpOpen }: TopBarProps) {
+export function TopBar({ sidebarCollapsed, onSearchOpen, onHelpOpen, isMobile, mobileMenuOpen, onMobileMenuToggle }: TopBarProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const user     = useAuthStore((s) => s.user)
 
@@ -48,19 +51,36 @@ export function TopBar({ sidebarCollapsed, onSearchOpen, onHelpOpen }: TopBarPro
     <header
       style={{
         position: 'fixed', top: 0,
-        left: sidebarCollapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)',
+        left: isMobile ? 0 : (sidebarCollapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)'),
         right: 0, height: 'var(--topbar-height)',
         background: 'hsla(var(--hue-bg), 18%, 4%, 0.7)',
         borderBottom: '1px solid var(--border-subtle)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 32px',
+        padding: isMobile ? '0 16px' : '0 32px',
         zIndex: 'var(--z-topbar)',
         backdropFilter: 'var(--blur-glass)',
         boxShadow: '0 4px 30px rgba(0, 0, 0, 0.4)',
-        transition: 'left var(--transition-bounce)'}}
+        transition: 'left var(--transition-bounce), padding var(--transition-fast)'}}
     >
       {/* ── Left: breadcrumb + title + pool monitor ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+        {isMobile && onMobileMenuToggle && (
+          <button
+            onClick={onMobileMenuToggle}
+            aria-label="Toggle navigation menu"
+            aria-expanded={mobileMenuOpen}
+            style={{
+              width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)',
+              transition: 'color var(--transition-fast)',
+              marginRight: 8,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary)' }}
+          >
+            <Icon name="menu" size={20} aria-hidden="true" />
+          </button>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 30, height: 30, borderRadius: 8,
@@ -97,29 +117,47 @@ export function TopBar({ sidebarCollapsed, onSearchOpen, onHelpOpen }: TopBarPro
       {/* ── Right: search + user chip ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         {/* Search trigger */}
-        <button
-          onClick={onSearchOpen}
-          aria-label="Open global search (Ctrl+K)"
-          aria-keyshortcuts="Control+k Meta+k"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '5px 10px 5px 8px',
-            background: 'hsla(0,0%,100%,0.04)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer', color: 'var(--text-tertiary)',
-            fontSize: 'var(--text-xs)', fontFamily: 'inherit',
-            transition: 'all var(--transition-fast)',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'hsla(0,0%,100%,0.08)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'hsla(0,0%,100%,0.04)'; e.currentTarget.style.color = 'var(--text-tertiary)' }}
-        >
-          <Icon name="search" size={14} aria-hidden="true" />
-          <span>Search</span>
-          <kbd style={{ padding: '1px 5px', borderRadius: 3, fontSize: 10, background: 'var(--bg-card)', border: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }} aria-hidden="true">
-            {navigator.platform.startsWith('Mac') ? '⌘K' : 'Ctrl+K'}
-          </kbd>
-        </button>
+        {isMobile ? (
+          <button
+            onClick={onSearchOpen}
+            aria-label="Open global search (Ctrl+K)"
+            aria-keyshortcuts="Control+k Meta+k"
+            style={{
+              width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'none', border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)', cursor: 'pointer', color: 'var(--text-tertiary)',
+              transition: 'all var(--transition-fast)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'hsla(0,0%,100%,0.08)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-tertiary)' }}
+          >
+            <Icon name="search" size={18} aria-hidden="true" />
+          </button>
+        ) : (
+          <button
+            onClick={onSearchOpen}
+            aria-label="Open global search (Ctrl+K)"
+            aria-keyshortcuts="Control+k Meta+k"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '5px 10px 5px 8px',
+              background: 'hsla(0,0%,100%,0.04)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer', color: 'var(--text-tertiary)',
+              fontSize: 'var(--text-xs)', fontFamily: 'inherit',
+              transition: 'all var(--transition-fast)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'hsla(0,0%,100%,0.08)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'hsla(0,0%,100%,0.04)'; e.currentTarget.style.color = 'var(--text-tertiary)' }}
+          >
+            <Icon name="search" size={14} aria-hidden="true" />
+            <span>Search</span>
+            <kbd style={{ padding: '1px 5px', borderRadius: 3, fontSize: 10, background: 'var(--bg-card)', border: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }} aria-hidden="true">
+              {navigator.platform.startsWith('Mac') ? '⌘K' : 'Ctrl+K'}
+            </kbd>
+          </button>
+        )}
 
         {onHelpOpen && (
           <Tooltip content="Keyboard shortcuts (?)">

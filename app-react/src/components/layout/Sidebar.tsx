@@ -18,18 +18,22 @@ import { api } from '@/lib/api'
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
+  isMobile?: boolean
+  mobileMenuOpen?: boolean
+  onMobileMenuClose?: () => void
 }
 
 interface LicenseStatus {
   active: boolean
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, isMobile: isMobileProp, mobileMenuOpen, onMobileMenuClose }: SidebarProps) {
   const router   = useRouter()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const user     = useAuthStore((s) => s.user)
   const logout   = useAuthStore((s) => s.logout)
   const wsStatus = useWsStore((s) => s.status)
+  const isMobile = isMobileProp ?? window.innerWidth < 768
 
   const licenseQ = useQuery({
     queryKey: ['license', 'status'],
@@ -61,19 +65,33 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const wsLabel = wsStatus === 'connected' ? 'Live' : wsStatus === 'connecting' ? 'Connecting…' : 'Disconnected'
 
   return (
-    <nav
-      role="navigation"
-      aria-label="Main navigation"
-      style={{
-        position: 'fixed', top: 0, left: 0, height: '100vh',
-        width: collapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)',
-        background: 'hsla(var(--hue-bg), 18%, 2%, 0.8)',
-        borderRight: '1px solid var(--border-subtle)',
-        display: 'flex', flexDirection: 'column',
-        transition: 'width var(--transition-bounce)',
-        overflow: 'hidden', zIndex: 'var(--z-topbar)',
-        backdropFilter: 'var(--blur-glass)'}}
-    >
+    <>
+      {isMobile && (
+        <div
+          onClick={onMobileMenuClose}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 'calc(var(--z-topbar) - 1)',
+            background: 'rgba(0, 0, 0, 0.4)',
+            opacity: mobileMenuOpen ? 1 : 0,
+            pointerEvents: mobileMenuOpen ? 'auto' : 'none',
+            transition: 'opacity var(--transition-fast)',
+          }}
+        />
+      )}
+      <nav
+        role="navigation"
+        aria-label="Main navigation"
+        style={{
+          position: 'fixed', top: 0, left: isMobile ? (mobileMenuOpen ? 0 : '-100%') : 0,
+          height: '100vh',
+          width: isMobile ? '260px' : (collapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)'),
+          background: 'hsla(var(--hue-bg), 18%, 2%, 0.8)',
+          borderRight: '1px solid var(--border-subtle)',
+          display: 'flex', flexDirection: 'column',
+          transition: isMobile ? 'left var(--transition-fast)' : 'width var(--transition-bounce)',
+          overflow: 'hidden', zIndex: isMobile ? 'calc(var(--z-topbar) + 1)' : 'var(--z-topbar)',
+          backdropFilter: 'var(--blur-glass)'}}
+      >
       {/* ── Logo + collapse toggle ── */}
       <div style={{
         height: 'var(--topbar-height)',
@@ -287,7 +305,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </Tooltip>
         )}
       </div>
-    </nav>
+      </nav>
+    </>
   )
 }
 
