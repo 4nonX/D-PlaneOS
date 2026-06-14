@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v14.5.0 (2026-06-15) - "Adaptive"
+
+Responsive design overhaul: DPlaneOS interface now adapts seamlessly across all screen sizes, from 320px mobile devices to 4K displays. Desktop-first design maintained with full feature parity across all breakpoints. No breaking API changes. No breaking configuration changes.
+
+### User Interface
+
+- **Responsive Design Foundation**: Interface adapts gracefully across full spectrum of screen sizes (320px mobile to 3840px 4K) with three primary breakpoints (768px mobile, 1024px tablet, 1440px desktop) plus ultra-wide adjustments.
+  - **Mobile** (<768px): Hamburger menu overlay, stacked form columns, icon-only buttons, horizontal table scroll
+  - **Tablet** (768px-1024px): Compressed spacing, toggleable sidebar for more content space
+  - **Desktop** (1024px+): Full sidebar visible, all controls displayed, optimal reading width (1440px max-width)
+  - **Ultra-wide** (2560px+): Increased padding and spacing for visual balance on QHD/4K monitors
+
+- **Mobile Navigation**: Hamburger menu button appears at <768px viewport width with full-screen overlay pattern. Click backdrop or navigate to dismiss. Menu automatically closes when resizing to desktop or changing routes. Semi-transparent dark overlay (0.4 opacity) provides affordance for dismissal.
+
+- **Touch Target Compliance**: All interactive elements maintain 44px minimum height/width on any screen size per WCAG AA accessibility guidelines. Buttons, form inputs, tab controls, and navigation items scale appropriately while staying within touch-target requirements.
+
+- **TopBar Responsive Scaling**: Header adapts padding (16px mobile, 32px desktop), search button collapses to icon-only on mobile (<768px) to preserve space while maintaining Ctrl+K keyboard shortcut functionality. Hamburger menu button positioned for easy reach on mobile devices.
+
+- **Form Layout Adaptation**: Single-column form layouts on mobile (<768px) automatically stack for readability. Form field padding scales from 10px desktop to 12px mobile for easier touch interaction. Select dropdowns and text inputs expand to 100% width on mobile with proper spacing.
+
+- **Data Table Responsiveness**: Tables use horizontal scroll on mobile (<768px) instead of forcing columns to squeeze. Sticky headers ensure column context remains visible during scroll. Padding and font sizing scale appropriately for readability at all viewport widths.
+
+- **Modal Responsiveness**: Modal dialogs adapt to viewport constraints. On mobile (<768px), modals take full screen with rounded corners removed and slide-up animation from bottom. Desktop modals maintain optimal 420px-680px width with centered positioning. Footer buttons stack vertically on mobile for adequate touch spacing.
+
+- **Typography Scaling**: Page titles and headings scale from desktop sizes down to mobile-optimized sizes. All text maintains readability and visual hierarchy across breakpoints without requiring manual resizing.
+
+- **Reduced Motion Support**: Respects `prefers-reduced-motion: reduce` media query across all animations and transitions. Users who prefer reduced motion experience instant state changes without animations while fully-featured interface remains available.
+
+### Technical Changes
+
+- **CSS Media Queries**: Comprehensive responsive breakpoints in `src/index.css` with desktop-first approach. Safeguard rules prevent horizontal overflow at any screen size. Flexible flex children with `min-width: 0` allow proper shrinking. Word-break rules prevent text overflow in constrained spaces.
+
+- **Responsive Component Props**: Sidebar and TopBar accept `isMobile` and `mobileMenuOpen` props for state-driven responsive behavior. AppShell manages mobile state with window resize listener and route-change effects for seamless adaptation.
+
+- **Body Class Toggle**: Mobile menu state drives CSS-based sidebar styling via `mobile-menu-open` class on document.body. Separates state management from inline styles for cleaner responsive patterns.
+
+- **Ultra-wide Adjustments**: Main content area padding increases from `32px 40px` desktop to `40px 80px` QHD (2560px+) and `48px 120px` 4K (3840px+) for appropriate spacing on ultra-wide displays.
+
+### Accessibility
+
+- **WCAG AA Compliance**: All responsive changes maintain WCAG AA accessibility standards. 44px touch targets on all interactive elements. Focus management preserved across all breakpoints. Keyboard navigation fully functional on mobile with proper focus-visible outlines.
+
+- **Aria Labels**: Hamburger menu button includes `aria-label="Toggle navigation menu"` and `aria-expanded` attribute reflecting current state. Semantic HTML maintained throughout responsive adaptations.
+
+### Fixed
+
+- **Sidebar Responsiveness**: Previously occupying 71% of mobile viewport (260px on 375px screen), sidebar now uses overlay pattern on mobile devices, preventing content from becoming unusable. Desktop users unaffected; sidebar remains fixed and always visible.
+
 ## v14.4.0 (2026-06-13) - "Complete Roadmap"
 
 Upgrade from: v14.3.0 - Schema migration required (migration 00011 adds `enterprise_license` and `enterprise_audit_usage` tables for licensing and audit tracking; applied automatically at startup). No breaking API changes. No breaking configuration changes.
