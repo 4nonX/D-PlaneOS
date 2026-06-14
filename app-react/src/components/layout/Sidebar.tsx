@@ -155,7 +155,7 @@ export function Sidebar({ collapsed, onToggle, isMobile: isMobileProp, mobileMen
 
           const group = item as NavGroup
           const filteredChildren = group.children.filter((c) => {
-            const isEnterprise = (c as any).enterprise === true
+            const isEnterprise = c.enterprise === true
             return !isEnterprise || licenseQ.data?.active
           })
           const isOpen = openGroups.has(group.id)

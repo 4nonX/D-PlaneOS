@@ -15,7 +15,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import type React from 'react'
-import { Outlet, useNavigate } from '@tanstack/react-router'
+import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { ToastContainer } from '@/components/ui/Toast'
@@ -234,6 +234,7 @@ const GO_ROUTES: Record<string, string> = {
 
 export function AppShell() {
   const navigate   = useNavigate()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const [collapsed, setCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -261,10 +262,9 @@ export function AppShell() {
 
   // Close mobile menu when route changes
   useEffect(() => {
-    if (mobileMenuOpen) {
-      setMobileMenuOpen(false)
-    }
-  }, [])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMobileMenuOpen(false)
+  }, [pathname])
 
   // Update body class for CSS mobile menu styling
   useEffect(() => {
