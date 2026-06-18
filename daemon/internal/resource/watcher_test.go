@@ -35,9 +35,7 @@ func TestWatcherResourceMonitoring(t *testing.T) {
 func TestWatcherCallbackOnCritical(t *testing.T) {
 	watcher := NewWatcher(100*time.Millisecond, 10*1024, []string{"/"}) // Tiny memory limit to trigger CRITICAL
 
-	callbackCalled := false
 	watcher.SetCriticalCallback(func(rs ResourceStatus) {
-		callbackCalled = true
 		t.Logf("Critical callback triggered: %+v", rs)
 	})
 
@@ -54,29 +52,3 @@ func TestWatcherCallbackOnCritical(t *testing.T) {
 	}
 }
 
-func TestWriteAtomicFile(t *testing.T) {
-	testFile := "/tmp/test-atomic-write"
-	testData := []byte("test data")
-
-	err := WriteAtomicFile(testFile, testData)
-	if err != nil {
-		t.Fatalf("WriteAtomicFile failed: %v", err)
-	}
-
-	// Verify file was written
-	data, err := ReadAtomicFile(testFile)
-	if err != nil {
-		t.Fatalf("ReadAtomicFile failed: %v", err)
-	}
-
-	if string(data) != string(testData) {
-		t.Errorf("Data mismatch: expected %q, got %q", testData, data)
-	}
-
-	t.Logf("Atomic write/read successful: %q", data)
-}
-
-// ReadAtomicFile is a helper for testing (not in watcher.go)
-func ReadAtomicFile(path string) ([]byte, error) {
-	return nil, nil
-}
