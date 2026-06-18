@@ -3,6 +3,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -52,27 +53,28 @@ func FeatureFlagsHandler(featureManager *features.Manager) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		features := featureManager.List()
+		featureList := featureManager.List()
 
-		// Return as JSON array
-		w.Write([]byte("["))
-		for i, f := range features {
-			if i > 0 {
-				w.Write([]byte(","))
-			}
-			fmt.Fprintf(w, `{"id":"%s","name":"%s","state":"%s"}`, f.ID, f.Name, f.State)
+		// Use json.Encoder for safe JSON encoding (prevents XSS)
+		if err := json.NewEncoder(w).Encode(featureList); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to encode features: %v", err), http.StatusInternalServerError)
+			return
 		}
-		w.Write([]byte("]"))
 	}
 }
 
 // FeatureEnableHandler handles POST /api/system/features/:id/enable
+// REQUIRES: Admin authorization (should be wrapped with RequirePermission middleware)
 func FeatureEnableHandler(featureManager *features.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
+		// Note: Authentication/authorization is checked by RequirePermission middleware
+		// This handler assumes the caller has already been authorized.
+		// Registration: middleware.RequirePermission("system", "write")(FeatureEnableHandler(fm))
 
 		featureID := strings.TrimPrefix(r.URL.Path, "/api/system/features/")
 		featureID = strings.TrimSuffix(featureID, "/enable")
@@ -87,18 +89,28 @@ func FeatureEnableHandler(featureManager *features.Manager) http.HandlerFunc {
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"enabled","feature":"%s","state":"%s"}`, featureID, state)
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  "enabled",
+			"feature": featureID,
+			"state":   state,
+		})
 	}
 }
 
 // FeatureDisableHandler handles POST /api/system/features/:id/disable
+// REQUIRES: Admin authorization (should be wrapped with RequirePermission middleware)
 func FeatureDisableHandler(featureManager *features.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
+		// Note: Authentication/authorization is checked by RequirePermission middleware
+		// This handler assumes the caller has already been authorized.
+		// Registration: middleware.RequirePermission("system", "write")(FeatureDisableHandler(fm))
 
 		featureID := strings.TrimPrefix(r.URL.Path, "/api/system/features/")
 		featureID = strings.TrimSuffix(featureID, "/disable")
@@ -108,7 +120,11 @@ func FeatureDisableHandler(featureManager *features.Manager) http.HandlerFunc {
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"disabled","feature":"%s"}`, featureID)
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  "disabled",
+			"feature": featureID,
+		})
 	}
 }
