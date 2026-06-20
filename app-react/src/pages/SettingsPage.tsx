@@ -1,11 +1,13 @@
 /**
  * pages/SettingsPage.tsx - System Settings
  *
- * Tabs: General | NixOS | SSO / OIDC | Security | Maintenance
+ * Tabs: General | NixOS | SSO / OIDC | Security | License | Features | Maintenance
  *
  * General: hostname, timezone, MOTD - backed by /api/system/settings (key-value store)
  * NixOS: detect, validate, apply (with 60s confirm), generations list & rollback
  * Security: AES-256-GCM key rotation  POST /api/system/secrets/rotate
+ * License: activation, status, CE integration
+ * Features: enable/disable optional features, hardware requirements
  * Maintenance: DB backup/restore      GET /api/system/db/backup, POST /api/system/db/restore
  *
  * Calls:
@@ -18,6 +20,9 @@
  *   GET  /api/nixos/generations            → { success, generations: Generation[] }
  *   POST /api/nixos/rollback { generation } → { success }
  *   POST /api/system/secrets/rotate        → { success, rotated_count: number }
+ *   GET  /api/system/features              → { success, features: Feature[] }
+ *   POST /api/system/features/:id/enable   → { success }
+ *   POST /api/system/features/:id/disable  → { success }
  *   GET  /api/system/db/backup             → octet-stream download
  *   POST /api/system/db/restore            → { success }
  */
