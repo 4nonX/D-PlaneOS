@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 
 
+## v14.6.0 (2026-06-20) - "Vigilant"
+
+Production-grade resilience system enabling graceful degradation, automatic recovery, and zero-data-loss operations across any hardware configuration. System now monitors itself, recovers from crashes, adapts to hardware changes, rejects operations when resources are critical, and maintains immutable audit trail of all changes. No breaking API changes. No breaking configuration changes.
+
+### Infrastructure & Resilience
+
+- **Hardware-Agnostic Adaptation** (Phase 2): System automatically detects available hardware (BMC, iLO, Redfish, IPMI, NVMe controllers, SES enclosures, network bonding) at startup and disables features requiring unsupported hardware. Features can be manually managed via Settings → Features tab. No configuration changes required. Enables single image deployment across heterogeneous hardware.
+
+- **Resource Exhaustion Gates** (Phase 1): Daemon monitors disk space, memory, and file descriptor utilization with configurable thresholds (DEGRADED at 85% disk, 80% memory, 80% FD; CRITICAL at 95% disk, 90% memory, 95% FD). When critical thresholds reached, new operations are rejected with HTTP 507 (Insufficient Storage) or 429 (Too Many Requests) to prevent catastrophic failures. Running operations continue uninterrupted. Operators notified via health status.
+
+- **Crash Recovery & State Persistence** (Phase 3.1): All long-running operations (pool creation, dataset migration, replication, snapshots) persist state to operation_journal before execution. If daemon crashes or loses power mid-operation, startup recovery automatically resumes from last checkpoint. Zero data loss. No manual intervention required. Enables safe unattended operation.
+
+- **Health Check Aggregation** (Phase 3.3): System health continuously monitored and visible via GET /api/health endpoint with per-subsystem status (ZFS, Docker, Postgres, network, resources, external services, BMC, SES enclosures). Hardware-aware: BMC and enclosure checks only run if hardware detected. Kubernetes-compatible liveness and readiness probes included. Enables integration with monitoring stacks.
+
+- **Immutable Audit Trail** (Phase 4): All significant events logged with HMAC chain integrity: operations (start, complete, fail), feature state changes, resource warnings, hardware detection, circuit breaker transitions, rollbacks. Audit entries form cryptographic HMAC chain where each entry links to previous via hash. Chain integrity verifiable, tampering detectable. Compliance-ready for regulated environments.
+
+- **Automatic Rollback & Recovery** (Phase 5): On operation failure, system automatically rolls back configuration via git revert, disables incompatible features, and logs recovery event. Resource exhaustion or circuit breaker failures trigger graceful degradation instead of crashes. Incomplete operations resume at startup. Operators notified via audit trail and health status. Enables safe automation and unattended operation.
+
+### User Interface
+
+- **Settings → Features Tab** (NEW): Users can enable/disable optional features based on system needs and hardware capabilities. Each feature displays: name, description, current state (enabled/disabled/beta/deprecated), and hardware requirements if applicable. Hardware-required features show grayed out with explanatory tooltip if not present. Feature state changes logged to audit trail.
+
+### API Changes
+
+- **New Endpoints**:
+  - `GET /api/system/features` - List all features with state and requirements
+  - `POST /api/system/features/:id/enable` - Enable a feature (requires system:write permission)
+  - `POST /api/system/features/:id/disable` - Disable a feature (requires system:write permission)
+
+- **Enhanced Endpoints**:
+  - `GET /api/health` - Now includes per-subsystem status with hardware-aware checks
+  - `GET /api/health?subsystem=X` - Query specific subsystem health
+  - `GET /api/health/live` - Kubernetes liveness probe (200 if alive, 503 if critical subsystems down)
+  - `GET /api/health/ready` - Kubernetes readiness probe (200 if all subsystems OK, 503 otherwise)
+
+### Database Changes
+
+- **New Tables** (3 migrations, no breaking changes):
+  - `feature_flags` - Feature state persistence with enable/disable timestamps
+  - `operation_journal` - Operation state for crash recovery with resumption support
+  - `audit_events` - Immutable event log with HMAC chain integrity
+
+### No Breaking Changes
+
+All changes are backward-compatible. No API breaking changes (new endpoints only), no configuration file changes required, no database schema breaking changes (new tables only), no binary format changes. Existing operations continue to work exactly as before. v14.5.0 deployments can upgrade to v14.6.0 without operational changes.
+
+---
+
 ## v14.5.0 (2026-06-15) - "Adaptive"
 
 Responsive design overhaul: DPlaneOS interface now adapts seamlessly across all screen sizes, from 320px mobile devices to 4K displays. Desktop-first design maintained with full feature parity across all breakpoints. No breaking API changes. No breaking configuration changes.
