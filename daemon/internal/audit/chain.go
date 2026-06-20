@@ -32,4 +32,3 @@ func computeRowHash(key []byte, prevHash string, e AuditEvent) string {
 	mac.Write([]byte(msg))
 	return hex.EncodeToString(mac.Sum(nil))
 }
-

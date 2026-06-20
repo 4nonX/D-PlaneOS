@@ -11,25 +11,25 @@ import (
 type LogLevel string
 
 const (
-	LevelInfo    LogLevel = "INFO"
-	LevelWarning LogLevel = "WARNING"
-	LevelWarn    LogLevel = "WARNING" // alias for LevelWarning
-	LevelError   LogLevel = "ERROR"
+	LevelInfo     LogLevel = "INFO"
+	LevelWarning  LogLevel = "WARNING"
+	LevelWarn     LogLevel = "WARNING" // alias for LevelWarning
+	LevelError    LogLevel = "ERROR"
 	LevelSecurity LogLevel = "SECURITY"
 )
 
 type AuditLog struct {
-	Timestamp   time.Time              `json:"timestamp"`
-	Level       LogLevel               `json:"level"`
-	User        string                 `json:"user,omitempty"`
-	Command     string                 `json:"command"`
-	Args        []string               `json:"args,omitempty"`
-	Success     bool                   `json:"success"`
-	Error       string                 `json:"error,omitempty"`
-	Duration    int64                  `json:"duration_ms"`
-	SourceIP    string                 `json:"source_ip,omitempty"`
-	SessionID   string                 `json:"session_id,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
+	Timestamp time.Time      `json:"timestamp"`
+	Level     LogLevel       `json:"level"`
+	User      string         `json:"user,omitempty"`
+	Command   string         `json:"command"`
+	Args      []string       `json:"args,omitempty"`
+	Success   bool           `json:"success"`
+	Error     string         `json:"error,omitempty"`
+	Duration  int64          `json:"duration_ms"`
+	SourceIP  string         `json:"source_ip,omitempty"`
+	SessionID string         `json:"session_id,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 type Logger struct {
@@ -42,7 +42,8 @@ var (
 	globalBufferedLogger interface {
 		Log(AuditEvent) error
 	}
-	once sync.Once
+	globalEventLogger *EventLogger
+	once              sync.Once
 )
 
 // SetGlobalBufferedLogger sets the database-backed logger

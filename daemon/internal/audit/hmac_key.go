@@ -1,4 +1,4 @@
-﻿package audit
+package audit
 
 import (
 	"crypto/rand"
@@ -41,4 +41,3 @@ func LoadOrCreateAuditKey(path string) ([]byte, error) {
 
 	return key, nil
 }
-

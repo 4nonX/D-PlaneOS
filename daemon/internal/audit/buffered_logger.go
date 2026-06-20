@@ -21,9 +21,9 @@ type AuditEvent struct {
 
 // BufferedLogger implements batched audit logging for high-performance PostgreSQL
 type BufferedLogger struct {
-	db            *sql.DB
-	buffer        []AuditEvent
-	bufferMutex   sync.Mutex
+	db          *sql.DB
+	buffer      []AuditEvent
+	bufferMutex sync.Mutex
 	// chainMu serialises the prevHash read→compute→insert sequence across both
 	// Flush (batch path) and writeDirect (security-event path). Without this,
 	// two concurrent callers can read the same prevHash and produce a broken chain link.
@@ -67,9 +67,9 @@ func NewBufferedLogger(db *sql.DB, maxBuffer int, flushInterval time.Duration, h
 
 // Start begins the background flushing goroutine
 func (bl *BufferedLogger) Start() {
-	bl.flushDone.Add(1) // Increment WaitGroup counter
+	bl.flushDone.Add(1)                        // Increment WaitGroup counter
 	ticker := time.NewTicker(bl.flushInterval) // Renamed from bl.flushTicker
-	
+
 	go func() {
 		defer bl.flushDone.Done() // Decrement WaitGroup counter when goroutine exits
 		for {
@@ -101,16 +101,16 @@ func (bl *BufferedLogger) Stop() {
 // directly to PostgreSQL. These events must never be lost on crash or SIGKILL.
 // Callers can also set event.Critical = true to force direct write.
 var SecurityActions = map[string]bool{
-	"login":           true,
-	"login_failed":    true,
-	"logout":          true,
-	"auth_failed":     true,
+	"login":             true,
+	"login_failed":      true,
+	"logout":            true,
+	"auth_failed":       true,
 	"permission_denied": true,
-	"user_created":    true,
-	"user_deleted":    true,
-	"password_changed": true,
-	"token_created":   true,
-	"token_revoked":   true,
+	"user_created":      true,
+	"user_deleted":      true,
+	"password_changed":  true,
+	"token_created":     true,
+	"token_revoked":     true,
 }
 
 // Log adds an event to the buffer.
@@ -258,13 +258,13 @@ func (bl *BufferedLogger) GetStats() map[string]any {
 //
 // func main() {
 //     db, _ := sql.Open("pgx", "postgres://...")
-//     
+//
 //     // Create buffered logger
 //     // Buffer up to 100 events, flush every 5 seconds
 //     auditLogger = audit.NewBufferedLogger(db, 100, 5*time.Second)
 //     auditLogger.Start()
 //     defer auditLogger.Stop()
-//     
+//
 //     // Log events (non-blocking, fast!)
 //     auditLogger.Log(audit.AuditEvent{
 //         Timestamp: time.Now().Unix(),
@@ -274,4 +274,3 @@ func (bl *BufferedLogger) GetStats() map[string]any {
 //         Success:   true,
 //     })
 // }
-
