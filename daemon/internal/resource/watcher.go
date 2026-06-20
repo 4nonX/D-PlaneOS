@@ -45,12 +45,16 @@ func NewWatcher(checkInterval time.Duration, memoryLimitBytes uint64, diskPaths 
 	if len(diskPaths) == 0 {
 		diskPaths = []string{"/persist", "/"}
 	}
-	return &Watcher{
+	w := &Watcher{
 		checkInterval:    checkInterval,
 		memoryLimitBytes: memoryLimitBytes,
 		diskCheckPaths:   diskPaths,
 		stopChan:         make(chan bool),
 	}
+	// Perform initial check so GetStatus() doesn't return UNKNOWN
+	status := w.check()
+	w.lastStatus = &status
+	return w
 }
 
 // SetCriticalCallback sets the callback invoked when resource hits CRITICAL threshold.
