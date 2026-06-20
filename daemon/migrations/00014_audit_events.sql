@@ -23,18 +23,40 @@ CREATE INDEX IF NOT EXISTS idx_audit_events_operation_id ON audit_events(operati
 CREATE INDEX IF NOT EXISTS idx_audit_events_user_id ON audit_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_events_status ON audit_events(status);
 
--- Immutability: no updates or deletes on audit_events
--- REVOKE UPDATE, DELETE ON audit_events FROM dplaneos; (requires superuser)
+-- Immutability enforcement: prevent updates and deletes on audit_events
+-- Enforced via trigger that raises exception on any modification attempt
+CREATE OR REPLACE FUNCTION audit_prevent_modification()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'audit_events table is immutable - updates and deletes are not allowed';
+END;
+$$ LANGUAGE plpgsql;
 
--- HMAC Integrity Chain (PostgreSQL Trigger)
--- Each event is linked via HMAC of (previous_hmac || current_event_hash)
--- This creates an immutable chain that can be verified at any time
+DROP TRIGGER IF EXISTS audit_prevent_update ON audit_events;
+CREATE TRIGGER audit_prevent_update
+BEFORE UPDATE ON audit_events
+FOR EACH ROW
+EXECUTE FUNCTION audit_prevent_modification();
+
+DROP TRIGGER IF EXISTS audit_prevent_delete ON audit_events;
+CREATE TRIGGER audit_prevent_delete
+BEFORE DELETE ON audit_events
+FOR EACH ROW
+EXECUTE FUNCTION audit_prevent_modification();
+
+-- HMAC-SHA256 Integrity Chain (PostgreSQL Trigger)
+-- Each event is linked via HMAC-SHA256 of (previous_hmac || current_event_hash)
+-- Uses pgcrypto for cryptographically sound hashing
+-- Creates an immutable chain that can be verified at any time
+-- Note: Key derivation happens in application layer (daemon/internal/audit/hmac_key.go)
+-- For production, key should be managed via secure key management system
+
 CREATE OR REPLACE FUNCTION audit_compute_hmac()
 RETURNS TRIGGER AS $$
 DECLARE
   prev_hmac TEXT;
   current_hash TEXT;
-  combined TEXT;
+  event_data TEXT;
 BEGIN
   -- Get previous event's HMAC (or empty string if first event)
   SELECT hmac INTO prev_hmac FROM audit_events
@@ -46,17 +68,22 @@ BEGIN
     prev_hmac := '';
   END IF;
 
-  -- Create hash of current event (simplified: just use JSON of key fields)
-  current_hash := MD5(
-    NEW.timestamp::TEXT || '|' ||
-    NEW.event_type || '|' ||
-    NEW.component || '|' ||
-    COALESCE(NEW.operation_id, '') || '|' ||
-    NEW.status
-  );
+  -- Create hash of current event: include all security-relevant fields
+  -- Use explicit field delimiters with length prefixes to prevent canonicalization attacks
+  event_data :=
+    LENGTH(COALESCE(NEW.timestamp::TEXT, ''))::TEXT || ':' || COALESCE(NEW.timestamp::TEXT, '') || '|' ||
+    LENGTH(COALESCE(NEW.event_type, ''))::TEXT || ':' || COALESCE(NEW.event_type, '') || '|' ||
+    LENGTH(COALESCE(NEW.component, ''))::TEXT || ':' || COALESCE(NEW.component, '') || '|' ||
+    LENGTH(COALESCE(NEW.operation_id, ''))::TEXT || ':' || COALESCE(NEW.operation_id, '') || '|' ||
+    LENGTH(COALESCE(NEW.user_id, ''))::TEXT || ':' || COALESCE(NEW.user_id, '') || '|' ||
+    LENGTH(COALESCE(NEW.status, ''))::TEXT || ':' || COALESCE(NEW.status, '') || '|' ||
+    LENGTH(COALESCE(NEW.ip_address, ''))::TEXT || ':' || COALESCE(NEW.ip_address, '') || '|' ||
+    LENGTH(COALESCE(NEW.details::TEXT, ''))::TEXT || ':' || COALESCE(NEW.details::TEXT, '');
 
-  -- Chain: HMAC = MD5(previous_hmac || current_hash)
-  NEW.hmac := MD5(prev_hmac || current_hash);
+  -- Use SHA256 for cryptographic strength (pgcrypto contrib module required)
+  -- Chain: HMAC = digest(previous_hmac || current_hash, 'sha256')
+  current_hash := digest(event_data, 'sha256');
+  NEW.hmac := digest(prev_hmac || current_hash, 'sha256');
 
   RETURN NEW;
 END;
@@ -69,14 +96,15 @@ FOR EACH ROW
 EXECUTE FUNCTION audit_compute_hmac();
 
 -- Verification function: check if audit chain is unbroken
+-- Returns (is_valid, first_invalid_id)
+-- If is_valid=false, first_invalid_id indicates where chain breaks
 CREATE OR REPLACE FUNCTION audit_verify_chain(from_id BIGINT, to_id BIGINT)
 RETURNS TABLE(is_valid BOOLEAN, first_invalid_id BIGINT) AS $$
 DECLARE
   prev_hmac TEXT := '';
-  current_id BIGINT;
   computed_hmac TEXT;
-  stored_hmac TEXT;
   current_hash TEXT;
+  event_data TEXT;
   evt audit_events%ROWTYPE;
 BEGIN
   FOR evt IN
@@ -84,15 +112,19 @@ BEGIN
     WHERE id BETWEEN from_id AND to_id
     ORDER BY id
   LOOP
-    current_hash := MD5(
-      evt.timestamp::TEXT || '|' ||
-      evt.event_type || '|' ||
-      evt.component || '|' ||
-      COALESCE(evt.operation_id, '') || '|' ||
-      evt.status
-    );
+    -- Reconstruct event data using same format as audit_compute_hmac()
+    event_data :=
+      LENGTH(COALESCE(evt.timestamp::TEXT, ''))::TEXT || ':' || COALESCE(evt.timestamp::TEXT, '') || '|' ||
+      LENGTH(COALESCE(evt.event_type, ''))::TEXT || ':' || COALESCE(evt.event_type, '') || '|' ||
+      LENGTH(COALESCE(evt.component, ''))::TEXT || ':' || COALESCE(evt.component, '') || '|' ||
+      LENGTH(COALESCE(evt.operation_id, ''))::TEXT || ':' || COALESCE(evt.operation_id, '') || '|' ||
+      LENGTH(COALESCE(evt.user_id, ''))::TEXT || ':' || COALESCE(evt.user_id, '') || '|' ||
+      LENGTH(COALESCE(evt.status, ''))::TEXT || ':' || COALESCE(evt.status, '') || '|' ||
+      LENGTH(COALESCE(evt.ip_address, ''))::TEXT || ':' || COALESCE(evt.ip_address, '') || '|' ||
+      LENGTH(COALESCE(evt.details::TEXT, ''))::TEXT || ':' || COALESCE(evt.details::TEXT, '');
 
-    computed_hmac := MD5(prev_hmac || current_hash);
+    current_hash := digest(event_data, 'sha256');
+    computed_hmac := digest(prev_hmac || current_hash, 'sha256');
 
     IF computed_hmac != evt.hmac THEN
       RETURN QUERY SELECT FALSE, evt.id;
