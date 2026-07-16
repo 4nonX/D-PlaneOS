@@ -125,6 +125,7 @@ in {
     systemd.tmpfiles.rules = [
       "d /var/lib/ctdb 0755 root root -"
       "d /var/lib/ctdb/persistent 0755 root root -"
+      "d /var/log/ctdb 0755 root root -"
     ];
 
     # Ensure /var/lib/ctdb survives across reboots
@@ -215,9 +216,7 @@ in {
     '';
 
     # ── Logging and monitoring ──────────────────────────────────────────────
-    systemd.tmpfiles.rules = [
-      "d /var/log/ctdb 0755 root root -"
-    ];
+    # Log directory is created above in systemd.tmpfiles.rules
 
     # ── Firewall rules for CTDB ─────────────────────────────────────────────
     # CTDB uses ports for inter-node communication
