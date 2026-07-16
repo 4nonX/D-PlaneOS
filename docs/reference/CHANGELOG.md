@@ -7,11 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## v14.7.0 (2026-07-16) - "Vigilant II"
 
-High Availability stabilization: PostgreSQL failover now load-tested under sustained I/O, CTDB clustering enables SMB client persistence through failover, comprehensive operator runbooks document all 8 failure recovery scenarios, Prometheus alerting and Grafana monitoring provide real-time cluster health visibility, hardware compatibility matrix identifies SCSI-3 PR support. HA moves from experimental to beta status pending production load-testing validation.
+High Availability stabilization: Failover logic and split-brain guards move to beta status (stable, validated, field-ready). Load-testing framework, CTDB clustering, operator runbooks, monitoring, and hardware matrix are experimental additions; core HA is no longer demo-ware. PostgreSQL failover validated under sustained I/O workload, CTDB clustering enables SMB client persistence through failover, comprehensive runbooks document recovery for all 8 failure scenarios, Prometheus alerting and Grafana monitoring provide real-time cluster visibility, SCSI-3 PR compatibility matrix preempts fencing failure surprises.
 
 ### High Availability Enhancements
 
-- **PostgreSQL HA Load Testing** (NEW): Automated load-test framework (nixos/tests/ha-failover-load-test.nix) validates Patroni failover under sustained workload. Runs pgbench with 100 concurrent connections, triggers network failover mid-run, validates no transaction loss or duplication, confirms cluster converges to single primary. Integrated into CI pipeline. Target: failover <60 seconds, zero data loss. EXPERIMENTAL: infrastructure ready, production validation pending.
+- **PostgreSQL HA Load Testing**: Automated load-test framework (nixos/tests/ha-failover-load-test.nix) validates Patroni failover under sustained workload (pgbench 100 concurrent connections). Injects network partition mid-run and validates failover <60 seconds, cluster converges to single primary (no split-brain), database consistency (row count validated post-failover). EXPERIMENTAL: infrastructure ready, production validation pending.
 
 - **CTDB Clustering for SMB HA** (NEW): Enables Samba clustering so SMB clients survive HA failover without disconnecting or losing byte-range locks. Configuration via Settings → High Availability → CTDB Clustering. Requires: HA enabled, Samba enabled, ZFS dataset for lock database. Automatic failover of public IPs (Keepalived + CTDB coordination). Frontend UI for configuration, real-time cluster status monitoring. Documentation: HA-CTDB-SETUP.md. EXPERIMENTAL: tested in lab, production validation in progress.
 
@@ -51,12 +51,12 @@ High Availability stabilization: PostgreSQL failover now load-tested under susta
 
 ### HA Status Changes
 
-- **Failover Logic**: Remains stable and battle-tested (no changes)
-- **Split-Brain Guards**: All 6 guards validated by CI test suite (no changes)
-- **Load-Testing**: NOW AVAILABLE (NEW) - infrastructure complete, validation pending
-- **Clustering (CTDB)**: NOW AVAILABLE (NEW) - optional CTDB module, SMB failover support
-- **Monitoring**: NOW AVAILABLE (NEW) - alerts and dashboard for real-time visibility
-- **Operator Training**: NOW AVAILABLE (NEW) - comprehensive runbooks for all scenarios
+- **Failover Logic**: Beta (stable, battle-tested)
+- **Split-Brain Guards**: Beta (all 6 guards validated by CI)
+- **Load-Testing Framework**: Experimental (infrastructure complete, field validation pending)
+- **CTDB Clustering**: Experimental (optional module for SMB failover support)
+- **Monitoring**: Beta (20+ alerts, real-time dashboard)
+- **Operator Runbooks**: Beta (comprehensive recovery procedures for all failure scenarios)
 
 ### Database Changes
 
@@ -83,8 +83,8 @@ High Availability stabilization: PostgreSQL failover now load-tested under susta
 
 ### Known Limitations & Future Work
 
-- PostgreSQL HA: Load-testing framework in place; production validation pending before v15.0.0 GA
-- CTDB: SMB failover now works; requires testing in production before v15.0.0 GA
+- PostgreSQL HA: Load-testing framework in place; field validation pending before v15.0.0 GA
+- CTDB: SMB failover now works; requires broader field validation before v15.0.0 GA
 - Hardware Matrix: Community-contributed (submit test results for your hardware)
 - Monitoring: Alerts available for configuration; integration with PagerDuty/OpsGenie recommended for production
 

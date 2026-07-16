@@ -76,6 +76,67 @@ This endpoint returns:
 
 ---
 
+## Virtualization (QEMU/Proxmox/KVM Guests)
+
+### Passthrough Requirements
+
+Running DPlaneOS HA on a hypervisor requires careful disk configuration to preserve SCSI-3 PR semantics:
+
+| Configuration | PR Support | Recommended | Notes |
+|---|---|---|---|
+| **Full HBA Passthrough** | ✅ YES | ✅ **Safe** | Entire SAS/SCSI HBA card passed to VM. Native SCSI-3 behavior preserved. |
+| **SCSI-Block Passthrough** | ✅ YES | ✅ **Recommended** | Individual LUNs passed via `scsi-block` device model. Requires `qemu-pr-helper` daemon on host. Most flexible option. |
+| **qemu-pr-helper** | ✅ YES (with scsi-block) | ✅ **Recommended** | Userspace helper that translates PROUT calls through host kernel. Requires: `qemu-pr-helper` service running on hypervisor, libqemu-pr-helper kernel module. |
+| **Virtual Disks** | ❌ NO | **Avoid** | QEMU virtual disks (qcow2, raw files) do not support SCSI-3 PR. Fencing becomes inoperable. |
+| **SCSI-HBA (plain scsi-hd)** | ❌ NO | **Avoid** | QEMU's generic SCSI emulation does not support PR. Fencing will fail silently. |
+
+### Safe Proxmox/KVM Configuration
+
+**For Proxmox guests using Path A (shared-storage) HA:**
+
+```bash
+# 1. Enable qemu-pr-helper on hypervisor host
+sudo systemctl enable qemu-pr-helper
+sudo systemctl start qemu-pr-helper
+
+# 2. Configure VM disk with scsi-block + pr-manager
+# In Proxmox: Edit VM → Hardware → Add Disk
+# Or in libvirt XML:
+<disk type='block' device='lun'>
+  <driver name='qemu' type='raw' cache='none' io='native'/>
+  <source dev='/dev/mapper/vg-disk'/>
+  <target dev='sdc' bus='scsi'/>
+  <address type='drive' controller='0' bus='0' target='0' unit='0'/>
+</disk>
+
+# 3. Enable PR manager (if not auto-detected)
+<pr-manager id='default'>
+  <source path='/var/run/qemu-pr-helper.sock'/>
+</pr-manager>
+```
+
+**Test PR support inside guest:**
+
+```bash
+# Inside DPlaneOS VM
+curl -X POST http://localhost:5000/api/ha/scsi/probe
+
+# Should show "supported": true for all disks
+# If false, SCSI-3 PR is not reaching the hypervisor's storage
+```
+
+### Detection & Debugging
+
+The fencing alert `HAScsiPrFencingFailed` (from Prometheus/HA-CTDB-SETUP.md) will fire if SCSI-3 PR fails. In a Proxmox guest, common causes:
+
+- `qemu-pr-helper` not running on hypervisor: `systemctl status qemu-pr-helper`
+- VM disk not using `scsi-block`: check `qemu-system-x86_64` process args; should include `pr-manager=default`
+- Virtual disk (qcow2/raw): no PR support possible; must use passthrough
+
+If you encounter fencing failures in virtualization, verify the stack before production use: hypervisor → pr-helper → VM kernel → DPlaneOS daemon.
+
+---
+
 ## Testing and Validation
 
 ### Before Production Deployment
