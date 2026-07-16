@@ -82,17 +82,17 @@ let
       };
 
       # Increase PostgreSQL max connections to handle pgbench load
-      services.postgresql.extraConfig = ''
-        max_connections = 200
-        shared_buffers = 512MB
-        work_mem = 4MB
-        maintenance_work_mem = 128MB
-        effective_cache_size = 1GB
-        synchronous_commit = on
-        wal_level = replica
-        max_wal_senders = 10
-        wal_keep_size = 1GB
-      '';
+      services.postgresql.settings = {
+        max_connections = 200;
+        shared_buffers = "512MB";
+        work_mem = "4MB";
+        maintenance_work_mem = "128MB";
+        effective_cache_size = "1GB";
+        synchronous_commit = "on";
+        wal_level = "replica";
+        max_wal_senders = 10;
+        wal_keep_size = "1GB";
+      };
     };
 
 in
