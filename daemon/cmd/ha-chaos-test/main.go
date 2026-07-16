@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -285,7 +287,7 @@ func (t *HAClusterTester) validateClusterState() {
 	log.Println("Validating cluster consistency...")
 
 	// Validation 1: Exactly one active node
-	primStale := t.getNodeState(t.primaryURL)
+	primState := t.getNodeState(t.primaryURL)
 	secState := t.getNodeState(t.secondaryURL)
 
 	activeCount := 0
@@ -339,8 +341,3 @@ type NodeState struct {
 	Role  string
 	State string
 }
-
-import (
-	"os"
-	"strings"
-)
