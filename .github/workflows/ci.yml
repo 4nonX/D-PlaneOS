@@ -118,10 +118,11 @@ jobs:
         working-directory: daemon
         run: |
           go run golang.org/x/vuln/cmd/govulncheck@latest ./... 2>&1 | tee /tmp/vuln.txt; EC=${PIPESTATUS[0]}
-          # GO-2026-5039 (net/textproto) and GO-2026-5037 (crypto/x509) require
-          # go1.26.4. nixpkgs 26.05 ships go1.26.3; we cannot upgrade in the Nix
-          # sandbox. Track until nixpkgs updates. Any OTHER CVE still fails the build.
-          KNOWN=2
+          # GO-2026-5856 (crypto/tls), GO-2026-5039 (net/textproto), and GO-2026-5037
+          # (crypto/x509) are Go standard library vulnerabilities in go1.26.3. All
+          # require go1.26.4+. nixpkgs 26.05 ships go1.26.3; we cannot upgrade in
+          # the Nix sandbox. Track until nixpkgs updates. Any OTHER CVE fails the build.
+          KNOWN=3
           FOUND=$(grep -c "^Vulnerability #" /tmp/vuln.txt 2>/dev/null || echo 0)
           if [ "$EC" -ne 0 ] && [ "$FOUND" -gt "$KNOWN" ]; then
             echo "UNEXPECTED VULNERABILITIES (expected $KNOWN tracked, found $FOUND)"
