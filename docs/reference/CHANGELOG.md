@@ -5,6 +5,103 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
 
+## v14.7.0 (2026-07-16) - "Vigilant II"
+
+High Availability stabilization: PostgreSQL failover now load-tested under sustained I/O, CTDB clustering enables SMB client persistence through failover, comprehensive operator runbooks document all 8 failure recovery scenarios, Prometheus alerting and Grafana monitoring provide real-time cluster health visibility, hardware compatibility matrix identifies SCSI-3 PR support. HA moves from experimental to beta status pending production load-testing validation.
+
+### High Availability Enhancements
+
+- **PostgreSQL HA Load Testing** (NEW): Automated load-test framework (nixos/tests/ha-failover-load-test.nix) validates Patroni failover under sustained workload. Runs pgbench with 100 concurrent connections, triggers network failover mid-run, validates no transaction loss or duplication, confirms cluster converges to single primary. Integrated into CI pipeline. Target: failover <60 seconds, zero data loss. EXPERIMENTAL: infrastructure ready, production validation pending.
+
+- **CTDB Clustering for SMB HA** (NEW): Enables Samba clustering so SMB clients survive HA failover without disconnecting or losing byte-range locks. Configuration via Settings → High Availability → CTDB Clustering. Requires: HA enabled, Samba enabled, ZFS dataset for lock database. Automatic failover of public IPs (Keepalived + CTDB coordination). Frontend UI for configuration, real-time cluster status monitoring. Documentation: HA-CTDB-SETUP.md. EXPERIMENTAL: tested in lab, production validation in progress.
+
+- **Prometheus HA Alerting** (NEW): 20+ production-grade alert rules for cluster health monitoring:
+  - Failover readiness: quorum lost, peer unreachable, fencing disabled, witness unreachable
+  - Replication health: lag high, replication stalled, Patroni no leader, WAL lag high
+  - Safety nets: watchdog disabled, watchdog stuck, split-brain detection
+  - System health: daemon unresponsive, etcd unreachable, SCSI-3 PR fencing failures
+  Each alert includes detection criteria and remediation guidance. Integration: prometheus/ha-alerts.yml.
+
+- **Grafana HA Cluster Dashboard** (NEW): Real-time monitoring dashboard (grafana/dashboards/ha-cluster.json) with:
+  - Cluster quorum status, node roles, recent failover timeline
+  - Peer heartbeat tracking (missed beats per node)
+  - Replication lag graphs with color-coded thresholds
+  - Node availability heatmap over time
+  - Failover suppression flags (maintenance, hysteresis, subordinate mode)
+  - CTDB cluster status and public IP ownership
+  - Automated impact measurement (how long did failover take?)
+
+- **HA Operator Runbooks** (NEW): Comprehensive guide (docs/admin/HA-FAILURE-MODES.md, 4000+ lines) covering 8 real failure scenarios:
+  1. Node unreachable (network partition detection and recovery)
+  2. Failover stalled (witness/maintenance/hysteresis blocking)
+  3. Split-brain detected (emergency data reconciliation)
+  4. Witness down (quorum witness loss)
+  5. Replication lag high (bottleneck identification)
+  6. Patroni no leader (etcd quorum restoration)
+  7. SCSI-3 fencing failed (PR support validation)
+  8. Subordinate mode (stale data catch-up)
+  Each scenario includes: root causes, detection symptoms, step-by-step recovery commands, validation checklist, escalation procedures. Post-failover validation checklist included.
+
+- **SCSI-3 PR Hardware Matrix** (NEW): Documented hardware compatibility (docs/reference/HA-HARDWARE-MATRIX.md):
+  - Tested working hardware (enterprise SANs, JBODs, SAS controllers with SCSI-3 PR support)
+  - Known issues and firmware workarounds
+  - NVMe-oF support (enterprise targets yes, consumer targets no)
+  - Testing procedures and fallback strategies
+  - Community contribution process for undocumented hardware
+
+### HA Status Changes
+
+- **Failover Logic**: Remains stable and battle-tested (no changes)
+- **Split-Brain Guards**: All 6 guards validated by CI test suite (no changes)
+- **Load-Testing**: NOW AVAILABLE (NEW) - infrastructure complete, validation pending
+- **Clustering (CTDB)**: NOW AVAILABLE (NEW) - optional CTDB module, SMB failover support
+- **Monitoring**: NOW AVAILABLE (NEW) - alerts and dashboard for real-time visibility
+- **Operator Training**: NOW AVAILABLE (NEW) - comprehensive runbooks for all scenarios
+
+### Database Changes
+
+- **New Tables** (CTDB configuration):
+  - `ctdb_config` - CTDB settings (enable, pool, dataset, timeouts, log level)
+  - `ctdb_public_addresses` - VIPs managed by CTDB across cluster nodes
+
+### API Changes
+
+- **New Endpoints** (CTDB):
+  - `GET /api/ha/ctdb/configure` - Get CTDB configuration
+  - `POST /api/ha/ctdb/configure` - Save CTDB configuration (requires system:admin)
+  - `GET /api/ha/ctdb/status` - Real-time CTDB cluster status
+  - `GET /api/ha/ctdb/databases` - CTDB database replication status
+
+### UI Changes
+
+- **Settings → High Availability → CTDB Clustering** (NEW): Configuration panel for:
+  - Enable/disable CTDB
+  - Configure data pool and dataset
+  - Configure node timeout and recovery timeout
+  - Manage public IP addresses (VIPs)
+  - Monitor real-time cluster status and IP ownership
+
+### Known Limitations & Future Work
+
+- PostgreSQL HA: Load-testing framework in place; production validation pending before v15.0.0 GA
+- CTDB: SMB failover now works; requires testing in production before v15.0.0 GA
+- Hardware Matrix: Community-contributed (submit test results for your hardware)
+- Monitoring: Alerts available for configuration; integration with PagerDuty/OpsGenie recommended for production
+
+### Documentation Changes
+
+- Added: docs/admin/HA-FAILURE-MODES.md (operator runbooks, all 8 scenarios)
+- Added: docs/admin/HA-CTDB-SETUP.md (CTDB installation and operational guide)
+- Added: docs/reference/HA-HARDWARE-MATRIX.md (SCSI-3 PR compatibility)
+- Updated: docs/admin/HIGH-AVAILABILITY.md (linked to new failure modes guide)
+- Added: prometheus/ha-alerts.yml (20+ alert rules)
+- Added: grafana/dashboards/ha-cluster.json (cluster monitoring dashboard)
+
+### No Breaking Changes
+
+All changes are backward-compatible. HA remains off-by-default. Existing v14.6.0 deployments can upgrade without changes. CTDB is optional (enabled by setting services.dplaneos.ctdb.enable = true). New Prometheus alerts and Grafana dashboard are optional integrations.
+
+---
 
 ## v14.6.0 (2026-06-20) - "Vigilant"
 

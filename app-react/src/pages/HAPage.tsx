@@ -45,6 +45,7 @@ import { JobProgress } from '@/components/ui/JobProgress'
 import { useJobStore } from '@/stores/jobs'
 import { JobConsole } from '@/components/ui/JobConsole'
 import { useWsStore } from '@/stores/ws'
+import { CTDBConfig } from '@/components/ha/CTDBConfig'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -182,6 +183,16 @@ interface TimingConfig {
   failover_after_seconds:     number
   hysteresis_window_minutes:  number
   heartbeat_interval_seconds: number
+}
+
+interface CTDBConfig {
+  enable:           boolean
+  data_pool:        string
+  data_dataset:     string
+  public_addresses: string[]
+  node_timeout:     number
+  recovery_timeout: number
+  log_level:        number
 }
 
 // HAPath identifies which HA topology this cluster is using.
@@ -2733,6 +2744,7 @@ export function HAPage() {
       <NetworkWitnessForm />
       <ReplicationConfigForm />
       <TimingConfigForm />
+      <CTDBConfig />
 
       <ConfirmDialog />
     </div>

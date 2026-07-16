@@ -198,6 +198,18 @@
           witnessModule = ./nixos/patroni-witness.nix;
         };
 
+        # HA PostgreSQL load test: pgbench under failover (Tier 1.1).
+        # Validates that Patroni failover is safe under sustained I/O load.
+        # Run with:
+        #   nix build .#checks.x86_64-linux.ha-failover-load-test -L --timeout 3600
+        checks.ha-failover-load-test = import ./nixos/tests/ha-failover-load-test.nix {
+          inherit nixpkgs system;
+          daemonPackage = daemon;
+          haModule      = ./nixos/module.nix;
+          witnessModule = ./nixos/patroni-witness.nix;
+          timeout = 3600;
+        };
+
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [ go gcc musl.dev gopls gotools postgresql git ];
           shellHook = ''

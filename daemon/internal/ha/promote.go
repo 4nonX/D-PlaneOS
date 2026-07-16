@@ -63,10 +63,20 @@ func ExecutePromotion(candidate, leader string) {
 		}
 	}
 
-	// 3. Reload NAS services that mount or share these pools.
+	// 3. CTDB Orchestration (if clustering is enabled).
+	// On failover: old primary's CTDB must release IP/lock, new primary's CTDB must acquire them.
+	log.Printf("HA Failover: CTDB orchestration (cluster takeover)...")
+	// First, ensure CTDB is running on this node (it should be, but failover may race with startup)
+	cmdutil.RunMedium("systemctl_ha_ctdb_start", "start", "ctdb")
+	// CTDB will detect it's now the active node (primary role) and take over public IPs.
+	// This is automatic; ctdbd watches the cluster state and migrates IPs on role change.
+	time.Sleep(2 * time.Second)  // Give CTDB time to detect role change and acquire IPs
+
+	// 4. Reload NAS services that mount or share these pools.
 	log.Printf("HA Failover: Reloading storage services (SMB, NFS, Docker)...")
-	cmdutil.RunMedium("systemctl_ha_smbd", "reload-or-restart", "smbd")
-	cmdutil.RunMedium("systemctl_ha_nmbd", "reload-or-restart", "nmbd")
+	// Restart Samba services; they will connect to CTDB and take over clients.
+	cmdutil.RunMedium("systemctl_ha_smbd", "restart", "smbd")
+	cmdutil.RunMedium("systemctl_ha_nmbd", "restart", "nmbd")
 	cmdutil.RunMedium("systemctl_ha_nfs", "reload-or-restart", "nfs-server")
 	cmdutil.RunMedium("systemctl_restart_docker", "restart", "docker")
 

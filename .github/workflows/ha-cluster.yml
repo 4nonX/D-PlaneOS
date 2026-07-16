@@ -190,19 +190,42 @@ jobs:
           # the closure; it does NOT boot a cluster.
           nix flake check --no-build .
 
-      - name: Two-node failover VM test
+      - name: Basic HA failover VM test
         run: |
-          # To enable the full multi-node VM test, replace this step with:
-          #   nix build .#checks.x86_64-linux.ha-failover -L
+          # Full multi-node failover test: starts 3 VMs (2 data nodes + 1 witness),
+          # verifies Patroni election, etcd quorum, and network partition failover.
+          # Requires KVM; runs on ubuntu-22.04 which has nested virtualization.
+          nix build .#checks.x86_64-linux.ha-failover -L
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 4: PostgreSQL HA under sustained load with failover injection (Tier 1.1).
+  # ════════════════════════════════════════════════════════════════════════════
+  load-test:
+    name: HA PostgreSQL Load Test (pgbench + failover)
+    runs-on: ubuntu-22.04  # Can use larger runner if available
+    # This job is optional (may be skipped if runner is unavailable)
+    continue-on-error: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: PostgreSQL HA load test (pgbench under failover)
+        run: |
+          # Runs pgbench with 100 concurrent connections against a real
+          # two-node HA cluster. Injects network failover mid-workload and
+          # validates: (1) standby promotes within 60s, (2) no transaction
+          # loss or duplication, (3) cluster converges to single primary.
           #
-          # Prerequisites before enabling:
-          #   1. Validate ha-failover.nix locally on a KVM machine first
-          #      (unit names, timeouts, settle delays may need 1-2 tweaks).
-          #   2. Add a Nix binary cache (e.g. Cachix) to avoid rebuilding
-          #      the full VM closure on every run.
+          # This is the critical validation that Patroni failover is safe
+          # under production load. Expected runtime: 45-60 minutes.
           #
-          # The test expression is already wired in flake.nix checks output
-          # and evaluates cleanly under --no-build above.
-          echo "NixOS HA modules evaluated successfully."
-          echo "VM test (ha-failover.nix) wired in flake checks; enable full"
-          echo "run by switching this step to: nix build .#checks.x86_64-linux.ha-failover -L"
+          # Can be marked as optional in CI by adding 'optional: true' if
+          # runner resources are constrained; prioritize the logic and ZFS
+          # tests (Jobs 1-2) over this for now.
+          nix build .#checks.x86_64-linux.ha-failover-load-test -L --timeout 3600

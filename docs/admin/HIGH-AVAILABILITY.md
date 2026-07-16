@@ -8,6 +8,8 @@ Run a full HA NAS on two mini-PCs and a shared disk shelf, no third box required
 
 Before reading further, review [ARCHITECTURE.md](../reference/ARCHITECTURE.md#multi-node-ha-architecture) for the overall system model.
 
+**If something goes wrong:** See [HA-FAILURE-MODES.md](HA-FAILURE-MODES.md) for recovery procedures. It covers 8 real failure scenarios (node unreachable, failover stalled, split-brain detected, witness down, replication lag, etcd quorum lost, fencing failed, and subordinate mode) with step-by-step recovery instructions.
+
 ---
 
 ## Deployment Topologies
