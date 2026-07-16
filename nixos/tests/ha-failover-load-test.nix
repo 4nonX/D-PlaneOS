@@ -98,7 +98,7 @@ let
 in
 pkgs.testers.runNixOSTest {
   name = "dplaneos-ha-failover-load-test";
-  inherit timeout;
+  meta = { inherit timeout; };
 
   nodes = {
     nodeA = mkDataNode { role = "primary";   localIP = ipNodeA; peerIP = ipNodeB; };
