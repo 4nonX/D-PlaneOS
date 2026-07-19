@@ -215,7 +215,7 @@
         # ZFS auto-import works, and system is ephemeral. Run with:
         #   nix build .#checks.x86_64-linux.live-boot -L
         checks.live-boot = import ./nixos/tests/live-boot.nix {
-          inherit nixpkgs system;
+          inherit nixpkgs system impermanence;
           daemonPackage = daemon;
         };
 

@@ -13,7 +13,7 @@
 #
 # Expected runtime: ~2-3 minutes per test, 120 second timeout
 
-{ nixpkgs, system ? "x86_64-linux", daemonPackage ? null, ... }:
+{ nixpkgs, system ? "x86_64-linux", impermanence, daemonPackage ? null, ... }:
 
 let
   pkgs = nixpkgs.legacyPackages.${system};
@@ -25,6 +25,7 @@ pkgs.testers.nixosTest {
   nodes.liveSystem = { config, pkgs, lib, self, ... }: {
     imports = [
       ../configuration-live.nix
+      impermanence.nixosModules.impermanence
     ];
 
     # Test environment: disable serial console noise

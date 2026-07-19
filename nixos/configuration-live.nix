@@ -23,7 +23,6 @@
   imports = [
     # Base configuration (shared with installed system)
     ./configuration-standalone.nix
-    ./module.nix
 
     # Live-specific additions
     ./live-zfs-auto-import.nix
@@ -32,6 +31,9 @@
     # System generation scripts (shared)
     ./ota-module.nix
     ./dplane-generated.nix
+
+    # Note: module.nix (services.dplaneos, etc.) is imported by the flake
+    # via self.nixosModules.dplaneos to avoid duplicate declarations
   ];
 
   # ── Disable features not applicable to live boot ───────────────────────────
