@@ -13,7 +13,7 @@
 #
 # Expected runtime: ~2-3 minutes per test, 120 second timeout
 
-{ nixpkgs, system ? "x86_64-linux", impermanence, dplaneosModule, daemonPackage ? null, ... }:
+{ nixpkgs, system ? "x86_64-linux", impermanence, daemonPackage ? null, ... }:
 
 let
   pkgs = nixpkgs.legacyPackages.${system};
@@ -26,7 +26,6 @@ pkgs.testers.nixosTest {
     imports = [
       ../configuration-live.nix
       impermanence.nixosModules.impermanence
-      dplaneosModule
     ];
 
     # Test environment: disable serial console noise

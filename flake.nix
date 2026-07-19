@@ -217,7 +217,6 @@
         checks.live-boot = import ./nixos/tests/live-boot.nix {
           inherit nixpkgs system impermanence;
           daemonPackage = daemon;
-          dplaneosModule = ./nixos/module.nix;
         };
 
         devShells.default = pkgs.mkShell {
@@ -405,10 +404,7 @@
         specialArgs = { inherit self; };
         modules = [
           ./nixos/configuration-live.nix
-          self.nixosModules.dplaneos
           impermanence.nixosModules.impermanence
-          ./nixos/ota-module.nix
-          ./nixos/dplane-generated.nix
           applianceConfig
           (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
                f = mkFrontend { inherit pkgs; };
@@ -428,10 +424,7 @@
         specialArgs = { inherit self; };
         modules = [
           ./nixos/configuration-live.nix
-          self.nixosModules.dplaneos
           impermanence.nixosModules.impermanence
-          ./nixos/ota-module.nix
-          ./nixos/dplane-generated.nix
           applianceConfig
           (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
                f = mkFrontend { inherit pkgs; };
