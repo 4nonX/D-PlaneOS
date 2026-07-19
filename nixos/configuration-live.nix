@@ -25,13 +25,8 @@
     ./configuration-standalone.nix
     ./module.nix
 
-    # Disk/partition management (reused from installer)
-    # Not used for live boot (no installation), but kept for future install-to-disk option
-    # ../inputs/disko/nixosModules.disko
-    # ./disko.nix
-
     # Ephemeral filesystem management
-    ../inputs/impermanence/nixosModules.impermanence
+    # (impermanence is imported by flake configurations, not here)
     ./impermanence.nix
 
     # Live-specific additions

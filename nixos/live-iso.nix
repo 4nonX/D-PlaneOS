@@ -45,38 +45,38 @@
   hardware.graphics.enable = lib.mkForce false;
 
   # ── System packages: tools useful for live environment ──────────────────────
-  environment.systemPackages = with pkgs; [
+  environment.systemPackages = [
     # Pool and filesystem management
-    zfsutils
-    util-linux
-    e2fsprogs
+    pkgs.zfs
+    pkgs.util-linux
+    pkgs.e2fsprogs
 
     # System utilities
-    curl
-    wget
-    git
-    jq
-    htop
-    tmux
-    vim
-    nano
+    pkgs.curl
+    pkgs.wget
+    pkgs.git
+    pkgs.jq
+    pkgs.htop
+    pkgs.tmux
+    pkgs.vim
+    pkgs.nano
 
     # Network utilities
-    iproute2
-    inetutils
-    netcat
-    nmap
+    pkgs.iproute2
+    pkgs.inetutils
+    pkgs.netcat
+    pkgs.nmap
 
     # Debugging / monitoring
-    lshw
-    pciutils
-    dmidecode
-    ethtool
+    pkgs.lshw
+    pkgs.pciutils
+    pkgs.dmidecode
+    pkgs.ethtool
 
     # Optional: Install-to-disk tools (future feature)
-    # python3
-    # disko
-    # gum
+    # pkgs.python3
+    # pkgs.disko
+    # pkgs.gum
   ];
 
   # ── Boot behavior: Auto-login and display welcome message ────────────────
