@@ -48,10 +48,10 @@
     serviceConfig.Group = "root";
 
     # Script to perform auto-import
-    script = with pkgs; ''
+    script = ''
       set -e  # Fail on any error for visibility, but catch below
 
-      export PATH=${lib.makeBinPath [ zfsutils util-linux coreutils gnugrep ]}:$PATH
+      export PATH=${lib.makeBinPath [ pkgs.zfs pkgs.util-linux pkgs.coreutils pkgs.gnugrep ]}:$PATH
 
       echo "=== D-PlaneOS ZFS Auto-Import ==="
       echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"

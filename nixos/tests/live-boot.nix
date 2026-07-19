@@ -94,7 +94,7 @@ pkgs.testers.nixosTest {
     @test_step("Verify ZFS kernel module")
     def check_zfs_module():
         liveSystem.succeed("lsmod | grep zfs")
-        liveSystem.succeed("${pkgs.zfsutils}/bin/zfs version")
+        liveSystem.succeed("${pkgs.zfs}/bin/zfs version")
 
     # ── Step 5: Check ZFS auto-import service status ────────────────────────
     @test_step("Verify ZFS auto-import service")
