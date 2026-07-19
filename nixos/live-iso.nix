@@ -162,7 +162,7 @@
 
   # ── Networking ───────────────────────────────────────────────────────────────
   # Live ISO should support DHCP out of the box
-  networking.useDHCP = true;
+  networking.useDHCP = lib.mkForce true;
   networking.useNetworkd = true;
 
   # ── Nix configuration ────────────────────────────────────────────────────────
