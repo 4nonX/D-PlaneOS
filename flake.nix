@@ -406,7 +406,6 @@
           ./nixos/configuration-live.nix
           self.nixosModules.dplaneos
           impermanence.nixosModules.impermanence
-          ./nixos/impermanence.nix
           ./nixos/ota-module.nix
           ./nixos/dplane-generated.nix
           applianceConfig
@@ -430,7 +429,6 @@
           ./nixos/configuration-live.nix
           self.nixosModules.dplaneos
           impermanence.nixosModules.impermanence
-          ./nixos/impermanence.nix
           ./nixos/ota-module.nix
           ./nixos/dplane-generated.nix
           applianceConfig
