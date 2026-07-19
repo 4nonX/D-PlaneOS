@@ -573,11 +573,151 @@ jobs:
           echo "run by switching this step to: nix build .#checks.x86_64-linux.ha-failover -L"
 
   # ════════════════════════════════════════════════════════════════════════════
+  # STAGE 5C: LIVE BOOT ISO BUILD - Live boot environment (no installation)
+  # Parallel build for x86_64 and aarch64
+  # ════════════════════════════════════════════════════════════════════════════
+  build-live-iso:
+    name: Build Live Boot ISO
+    needs: [validate, integration, ha-failover-logic, ha-promotion-zfs, ha-vm-cluster]
+    if: github.ref_type == 'tag' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/live-boot'
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - system: "x86_64-linux"
+            runner: "ubuntu-22.04"
+            iso_target: "iso-live"
+            arch_label: "x86_64"
+            artifact_name: "iso-live-x86_64"
+          - system: "aarch64-linux"
+            runner: "ubuntu-22.04-arm"
+            iso_target: "iso-live-arm"
+            arch_label: "arm64"
+            artifact_name: "iso-live-arm64"
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download pinned flake.lock from ha-vm-cluster
+        uses: actions/download-artifact@v4
+        with:
+          name: flake-lock
+          path: /tmp/flake-lock-artifact
+
+      - name: Install flake.lock in repo root
+        run: |
+          if [ -f /tmp/flake-lock-artifact/flake.lock ]; then
+            cp /tmp/flake-lock-artifact/flake.lock flake.lock
+          else
+            echo "WARNING: flake.lock artifact not found, continuing"
+          fi
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be  # v1.3.1
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Reclaim disk space for Nix store
+        uses: wimpysworld/nothing-but-nix@687c797a730352432950c707ab493fcc951818d7  # main
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+            extra-substituters = https://cache.nixos.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+
+      - name: Verify VERSION matches tag
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            FILE_VERSION="$(cat VERSION | tr -d '[:space:]')"
+            if [ "$FILE_VERSION" != "$VERSION" ]; then
+              echo "ERROR: VERSION file ($FILE_VERSION) does not match tag ($VERSION)"
+              exit 1
+            fi
+          else
+            VERSION="$(cat VERSION | tr -d '[:space:]')"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build live boot ISO (${{ matrix.system }})
+        run: |
+          nix build ".#${{ matrix.iso_target }}" --print-build-logs
+          ls -lh result/iso/
+
+      - name: Package ISO and generate SBOM
+        id: package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ISO_NAME="dplaneos-v${VERSION}-live-${{ matrix.arch_label }}.iso"
+          cp result/iso/*.iso "$ISO_NAME"
+          sha256sum "$ISO_NAME" > "${ISO_NAME}.sha256"
+          echo "iso_name=${ISO_NAME}" >> $GITHUB_OUTPUT
+          echo "iso_sha=${ISO_NAME}.sha256" >> $GITHUB_OUTPUT
+
+          SYSTEM_PATH=$(nix eval --raw ".#nixosConfigurations.dplaneos-live${{ matrix.system == 'aarch64-linux' && '-arm' || '' }}.config.system.build.toplevel" 2>&1)
+          if [[ "$SYSTEM_PATH" != /nix/store/* ]]; then
+            echo "ERROR: could not resolve dplaneos-live toplevel: $SYSTEM_PATH"; exit 1
+          fi
+          nix path-info -r "$SYSTEM_PATH" --json | python3 .github/scripts/generate-iso-sbom.py "$ISO_NAME" > "${ISO_NAME}.sbom.json"
+          echo "iso_sbom=${ISO_NAME}.sbom.json" >> $GITHUB_OUTPUT
+
+      - name: Upload Live ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            ${{ steps.package.outputs.iso_name }}
+            ${{ steps.package.outputs.iso_sha }}
+            ${{ steps.package.outputs.iso_sbom }}
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # STAGE 5D: TEST LIVE BOOT - VM-based integration test for live boot
+  # ════════════════════════════════════════════════════════════════════════════
+  test-live-boot:
+    name: Test Live Boot (VM)
+    needs: [prepare]
+    if: github.ref_type == 'tag' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/live-boot'
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+            extra-substituters = https://cache.nixos.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+
+      - name: Run live boot VM test (x86_64)
+        timeout-minutes: 5
+        run: |
+          nix build .#checks.x86_64-linux.live-boot -L
+
+  # ════════════════════════════════════════════════════════════════════════════
   # STAGE 5: RELEASE - Professional Build & Publish
   # ════════════════════════════════════════════════════════════════════════════
   release:
     name: Build & Publish Release
-    needs: [validate, integration, convergence, storage-failure, ha-failover-logic, ha-promotion-zfs, ha-vm-cluster, iso, iso-arm]
+    needs: [validate, integration, convergence, storage-failure, ha-failover-logic, ha-promotion-zfs, ha-vm-cluster, iso, iso-arm, build-live-iso, test-live-boot]
     if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     permissions:
@@ -678,11 +818,27 @@ jobs:
           merge-multiple: true
           path: iso-artifacts
 
-      - name: Sign ISOs
+      - name: Download live ISO artifacts from build jobs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: iso-live-*
+          merge-multiple: true
+          path: iso-live-artifacts
+
+      - name: Sign ISOs (installer)
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
           for ISO in iso-artifacts/*.iso; do
+            [ -f "$ISO" ] || continue
+            cosign sign-blob --yes "$ISO" --bundle "${ISO}.bundle"
+          done
+
+      - name: Sign ISOs (live boot)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          for ISO in iso-live-artifacts/*.iso; do
             [ -f "$ISO" ] || continue
             cosign sign-blob --yes "$ISO" --bundle "${ISO}.bundle"
           done
@@ -732,6 +888,12 @@ jobs:
             iso-artifacts/*.sha256
             iso-artifacts/*.bundle
             iso-artifacts/*.sbom.json
+            iso-live-x86_64/*.iso
+            iso-live-x86_64/*.sha256
+            iso-live-x86_64/*.sbom.json
+            iso-live-arm64/*.iso
+            iso-live-arm64/*.sha256
+            iso-live-arm64/*.sbom.json
           draft: true
           prerelease: false
           make_latest: false

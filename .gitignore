@@ -122,3 +122,17 @@ id_ed25519
 *.p12
 *.pfx
 D-Plane-Compliance-Engine
+
+# ── RULE: Planning & implementation documentation (internal only) ──────────────
+# Internal development docs are not committed to public repo.
+# Use these patterns for planning, design docs, migration guides, roadmaps.
+# They belong in private wiki, internal git, or developer notes only.
+*_IMPLEMENTATION_PLAN.md
+*_IMPLEMENTATION.md
+*_MIGRATION.md
+*_MIGRATION_PLAN.md
+*_PLANNING.md
+*_ROADMAP.md
+*_DESIGN.md
+INTERNAL_*.md
+PLAN_*.md

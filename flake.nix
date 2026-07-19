@@ -210,6 +210,15 @@
           timeout = 3600;
         };
 
+        # Live boot integration test (Tier 2).
+        # Validates that D-PlaneOS boots from live ISO, daemon starts, UI accessible,
+        # ZFS auto-import works, and system is ephemeral. Run with:
+        #   nix build .#checks.x86_64-linux.live-boot -L
+        checks.live-boot = import ./nixos/tests/live-boot.nix {
+          inherit nixpkgs system;
+          daemonPackage = daemon;
+        };
+
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [ go gcc musl.dev gopls gotools postgresql git ];
           shellHook = ''
@@ -382,5 +391,94 @@
         self.nixosConfigurations.dplaneos-witness-iso.config.system.build.isoImage;
       packages.aarch64-linux.iso-witness =
         self.nixosConfigurations.dplaneos-witness-iso-arm.config.system.build.isoImage;
+
+      # ── Live Boot Configurations ──────────────────────────────────────────
+      # D-PlaneOS running directly from USB without installation.
+      # Reuses impermanence module for ephemeral root + optional USB persistence.
+
+      nixosConfigurations.dplaneos-live = let
+        system = "x86_64-linux";
+        pkgs   = nixpkgs.legacyPackages.${system};
+      in nixpkgs.lib.nixosSystem {
+        inherit system pkgs;
+        specialArgs = { inherit self; };
+        modules = [
+          ./nixos/configuration-live.nix
+          self.nixosModules.dplaneos
+          impermanence.nixosModules.impermanence
+          ./nixos/impermanence.nix
+          ./nixos/ota-module.nix
+          ./nixos/dplane-generated.nix
+          applianceConfig
+          (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
+               f = mkFrontend { inherit pkgs; };
+           in {
+            services.dplaneos.daemonPackage    = d;
+            services.dplaneos.fenced.package   = d;
+            services.dplaneos.frontendPackage  = f;
+          })
+        ];
+      };
+
+      nixosConfigurations.dplaneos-live-arm = let
+        system = "aarch64-linux";
+        pkgs   = nixpkgs.legacyPackages.${system};
+      in nixpkgs.lib.nixosSystem {
+        inherit system pkgs;
+        specialArgs = { inherit self; };
+        modules = [
+          ./nixos/configuration-live.nix
+          self.nixosModules.dplaneos
+          impermanence.nixosModules.impermanence
+          ./nixos/impermanence.nix
+          ./nixos/ota-module.nix
+          ./nixos/dplane-generated.nix
+          applianceConfig
+          (let d = mkDaemonCGO { inherit system pkgs dplaneosVersion nixpkgs; };
+               f = mkFrontend { inherit pkgs; };
+           in {
+            services.dplaneos.daemonPackage    = d;
+            services.dplaneos.fenced.package   = d;
+            services.dplaneos.frontendPackage  = f;
+          })
+          ({ lib, ... }: {
+            hardware.graphics.extraPackages       = nixpkgs.lib.mkForce [];
+            hardware.cpu.intel.updateMicrocode    = nixpkgs.lib.mkForce false;
+          })
+        ];
+      };
+
+      # Live boot ISO configurations
+      nixosConfigurations.iso-live = let
+        system = "x86_64-linux";
+      in nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit self;
+          targetSystem = self.nixosConfigurations.dplaneos-live.config.system.build.toplevel;
+        };
+        modules = [
+          ./nixos/live-iso.nix
+          { environment.etc."dplaneos-live/VERSION".text = dplaneosVersion; }
+        ];
+      };
+
+      nixosConfigurations.iso-live-arm = let
+        system = "aarch64-linux";
+      in nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit self;
+          targetSystem = self.nixosConfigurations.dplaneos-live-arm.config.system.build.toplevel;
+        };
+        modules = [
+          ./nixos/live-iso.nix
+          { environment.etc."dplaneos-live/VERSION".text = dplaneosVersion; }
+        ];
+      };
+
+      # Live boot ISO packages (artifacts)
+      packages.x86_64-linux.iso-live  = self.nixosConfigurations.iso-live.config.system.build.isoImage;
+      packages.aarch64-linux.iso-live  = self.nixosConfigurations.iso-live-arm.config.system.build.isoImage;
     };
 }

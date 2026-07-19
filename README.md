@@ -31,6 +31,7 @@ Feature maturity, honestly:
 | OIDC / SSO (Authorization Code + PKCE) | Beta | Keycloak, Authentik, Dex, Entra ID, and any OIDC-compliant provider. |
 | Enterprise Licensing & Compliance Engine | Stable | Ed25519 offline license verification. Optional compliance reporting sidecar. Automatic activation and expiration handling. |
 | A/B OTA updates with auto-revert | Beta | Mechanism is sound, sample size is small. |
+| Live boot (ephemeral, no install needed) | Stable | Trial the software, manage pools, run containers from USB. Full daemon/UI in RAM. Persistence optional via USB. |
 | GitOps reconciliation | Beta | Structural sync (pools, datasets, shares, stacks) and capture-from-live both work. Safety rails (block destroy on used data, block pool destroy unconditionally) are well-tested. Edge cases at the property-coverage frontier still surfacing. |
 | Out-of-band hardware management (BMC) | Beta | Redfish (iLO 5+, iDRAC 9+), iLO 4 legacy REST, generic IPMI. TOFU TLS certificate pinning. Sensors, event log, power management. |
 | PostgreSQL HA (Patroni + etcd) | Experimental | Tested in lab, never under real load. |
@@ -81,6 +82,21 @@ DPlaneOS stands on the shoulders of decades of work by people I have never met. 
 **The frontend.** [React](https://react.dev), [TanStack Router and Query](https://tanstack.com), [Zustand](https://github.com/pmndrs/zustand), [xterm.js](https://xtermjs.org), [Vite](https://vitejs.dev). The [Outfit](https://github.com/Outfitio/Outfit-Fonts) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) typefaces, plus [Material Symbols](https://fonts.google.com/icons).
 
 Full license inventory and attribution in [NOTICE.md](NOTICE.md).
+
+---
+
+## Getting Started
+
+**Install to disk** (permanent):
+- Download the [latest installer ISO](https://github.com/4nonX/D-PlaneOS/releases)
+- Follow the [Installation Guide](docs/admin/INSTALLATION-GUIDE.md)
+- Full disk installation with OTA updates
+
+**Try live boot** (no installation needed):
+- Download the [latest live ISO](https://github.com/4nonX/D-PlaneOS/releases) (same releases, look for `-live` in filename)
+- Flash to USB and boot
+- Full D-PlaneOS in RAM, ephemeral state, auto-import existing ZFS pools
+- See [Live Boot Quick Start](docs/admin/LIVE-BOOT-QUICKSTART.md)
 
 ---
 

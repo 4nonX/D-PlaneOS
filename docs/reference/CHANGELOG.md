@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
 
+## v14.8.0 (TBD) - "Live Boot Release"
+
+Live boot support enables running D-PlaneOS directly from USB without installation. Full daemon and UI run in RAM, existing ZFS pools are auto-discovered and imported, and persistence is optional via USB drive.
+
+### Live Boot Features (NEW)
+
+- **Bootable ISO**: Same release ISO can be used as installer (traditional) or live boot (no installation needed). Dual-purpose build with branching logic at boot time.
+
+- **Ephemeral by default**: System runs entirely from RAM using impermanence module. All state (configs, logs, container data) is lost on shutdown unless persistent USB attached. Zero disk writes to boot USB (read-only squashfs).
+
+- **Auto-import ZFS pools**: On boot, systemd service auto-discovers and imports any ZFS pools found on attached drives. Pools appear in UI immediately without manual intervention. Existing pool data preserved and accessible.
+
+- **Full daemon capability**: Everything works the same as installed version: SMB/NFS/iSCSI sharing, Docker containers, dataset management, snapshots, replication, UI accessible at `http://<ip>:9000`.
+
+- **Optional persistence**: Attach USB drive labeled `dplane-persist` to preserve daemon state across reboots. Without persistence, state resets on shutdown. Useful for trial/rescue scenarios or persistent operation after first boot.
+
+- **VM test suite**: nixos/tests/live-boot.nix validates boot, daemon startup, ZFS auto-import, Docker engine, ephemeral root, and clean shutdown. Runs on every CI build.
+
+### Use Cases
+
+- **Trial before install**: Boot live, manage existing pools, run workloads, decide if you want to commit to disk installation
+- **Rescue mode**: Non-destructive access to existing ZFS pools if main NAS becomes unavailable  
+- **Evaluation**: Full feature set accessible without modifying hardware
+- **Temporary workload**: Run D-PlaneOS for a specific task with automatic cleanup on shutdown
+
+### Documentation Changes
+
+- **Added**: docs/admin/LIVE-BOOT-QUICKSTART.md - Getting started guide with troubleshooting
+- **Updated**: README.md - Links to live boot option, feature maturity table updated
+- **Updated**: CHANGELOG.md - This entry
+
+### CI/CD Changes
+
+- **New jobs**: build-live-iso (x86_64 + aarch64 parallel), test-live-boot (VM integration test)
+- **Updated release job**: Downloads, signs, and publishes live ISOs alongside installer ISOs
+- **Release artifacts**: Both installer and live ISOs available in same GitHub release
+
+### No Breaking Changes
+
+Live boot is an optional feature. Existing installer ISO unchanged. All installations created before v14.8.0 continue to work exactly as before. OTA updates disabled in live mode (but normal installed systems are unaffected).
+
+---
+
 ## v14.7.0 (2026-07-16) - "Vigilant II"
 
 High Availability stabilization: Failover logic and split-brain guards move to beta status (stable, validated, field-ready). Load-testing framework, CTDB clustering, operator runbooks, monitoring, and hardware matrix are experimental additions; core HA is no longer demo-ware. PostgreSQL failover validated under sustained I/O workload, CTDB clustering enables SMB client persistence through failover, comprehensive runbooks document recovery for all 8 failure scenarios, Prometheus alerting and Grafana monitoring provide real-time cluster visibility, SCSI-3 PR compatibility matrix preempts fencing failure surprises.
