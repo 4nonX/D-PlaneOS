@@ -156,7 +156,7 @@
   };
 
   # ── Disable unneeded services in ISO environment ────────────────────────────
-  services.rsyslog.enable = false;  # Excessive disk writes to squashfs
+  services.rsyslogd.enable = false;  # Excessive disk writes to squashfs
   services.udisks2.enable = false;  # Not useful in live ISO
   services.ntp.enable = false;      # Can use systemd-timesyncd instead
 

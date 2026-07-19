@@ -190,7 +190,4 @@ pkgs.testers.nixosTest {
     print("║                  ✓ ALL TESTS PASSED                           ║")
     print("╚════════════════════════════════════════════════════════════════╝")
   '';
-
-  # Test timeout: 2 minutes (enough for boot + checks + shutdown)
-  timeout = 120;
 }
