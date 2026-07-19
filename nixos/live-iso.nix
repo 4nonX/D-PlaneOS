@@ -174,9 +174,6 @@
 
   # ── Additional live-boot-specific configuration ──────────────────────────────
 
-  # Ensure ZFS is available before any services start
-  boot.supportedFilesystems = [ "zfs" ];
-
   # Set a meaningful hostname in live boot
   networking.hostName = lib.mkDefault "dplaneos-live";
 

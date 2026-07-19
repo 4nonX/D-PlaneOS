@@ -19,7 +19,7 @@ let
   pkgs = nixpkgs.legacyPackages.${system};
 in
 
-pkgs.nixosTest {
+pkgs.testers.nixosTest {
   name = "dplaneos-live-boot";
 
   nodes.liveSystem = { config, pkgs, lib, self, ... }: {
