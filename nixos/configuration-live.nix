@@ -17,13 +17,13 @@
 #   4. D-PlaneOS daemon starts and serves UI on port 9000
 #   5. User can manage pools, run Docker, optionally install to disk
 
-{ config, lib, pkgs, self, ... }:
+{ config, lib, pkgs, ... }:
 
 {
   imports = [
     # Base configuration (shared with installed system)
     ./configuration-standalone.nix
-    self.nixosModules.dplaneos
+    ./module.nix
 
     # Disk/partition management (reused from installer)
     # Not used for live boot (no installation), but kept for future install-to-disk option
