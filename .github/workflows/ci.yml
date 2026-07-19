@@ -580,7 +580,6 @@ jobs:
     name: Build Live Boot ISO
     needs: [validate, integration, ha-failover-logic, ha-promotion-zfs, ha-vm-cluster]
     if: github.ref_type == 'tag' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/live-boot'
-    runs-on: ubuntu-22.04
     strategy:
       matrix:
         include:
