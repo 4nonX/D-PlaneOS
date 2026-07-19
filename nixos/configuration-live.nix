@@ -25,10 +25,6 @@
     ./configuration-standalone.nix
     ./module.nix
 
-    # Ephemeral filesystem management
-    # (impermanence is imported by flake configurations, not here)
-    ./impermanence.nix
-
     # Live-specific additions
     ./live-zfs-auto-import.nix
     ./live-persistence.nix
@@ -46,9 +42,6 @@
   # Boot loader is not applicable to live ISO (boots from GRUB/bootloader already)
   boot.loader.grub.enable = false;
   boot.loader.efi.canTouchEfiVariables = false;
-
-  # Enable impermanence for ephemeral root
-  boot.impermanence.enable = lib.mkForce true;
 
   # ── Kernel and ZFS configuration (match installed system) ──────────────────
   boot.kernelPackages = pkgs.linuxPackages_6_12;
