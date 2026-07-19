@@ -1,0 +1,10 @@
+#!/bin/bash
+# Pre-commit hook: basic sanity checks before commit
+# NOTE: Nix validation happens in CI (nix not available on Windows)
+
+# Warn if Nix files changed (validation via CI)
+if git diff --cached --name-only 2>/dev/null | grep -qE '\.(nix|lock)$'; then
+    echo "[pre-commit] ⚠ Nix files changed - validation via CI"
+fi
+
+exit 0

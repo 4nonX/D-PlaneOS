@@ -111,7 +111,7 @@ in
 
     script = ''
       set -e
-      export PATH=${lib.makeBinPath [ coreutils util-linux ]}:$PATH
+      export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.util-linux ]}:$PATH
 
       echo "[dplane-link-persist] Checking for USB persistence mount..."
 

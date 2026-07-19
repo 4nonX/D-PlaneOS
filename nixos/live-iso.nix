@@ -183,6 +183,5 @@
     version = builtins.readFile ../VERSION;
     kernel = config.boot.kernelPackages.kernel.version;
     zfs = config.boot.zfs.package.version;
-    timestamp = builtins.currentSystem;
   };
 }
