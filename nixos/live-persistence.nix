@@ -18,14 +18,11 @@
 
 { config, lib, pkgs, ... }:
 
-let
-  # Check if we have a persistent mount already defined
-  hasPersistenceMount = config.fileSystems ? "/persist";
-
-in
 {
   # ── Define ephemeral root filesystem (tmpfs by default) ──────────────────
-  fileSystems."/persist" = lib.mkIf (!hasPersistenceMount) {
+  # Live boot always uses tmpfs for /persist (no persistent partition).
+  # Optional USB storage can be mounted at /mnt/usb-persist for daemon state.
+  fileSystems."/persist" = {
     fsType = "tmpfs";
     options = [
       "size=2G"          # Limit tmpfs to 2GB (sufficient for daemon state)

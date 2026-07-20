@@ -290,7 +290,8 @@
   };
 
   # ─── NTP ────────────────────────────────────────────────────────────────
-  services.timesyncd.enable = true;
+  # Use mkDefault so test VMs and other contexts can override (e.g., QEMU VM disables it)
+  services.timesyncd.enable = lib.mkDefault true;
 
   # ─── Sysctl tuning for NAS workloads ────────────────────────────────────
   boot.kernel.sysctl = {
