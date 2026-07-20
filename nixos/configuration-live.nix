@@ -41,7 +41,8 @@
 
   # Boot loader is not applicable to live ISO (boots from GRUB/bootloader already)
   boot.loader.grub.enable = false;
-  boot.loader.efi.canTouchEfiVariables = false;
+  # Use mkForce to override applianceConfig's true (live ISO doesn't use EFI)
+  boot.loader.efi.canTouchEfiVariables = lib.mkForce false;
 
   # ── Kernel and ZFS configuration (match installed system) ──────────────────
   # Use mkDefault so applianceConfig can set this without conflict
@@ -50,7 +51,8 @@
   boot.supportedFilesystems = [ "zfs" "vfat" "ext4" ];
 
   # ARC cache: 17GB (same as installed, for consistent behavior)
-  boot.kernelParams = [ "zfs.zfs_arc_max=17179869184" ];
+  # Use mkDefault so applianceConfig can set this without conflict
+  boot.kernelParams = lib.mkDefault [ "zfs.zfs_arc_max=17179869184" ];
 
   # ── Network configuration (live boot requires DHCP for automatic connectivity) ────────────────────────────
   networking.useNetworkd = true;
