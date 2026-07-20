@@ -124,12 +124,21 @@
 
   # ── Create required directories and files for sandboxed services ─────────
   # The daemon uses ProtectSystem=strict with ReadWritePaths that require
-  # several /etc files and directories to exist. In ephemeral live boot,
-  # these don't exist by default. Create them during system activation.
+  # all listed directories/files to exist. In ephemeral live boot with tmpfs
+  # root, these aren't created automatically. Build them during activation.
   system.activationScripts.ensureEtcDirs = ''
+    # Create all ReadWritePaths directories from module.nix
+    mkdir -p /var/log/dplaneos
+    mkdir -p /var/lib/dplaneos
+    mkdir -p /opt/dplaneos
+    mkdir -p /etc/dplaneos
+    mkdir -p /run/dplaneos
     mkdir -p /etc/cron.d
+    mkdir -p /etc/systemd/system
     mkdir -p /etc/systemd/network
     mkdir -p /etc/systemd/resolved.conf.d
+
+    # Create required /etc files (empty is fine)
     touch /etc/crontab
     touch /etc/exports
   '';
