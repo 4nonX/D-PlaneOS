@@ -64,6 +64,10 @@
       # Machine identity (systemd requires this)
       "/etc/machine-id"
 
+      # User/group database (impermanence requires this for stable UIDs/GIDs)
+      # Without this, users assigned ephemeral IDs will be reassigned on reboot
+      "/var/lib/nixos"
+
       # System state (created by services at boot)
       "/var/cache"
       "/var/log"
