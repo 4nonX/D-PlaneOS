@@ -13,7 +13,7 @@
 #
 # Expected runtime: ~2-3 minutes per test, 120 second timeout
 
-{ nixpkgs, system ? "x86_64-linux", impermanence, daemonPackage ? null, ... }:
+{ nixpkgs, system ? "x86_64-linux", impermanence, daemonPackage ? null, frontendPackage ? null, ... }:
 
 let
   pkgs = nixpkgs.legacyPackages.${system};
@@ -30,8 +30,9 @@ pkgs.testers.nixosTest {
     ];
 
     # Provide daemon and frontend packages (normally from applianceConfig in flake.nix)
-    services.dplaneos = lib.mkIf (daemonPackage != null) {
+    services.dplaneos = {
       daemonPackage = daemonPackage;
+      frontendPackage = frontendPackage;
       dbPath = "/var/lib/dplaneos/pgsql";
     };
 

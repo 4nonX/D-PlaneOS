@@ -217,6 +217,7 @@
         checks.live-boot = import ./nixos/tests/live-boot.nix {
           inherit nixpkgs system impermanence;
           daemonPackage = daemon;
+          frontendPackage = frontend;
         };
 
         devShells.default = pkgs.mkShell {
