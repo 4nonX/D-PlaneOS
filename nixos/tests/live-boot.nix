@@ -26,7 +26,14 @@ pkgs.testers.nixosTest {
     imports = [
       ../configuration-live.nix
       impermanence.nixosModules.impermanence
+      ../module.nix
     ];
+
+    # Provide daemon and frontend packages (normally from applianceConfig in flake.nix)
+    services.dplaneos = {
+      daemonPackage = daemonPackage or pkgs.dplaneos-daemon;
+      dbPath = "/var/lib/dplaneos/pgsql";
+    };
 
     # Test environment: disable serial console noise
     boot.kernelParams = [ ];

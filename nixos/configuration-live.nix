@@ -113,7 +113,8 @@
   # Additional tools useful in live environment are added in live-iso.nix
 
   # ── No automatic garbage collection in live (tmpfs-based) ──────────────
-  nix.gc.automatic = false;
+  # Use mkForce to override applianceConfig's true (tmpfs limited, GC would thrash)
+  nix.gc.automatic = lib.mkForce false;
 
   # ── Documentation disabled (appliance, live environment) ────────────────
   documentation.nixos.enable = false;
