@@ -39,7 +39,6 @@
     # Run once at boot and stay running (Type = oneshot + RemainAfterExit = true)
     wantedBy = [ "multi-user.target" ];
     type = "oneshot";
-    remainAfterExit = true;
 
     # Run as root (required for zpool commands)
     serviceConfig.Type = "oneshot";
