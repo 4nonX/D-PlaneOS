@@ -122,6 +122,13 @@
   # ── System state: use impermanence for ephemeral root ───────────────────
   # See live-persistence.nix for details on /persist mount
 
+  # ── Create required directories for sandboxed services ───────────────────
+  # The daemon uses ProtectSystem=strict which requires /etc/cron.d to exist.
+  # In live boot with ephemeral root, we must create this directory explicitly.
+  system.activationScripts.ensureEtcDirs = ''
+    mkdir -p /etc/cron.d
+  '';
+
   # ── Ensure services start after ZFS auto-import ───────────────────────
   systemd.services.dplaneos = lib.mkIf (config.services.dplaneos.enable or false) {
     after = [ "dplane-zfs-auto-import.service" ];
