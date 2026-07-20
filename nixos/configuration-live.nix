@@ -46,7 +46,7 @@
   # ── Kernel and ZFS configuration (match installed system) ──────────────────
   # Use mkDefault so applianceConfig can set this without conflict
   boot.kernelPackages = lib.mkDefault pkgs.linuxPackages_6_12;
-  boot.zfs.package = pkgs.zfs;
+  boot.zfs.package = lib.mkDefault pkgs.zfs;
   boot.supportedFilesystems = [ "zfs" "vfat" "ext4" ];
 
   # ARC cache: 17GB (same as installed, for consistent behavior)
@@ -97,11 +97,12 @@
   '';
 
   # ── SSH for remote access to live environment ───────────────────────────
+  # Live boot allows password auth for convenience; override module.nix's false
   services.openssh = {
     enable = true;
     settings = {
-      PermitRootLogin = "yes";
-      PasswordAuthentication = true;
+      PermitRootLogin = lib.mkForce "yes";
+      PasswordAuthentication = lib.mkForce true;
       UsePAM = true;
     };
   };
