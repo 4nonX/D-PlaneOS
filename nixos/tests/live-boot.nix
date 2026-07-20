@@ -57,7 +57,6 @@ pkgs.testers.nixosTest {
   };
 
   testScript = ''
-    import json
     import time
 
     def test_step(name):
