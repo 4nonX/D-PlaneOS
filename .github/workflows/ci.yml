@@ -590,7 +590,7 @@ jobs:
             artifact_name: "iso-live-x86_64"
           - system: "aarch64-linux"
             runner: "ubuntu-22.04-arm"
-            iso_target: "iso-live-arm"
+            iso_target: "iso-live"
             arch_label: "arm64"
             artifact_name: "iso-live-arm64"
     runs-on: ${{ matrix.runner }}
