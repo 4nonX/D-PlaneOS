@@ -122,11 +122,13 @@
   # ── System state: use impermanence for ephemeral root ───────────────────
   # See live-persistence.nix for details on /persist mount
 
-  # ── Create required directories for sandboxed services ───────────────────
-  # The daemon uses ProtectSystem=strict which requires /etc/cron.d to exist.
-  # In live boot with ephemeral root, we must create this directory explicitly.
+  # ── Create required directories and files for sandboxed services ─────────
+  # The daemon uses ProtectSystem=strict which requires /etc/crontab and
+  # /etc/cron.d to exist. In live boot with ephemeral root, we must create
+  # these explicitly during system activation before the service starts.
   system.activationScripts.ensureEtcDirs = ''
     mkdir -p /etc/cron.d
+    touch /etc/crontab
   '';
 
   # ── Ensure services start after ZFS auto-import ───────────────────────
