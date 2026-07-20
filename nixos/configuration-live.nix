@@ -44,16 +44,18 @@
   boot.loader.efi.canTouchEfiVariables = false;
 
   # ── Kernel and ZFS configuration (match installed system) ──────────────────
-  boot.kernelPackages = pkgs.linuxPackages_6_12;
+  # Use mkDefault so applianceConfig can set this without conflict
+  boot.kernelPackages = lib.mkDefault pkgs.linuxPackages_6_12;
   boot.zfs.package = pkgs.zfs;
   boot.supportedFilesystems = [ "zfs" "vfat" "ext4" ];
 
   # ARC cache: 17GB (same as installed, for consistent behavior)
   boot.kernelParams = [ "zfs.zfs_arc_max=17179869184" ];
 
-  # ── Network configuration (same as standalone) ────────────────────────────
+  # ── Network configuration (live boot requires DHCP for automatic connectivity) ────────────────────────────
   networking.useNetworkd = true;
-  networking.useDHCP = true;
+  # Use mkForce to override standalone's false (live boot needs DHCP to get network automatically)
+  networking.useDHCP = lib.mkForce true;
 
   # ── D-PlaneOS daemon and frontend ──────────────────────────────────────────
   # (Provided by applianceConfig in flake.nix, same as installed system)
