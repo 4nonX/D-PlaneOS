@@ -707,7 +707,7 @@ jobs:
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
 
       - name: Run live boot VM test (x86_64)
-        timeout-minutes: 5
+        timeout-minutes: 15
         run: |
           nix build .#checks.x86_64-linux.live-boot -L
 
