@@ -19,11 +19,19 @@
 { config, lib, pkgs, ... }:
 
 {
-  # ── Define ephemeral root filesystem (tmpfs by default) ──────────────────
+  # ── Root filesystem: ephemeral tmpfs for live boot ───────────────────────
+  # Live boot runs entirely in RAM. Root is tmpfs (or overlay on squashfs).
+  fileSystems."/" = {
+    fsType = "tmpfs";
+    options = [ "size=50%" ];
+  };
+
+  # ── Ephemeral /persist directory (tmpfs for daemon state) ──────────────────
   # Live boot always uses tmpfs for /persist (no persistent partition).
   # Optional USB storage can be mounted at /mnt/usb-persist for daemon state.
   fileSystems."/persist" = {
     fsType = "tmpfs";
+    neededForBoot = true;
     options = [
       "size=2G"          # Limit tmpfs to 2GB (sufficient for daemon state)
       "mode=755"         # Standard permissions
