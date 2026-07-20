@@ -123,12 +123,15 @@
   # See live-persistence.nix for details on /persist mount
 
   # ── Create required directories and files for sandboxed services ─────────
-  # The daemon uses ProtectSystem=strict which requires /etc/crontab and
-  # /etc/cron.d to exist. In live boot with ephemeral root, we must create
-  # these explicitly during system activation before the service starts.
+  # The daemon uses ProtectSystem=strict with ReadWritePaths that require
+  # several /etc files and directories to exist. In ephemeral live boot,
+  # these don't exist by default. Create them during system activation.
   system.activationScripts.ensureEtcDirs = ''
     mkdir -p /etc/cron.d
+    mkdir -p /etc/systemd/network
+    mkdir -p /etc/systemd/resolved.conf.d
     touch /etc/crontab
+    touch /etc/exports
   '';
 
   # ── Ensure services start after ZFS auto-import ───────────────────────
