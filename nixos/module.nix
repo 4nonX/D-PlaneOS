@@ -261,6 +261,8 @@ in {
         ExecStartPre    = [
           "${pkgs.coreutils}/bin/mkdir -p /var/lib/dplaneos /var/log/dplaneos /run/dplaneos /etc/dplaneos"
           "${pkgs.coreutils}/bin/chmod 755 /run/dplaneos"
+          # Verify daemon binary exists
+          "/bin/sh -c 'test -x ${cfg.daemonPackage}/bin/dplaned || (echo \"Daemon binary not found at ${cfg.daemonPackage}/bin/dplaned\" >&2; exit 1)'"
           # Wait for PostgreSQL to be ready before starting daemon
           "/bin/sh -c 'for i in $(${pkgs.coreutils}/bin/seq 1 30); do ${pkgs.postgresql}/bin/pg_isready -h localhost -U dplaneos -d dplaneos 2>/dev/null && exit 0; ${pkgs.coreutils}/bin/sleep 1; done; exit 1'"
         ];
@@ -312,9 +314,9 @@ in {
           "CAP_FOWNER"
         ];
 
-        # Logging (file fallback for environments where journald is unavailable)
-        StandardOutput=append:/var/log/dplaneos/dplaned.log
-        StandardError=append:/var/log/dplaneos/dplaned-error.log
+        # Logging
+        StandardOutput=journal
+        StandardError=journal
         SyslogIdentifier=dplaned
       };
     };
