@@ -59,6 +59,23 @@
   # Use mkForce to override standalone's false (live boot needs DHCP to get network automatically)
   networking.useDHCP = lib.mkForce true;
 
+  # ── PostgreSQL for daemon state (ephemeral in live boot) ───────────────────
+  # Live boot runs PostgreSQL in tmpfs /var. Database persists for session lifetime
+  # but is recreated on each boot (acceptable for live test environment).
+  services.postgresql = {
+    enable = true;
+    package = lib.mkDefault pkgs.postgresql_15;
+    settings = {
+      max_connections = 50;  # Reduced for low-memory VM
+      shared_buffers = "64MB";
+      effective_cache_size = "256MB";
+    };
+    initialScript = pkgs.writeText "init.sql" ''
+      CREATE USER dplaneos WITH CREATEDB;
+      CREATE DATABASE dplaneos OWNER dplaneos;
+    '';
+  };
+
   # ── D-PlaneOS daemon and frontend ──────────────────────────────────────────
   # (Provided by applianceConfig in flake.nix, same as installed system)
   # services.dplaneos.daemonPackage = ...
