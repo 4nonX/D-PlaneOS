@@ -315,9 +315,9 @@ in {
         ];
 
         # Logging
-        StandardOutput=journal
-        StandardError=journal
-        SyslogIdentifier=dplaned
+        StandardOutput = "journal";
+        StandardError = "journal";
+        SyslogIdentifier = "dplaned";
       };
     };
 
