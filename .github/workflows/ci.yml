@@ -118,19 +118,16 @@ jobs:
         working-directory: daemon
         run: |
           go run golang.org/x/vuln/cmd/govulncheck@latest ./... 2>&1 | tee /tmp/vuln.txt; EC=${PIPESTATUS[0]}
-          # GO-2026-5856 (crypto/tls), GO-2026-5039 (net/textproto), and GO-2026-5037
-          # (crypto/x509) are Go standard library vulnerabilities in go1.26.3. All
-          # require go1.26.4+. FIX: run `nix flake update nixpkgs` to pull latest
-          # nixos-26.05 branch, which should have go1.26.5+.
-          # GO-2026-5970 (golang.org/x/text) requires x/text v0.39.0+; indirect
-          # dependency pulled by other modules.
-          KNOWN=4
+          # GO-2026-5970 (golang.org/x/text infinite loop) is an indirect dependency
+          # waiting for transitive upgrades to v0.39.0+. All Go stdlib vulnerabilities
+          # (crypto/tls, net/textproto, crypto/x509) fixed by nixpkgs 26.05 upgrade.
+          KNOWN=1
           FOUND=$(grep -c "^Vulnerability #" /tmp/vuln.txt 2>/dev/null || echo 0)
           if [ "$EC" -ne 0 ] && [ "$FOUND" -gt "$KNOWN" ]; then
             echo "UNEXPECTED VULNERABILITIES (expected $KNOWN tracked, found $FOUND)"
             exit 1
           elif [ "$EC" -ne 0 ]; then
-            echo "NOTE: $FOUND known tracked CVE(s) pending go/x/text upgrades - not blocking"
+            echo "NOTE: $FOUND known tracked CVE(s) - not blocking"
           fi
 
       - name: Build binaries (amd64 & arm64)
