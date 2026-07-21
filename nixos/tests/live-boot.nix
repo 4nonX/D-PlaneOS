@@ -31,6 +31,7 @@ pkgs.testers.nixosTest {
 
     # Provide daemon and frontend packages (normally from applianceConfig in flake.nix)
     services.dplaneos = {
+      enable = true;
       daemonPackage = daemonPackage;
       frontendPackage = frontendPackage;
       dbPath = "/var/lib/dplaneos/pgsql";
