@@ -311,6 +311,11 @@ in {
           "CAP_CHOWN"
           "CAP_FOWNER"
         ];
+
+        # Logging (file fallback for environments where journald is unavailable)
+        StandardOutput=append:/var/log/dplaneos/dplaned.log
+        StandardError=append:/var/log/dplaneos/dplaned-error.log
+        SyslogIdentifier=dplaned
       };
     };
 
