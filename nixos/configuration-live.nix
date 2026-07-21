@@ -64,7 +64,6 @@
   # but is recreated on each boot (acceptable for live test environment).
   services.postgresql = {
     enable = true;
-    package = lib.mkDefault pkgs.postgresql_15;
     settings = {
       max_connections = 50;  # Reduced for low-memory VM
       shared_buffers = "64MB";
