@@ -82,13 +82,13 @@ pkgs.testers.nixosTest {
     def boot():
         liveSystem.start()
         liveSystem.wait_for_unit("multi-user.target")
-        liveSystem.wait_for_unit("dplaneos.service")
+        liveSystem.wait_for_unit("dplaned.service")
         time.sleep(2)  # Allow daemon to fully initialize
 
     # ── Step 2: Verify daemon is running ─────────────────────────────────────
     @test_step("Verify daemon process")
     def check_daemon():
-        liveSystem.succeed("systemctl is-active dplaneos.service")
+        liveSystem.succeed("systemctl is-active dplaned.service")
         output = liveSystem.succeed("ps aux | grep -E 'dplaned|dplane'")
         print(f"Daemon processes: {output}")
 
@@ -139,7 +139,7 @@ pkgs.testers.nixosTest {
     # ── Step 9: Check daemon logs for errors ─────────────────────────────────
     @test_step("Check daemon logs")
     def check_daemon_logs():
-        logs = liveSystem.succeed("journalctl -u dplaneos.service -n 30")
+        logs = liveSystem.succeed("journalctl -u dplaned.service -n 30")
         print(f"Recent daemon logs:\n{logs}")
 
         # Check for critical errors (warnings are OK)

@@ -161,7 +161,7 @@
   # This is handled by daemon configuration in applianceConfig (flake.nix),
   # with fallback to /persist/var/lib/dplaneos for tmpfs case.
 
-  systemd.services.dplaneos = lib.mkIf (config.services.dplaneos.enable or false) {
+  systemd.services.dplaned = lib.mkIf (config.services.dplaneos.enable or false) {
     # Ensure persistence link is created before daemon starts
     after = [ "dplane-link-persist.service" ];
   };

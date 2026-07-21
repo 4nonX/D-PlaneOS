@@ -160,7 +160,7 @@
   '';
 
   # ── Ensure services start after ZFS auto-import ───────────────────────
-  systemd.services.dplaneos = lib.mkIf (config.services.dplaneos.enable or false) {
+  systemd.services.dplaned = lib.mkIf (config.services.dplaneos.enable or false) {
     after = [ "dplane-zfs-auto-import.service" ];
   };
 
