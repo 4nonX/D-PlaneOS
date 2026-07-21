@@ -251,7 +251,7 @@ in {
     # ─── DPlaneOS daemon systemd service ────────────────────────────────
     systemd.services.dplaned = {
       description = "DPlaneOS NAS Daemon";
-      after       = [ "network.target" "zfs.target" "dplaneos-zfs-gate.service" ] ++ lib.optionals cfg.ha.enable [ "haproxy.service" "patroni.service" ];
+      after       = [ "network.target" "zfs.target" "dplaneos-zfs-gate.service" "postgresql.service" ] ++ lib.optionals cfg.ha.enable [ "haproxy.service" "patroni.service" ];
       requires    = [ "dplaneos-zfs-gate.service" ] ++ lib.optionals cfg.ha.enable [ "patroni.service" ];
       wantedBy    = [ "multi-user.target" ];
       path        = with pkgs; [ coreutils pciutils docker docker-compose ];
