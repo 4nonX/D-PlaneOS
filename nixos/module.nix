@@ -262,7 +262,7 @@ in {
           "${pkgs.coreutils}/bin/mkdir -p /var/lib/dplaneos /var/log/dplaneos /run/dplaneos /etc/dplaneos"
           "${pkgs.coreutils}/bin/chmod 755 /run/dplaneos"
           # Wait for PostgreSQL to be ready before starting daemon
-          "${pkgs.coreutils}/bin/sh -c 'for i in $(${pkgs.seq} 1 30); do ${pkgs.postgresql}/bin/pg_isready -h localhost -U dplaneos -d dplaneos 2>/dev/null && exit 0; ${pkgs.coreutils}/bin/sleep 1; done; exit 1'"
+          "${pkgs.coreutils}/bin/sh -c 'for i in $(${pkgs.coreutils}/bin/seq 1 30); do ${pkgs.postgresql}/bin/pg_isready -h localhost -U dplaneos -d dplaneos 2>/dev/null && exit 0; ${pkgs.coreutils}/bin/sleep 1; done; exit 1'"
         ];
         ExecStart       = "${cfg.daemonPackage}/bin/dplaned -db-dsn \"${cfg.dbDSN}\" -listen ${cfg.socketPath} -socket-group dplaned";
         WorkingDirectory = "/var/lib/dplaneos";
