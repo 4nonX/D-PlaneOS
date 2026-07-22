@@ -104,7 +104,7 @@
     ];
 
     before = [
-      "dplaneos.service"
+      "dplaned.service"
     ];
 
     wantedBy = [ "multi-user.target" ];
