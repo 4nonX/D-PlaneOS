@@ -261,6 +261,7 @@ in {
         ExecStartPre    = [
           "${pkgs.coreutils}/bin/mkdir -p /var/lib/dplaneos /var/log/dplaneos /run/dplaneos /etc/dplaneos"
           "${pkgs.coreutils}/bin/chmod 755 /run/dplaneos"
+          "${pkgs.coreutils}/bin/chmod 755 /var/lib/dplaneos"
           # Verify daemon binary exists
           "/bin/sh -c 'test -x ${cfg.daemonPackage}/bin/dplaned || (echo \"Daemon binary not found at ${cfg.daemonPackage}/bin/dplaned\" >&2; exit 1)'"
           # Wait for PostgreSQL to be ready before starting daemon
