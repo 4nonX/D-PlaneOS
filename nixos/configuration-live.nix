@@ -162,6 +162,12 @@
   # ── Ensure services start after ZFS auto-import ───────────────────────
   systemd.services.dplaned = lib.mkIf (config.services.dplaneos.enable or false) {
     after = [ "dplane-zfs-auto-import.service" ];
+    serviceConfig = {
+      # Relax security hardening in ephemeral live environment
+      ProtectSystem = lib.mkForce "off";
+      ProtectHome = lib.mkForce false;
+      NoNewPrivileges = lib.mkForce false;
+    };
   };
 
   systemd.services.docker = lib.mkIf config.virtualisation.docker.enable {
