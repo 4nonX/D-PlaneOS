@@ -32,7 +32,7 @@
 
     # Start before services that need pools (daemon, docker)
     before = [
-      "dplaneos.service"
+      "dplaned.service"
       "docker.service"
     ];
 
