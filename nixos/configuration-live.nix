@@ -39,6 +39,17 @@
   # OTA updates require persistent /boot partition. Live boot has no persistent storage.
   services.dplaneos.ota.enable = lib.mkForce false;
 
+  # ── Journald configuration for live boot ─────────────────────────────────
+  # Live boot has /var as tmpfs, so persistent journal storage doesn't work.
+  # Override to use volatile storage so journald is functional in live environment.
+  services.journald.extraConfig = lib.mkForce ''
+    Storage=volatile
+    Compress=yes
+    MaxRetentionSec=1day
+    SyncIntervalSec=5m
+    SystemMaxUse=128M
+  '';
+
   # Boot loader is not applicable to live ISO (boots from GRUB/bootloader already)
   boot.loader.grub.enable = false;
   # Use mkForce to override applianceConfig's true (live ISO doesn't use EFI)
