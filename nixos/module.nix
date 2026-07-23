@@ -315,9 +315,10 @@ in {
           "CAP_FOWNER"
         ];
 
-        # Logging
-        StandardOutput = "journal";
-        StandardError = "journal";
+        # Logging: use kmsg to bypass journald socket issues in constrained environments
+        # Output goes to kernel message buffer, visible via journalctl/dmesg
+        StandardOutput = "kmsg";
+        StandardError = "kmsg";
         SyslogIdentifier = "dplaned";
       };
     };
