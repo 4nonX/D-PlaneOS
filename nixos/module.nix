@@ -263,11 +263,11 @@ in {
           "${pkgs.coreutils}/bin/chmod 755 /run/dplaneos"
           "${pkgs.coreutils}/bin/chmod 755 /var/lib/dplaneos"
           # Verify daemon binary exists
-          "/bin/sh -c 'test -x ${cfg.daemonPackage}/bin/dplaned || (echo \"Daemon binary not found at ${cfg.daemonPackage}/bin/dplaned\" >&2; exit 1)'"
+          "/bin/sh -c 'test -x ${cfg.daemonPackage}/bin/dplaned || (echo \"FATAL: Daemon binary not found at ${cfg.daemonPackage}/bin/dplaned\" >&2; exit 1)'"
           # Wait for PostgreSQL to be ready before starting daemon
-          "/bin/sh -c 'for i in $(${pkgs.coreutils}/bin/seq 1 30); do ${pkgs.postgresql}/bin/pg_isready -h localhost -U dplaneos -d dplaneos 2>/dev/null && exit 0; ${pkgs.coreutils}/bin/sleep 1; done; exit 1'"
+          "/bin/sh -c 'echo \"[dplaned-pre] Checking PostgreSQL connectivity...\"; for i in $(${pkgs.coreutils}/bin/seq 1 30); do if ${pkgs.postgresql}/bin/pg_isready -h localhost -U dplaneos -d dplaneos 2>&1; then echo \"[dplaned-pre] PostgreSQL ready on attempt $i\"; exit 0; fi; ${pkgs.coreutils}/bin/sleep 1; done; echo \"FATAL: PostgreSQL not ready after 30 seconds\" >&2; exit 1'"
         ];
-        ExecStart       = "${cfg.daemonPackage}/bin/dplaned -db-dsn \"${cfg.dbDSN}\" -listen ${cfg.socketPath} -socket-group dplaned";
+        ExecStart       = "/bin/sh -c 'echo \"[dplaned] Starting with DSN: ${cfg.dbDSN}\"; exec ${cfg.daemonPackage}/bin/dplaned -db-dsn \"${cfg.dbDSN}\" -listen ${cfg.socketPath} -socket-group dplaned'";
         WorkingDirectory = "/var/lib/dplaneos";
         Restart         = "on-failure";
         RestartSec      = "5s";
