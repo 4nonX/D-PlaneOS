@@ -48,7 +48,15 @@
     MaxRetentionSec=1day
     SyncIntervalSec=5m
     SystemMaxUse=128M
+    RuntimeMaxUse=128M
   '';
+
+  # Ensure /run/log/journal directory exists with correct permissions before journald starts
+  systemd.tmpfiles.rules = [
+    "d /run/log 0755 root root -"
+    "d /run/log/journal 0755 root root -"
+    "d /run/log/journal-remote 0755 systemd-journal-remote systemd-journal 0"
+  ];
 
   # Boot loader is not applicable to live ISO (boots from GRUB/bootloader already)
   boot.loader.grub.enable = false;

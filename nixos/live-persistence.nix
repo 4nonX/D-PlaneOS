@@ -61,9 +61,6 @@
   environment.persistence."/persist" = {
     # Directories that must be persistent across sessions
     directories = [
-      # Machine identity (systemd requires this)
-      "/etc/machine-id"
-
       # User/group database (impermanence requires this for stable UIDs/GIDs)
       # Without this, users assigned ephemeral IDs will be reassigned on reboot
       "/var/lib/nixos"
@@ -78,6 +75,9 @@
 
     # Critical files
     files = [
+      # Machine identity (systemd requires this as a FILE, not a directory)
+      "/etc/machine-id"
+
       # SSH host keys (if user wants to preserve identity)
       # Note: /etc/ssh is typically read-only from squashfs;
       # this is a fallback for future install-to-disk scenarios
